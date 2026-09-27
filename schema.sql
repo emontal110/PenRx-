@@ -248,9 +248,6 @@ CREATE TABLE IF NOT EXISTS "Subscription" (
     CONSTRAINT "Subscription_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX IF NOT EXISTS "Subscription_machineId_idx" ON "Subscription"("machineId");
-CREATE INDEX IF NOT EXISTS "Subscription_subscriberId_idx" ON "Subscription"("subscriberId");
-
 -- Ensure subscriberId, doctorName, clinicName, isTrial, signatureToken and allowedMachineIds columns exist on existing Subscription table in Supabase
 ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "subscriberId" TEXT;
 ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "doctorName" TEXT;
@@ -258,6 +255,9 @@ ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "clinicName" TEXT;
 ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "isTrial" BOOLEAN DEFAULT false;
 ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "signatureToken" TEXT;
 ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "allowedMachineIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
+
+-- Indexes on Subscription (Safe after column existence check)
+CREATE INDEX IF NOT EXISTS "Subscription_machineId_idx" ON "Subscription"("machineId");
 CREATE INDEX IF NOT EXISTS "Subscription_subscriberId_idx" ON "Subscription"("subscriberId");
 
 
