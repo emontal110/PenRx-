@@ -260,6 +260,9 @@ ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "allowedMachineIds" TEXT[] D
 CREATE INDEX IF NOT EXISTS "Subscription_machineId_idx" ON "Subscription"("machineId");
 CREATE INDEX IF NOT EXISTS "Subscription_subscriberId_idx" ON "Subscription"("subscriberId");
 
+-- Enable unrestricted access for doctor apps and admin portal to sync subscriptions
+ALTER TABLE "Subscription" DISABLE ROW LEVEL SECURITY;
+
 
 -- Seed Admin User and System Clinic in Database
 INSERT INTO "Clinic" ("id", "name", "specialty", "primaryColor", "updatedAt")

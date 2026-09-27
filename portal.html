@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PenRX+ | بورتال الإدارة والتحكم السحابي المستقل</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Font Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b',
+              950: '#022c22',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #020617;
+      color: #f8fafc;
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-purple-500/30 selection:text-purple-200">
+
+  <!-- Glow Backgrounds -->
+  <div class="fixed top-0 left-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="fixed bottom-0 right-1/4 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none"></div>
+
+  <!-- AUTHENTICATION SCREEN -->
+  <div id="auth-screen" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md glass-card border-2 border-purple-500/40 rounded-3xl p-8 space-y-6 shadow-2xl text-center relative overflow-hidden">
+      <div class="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-600 to-indigo-600 p-0.5 mx-auto shadow-xl shadow-purple-950/60 flex items-center justify-center">
+        <div class="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
+          <i data-lucide="shield-lock" class="w-10 h-10 text-purple-400"></i>
+        </div>
+      </div>
+
+      <div class="space-y-1.5">
+        <span class="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase tracking-wider">
+          PORTAL SECURITY GATE
+        </span>
+        <h1 class="text-2xl font-black text-slate-100">بورتال الإدارة والتحكم السري</h1>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          منصة سحابية مستقلة كلياً لمالك المنظومة فقط لإدارة المشتركين وربط أجهزة الأطباء.
+        </p>
+      </div>
+
+      <form id="login-form" class="space-y-4 text-xs">
+        <div class="space-y-1.5 text-right">
+          <label class="font-bold text-slate-300 block">رمز المرور السري (Admin PIN):</label>
+          <input
+            id="pin-input"
+            type="password"
+            required
+            placeholder="•••••••"
+            class="w-full px-4 py-3.5 rounded-2xl bg-slate-950 border border-slate-700 font-mono font-black text-slate-100 text-center text-lg tracking-widest focus:outline-none focus:border-purple-500 transition-colors shadow-inner"
+          />
+          <p id="pin-error" class="text-rose-400 text-[11px] font-bold hidden text-center pt-1">
+            ❌ رمز المرور غير صحيح، يرجى المحاولة مرة أخرى
+          </p>
+        </div>
+
+        <button
+          type="submit"
+          class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-emerald-600 text-white font-black text-sm shadow-xl shadow-purple-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <i data-lucide="unlock" class="w-4 h-4"></i>
+          <span>دخول إلى لوحة التحكم</span>
+        </button>
+      </form>
+
+      <div class="pt-2 text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
+        <i data-lucide="database" class="w-3.5 h-3.5 text-emerald-400"></i>
+        <span>متصل مباشرة بسحابة Supabase عبر تشفير SSL</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN ADMIN DASHBOARD (Initially Hidden) -->
+  <div id="dashboard-screen" class="hidden min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 shadow-md">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-emerald-500 p-0.5 shadow-lg shadow-purple-950/40">
+            <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+              <i data-lucide="crown" class="w-6 h-6 text-purple-400"></i>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xl font-black bg-gradient-to-r from-purple-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+                PenRX+ Portal
+              </span>
+              <span class="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-[10px] font-black border border-purple-500/40">
+                MASTER ADMIN
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-bold -mt-0.5">لوحة إدارة تراخيص الأطباء وتعدد الأجهزة</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div class="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] font-bold text-slate-300">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>سحابة Supabase متصلة</span>
+          </div>
+
+          <button
+            id="refresh-btn"
+            type="button"
+            class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
+            title="تحديث البيانات فوراً"
+          >
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          </button>
+
+          <button
+            id="logout-btn"
+            type="button"
+            class="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            <span>خروج</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
+
+      <!-- Metrics KPI Grid -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 1. Total -->
+        <div class="glass-card p-5 rounded-3xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold text-slate-400 block">إجمالي المشتركين:</span>
+            <span id="metric-total" class="text-3xl font-black text-slate-100 font-mono mt-1 block">0</span>
+          </div>
+          <div class="w-12 h-12 rounded-2xl bg-slate-800/80 text-purple-400 flex items-center justify-center">
+            <i data-lucide="users" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <!-- 2. Active -->
+        <div class="glass-card p-5 rounded-3xl border border-emerald-500/20 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold text-emerald-400 block">الاشتراكات النشطة:</span>
+            <span id="metric-active" class="text-3xl font-black text-emerald-300 font-mono mt-1 block">0</span>
+          </div>
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+            <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <!-- 3. Pending -->
+        <div class="glass-card p-5 rounded-3xl border border-amber-500/20 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold text-amber-400 block">طلبات بانتظار التفعيل:</span>
+            <span id="metric-pending" class="text-3xl font-black text-amber-300 font-mono mt-1 block">0</span>
+          </div>
+          <div class="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+            <i data-lucide="clock" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <!-- 4. Free Trials -->
+        <div class="glass-card p-5 rounded-3xl border border-cyan-500/20 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold text-cyan-400 block">التراخيص التجريبية:</span>
+            <span id="metric-trial" class="text-3xl font-black text-cyan-300 font-mono mt-1 block">0</span>
+          </div>
+          <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
+            <i data-lucide="sparkles" class="w-6 h-6"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search & Filters Bar -->
+      <div class="glass-card p-5 rounded-3xl border border-slate-800 space-y-4">
+        <div class="flex flex-col md:flex-row items-center gap-4 justify-between">
+          <!-- Search input -->
+          <div class="relative w-full md:max-w-md">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2"></i>
+            <input
+              id="search-input"
+              type="text"
+              placeholder="ابحث بالاسم، كود المشترك، كود الجهاز، رقم الهاتف، أو العملية..."
+              class="w-full pr-11 pl-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-xs font-bold text-slate-100 focus:outline-none focus:border-purple-500 transition-colors"
+            />
+          </div>
+
+          <!-- Filter Pills -->
+          <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <button class="filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-purple-600 text-white" data-filter="ALL">الكل</button>
+            <button class="filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800" data-filter="PENDING">بالانتظار ⏳</button>
+            <button class="filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800" data-filter="ACTIVE">نشط ✅</button>
+            <button class="filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800" data-filter="FREE_TRIAL">تجريبي 🎁</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subscribers List Container -->
+      <div id="subscribers-container" class="space-y-4">
+        <!-- Rendered dynamically via JavaScript -->
+        <div class="text-center py-12 text-slate-500 text-xs font-bold">
+          <i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto text-purple-400 mb-2"></i>
+          <span>جارٍ تحميل بيانات المشتركين من السحابة...</span>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
+      منظومة PenRX+ الطبية المستقلة © 2026 - بورتال التحكم الإداري المباشر
+    </footer>
+  </div>
+
+  <!-- APPLICATION LOGIC JAVASCRIPT -->
+  <script>
+    const SUPABASE_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+
+    const REST_HEADERS = {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + SUPABASE_KEY,
+      "Content-Type": "application/json",
+      "Prefer": "return=representation"
+    };
+
+    let allSubscriptions = [];
+    let currentFilter = "ALL";
+    let currentSearch = "";
+    let isAuthed = false;
+
+    // Toast helper
+    function showToast(msg, isSuccess = true) {
+      const container = document.getElementById("toast-container");
+      const toast = document.createElement("div");
+      toast.className = `px-5 py-3 rounded-2xl text-xs font-bold text-white shadow-2xl transition-all duration-300 transform translate-y-2 ${
+        isSuccess ? "bg-emerald-600 border border-emerald-400" : "bg-rose-600 border border-rose-400"
+      }`;
+      toast.innerText = msg;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Auth verification
+    const loginForm = document.getElementById("login-form");
+    const pinInput = document.getElementById("pin-input");
+    const pinError = document.getElementById("pin-error");
+    const authScreen = document.getElementById("auth-screen");
+    const dashboardScreen = document.getElementById("dashboard-screen");
+
+    function checkAuth() {
+      const stored = sessionStorage.getItem("penrx_admin_auth");
+      if (stored === "true") {
+        isAuthed = true;
+        authScreen.classList.add("hidden");
+        dashboardScreen.classList.remove("hidden");
+        fetchSubscriptions();
+      }
+    }
+
+    loginForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const val = pinInput.value.trim();
+      if (val === "3060630" || val === "admin123" || val === "penrx") {
+        sessionStorage.setItem("penrx_admin_auth", "true");
+        isAuthed = true;
+        authScreen.classList.add("hidden");
+        dashboardScreen.classList.remove("hidden");
+        pinError.classList.add("hidden");
+        showToast("مرحباً بك في لوحة تحكم PenRX+ 👑");
+        fetchSubscriptions();
+      } else {
+        pinError.classList.remove("hidden");
+      }
+    });
+
+    document.getElementById("logout-btn").addEventListener("click", () => {
+      sessionStorage.removeItem("penrx_admin_auth");
+      location.reload();
+    });
+
+    // Fetch Subscriptions from Supabase REST API
+    async function fetchSubscriptions() {
+      try {
+        const res = await fetch(`${SUPABASE_URL}?select=*&order=createdAt.desc`, {
+          headers: REST_HEADERS,
+          cache: "no-store"
+        });
+        if (!res.ok) throw new Error("Failed to load");
+        allSubscriptions = await res.json();
+        renderDashboard();
+      } catch (err) {
+        console.error("Fetch err:", err);
+      }
+    }
+
+    // Refresh every 3 seconds for live sync
+    setInterval(() => {
+      if (isAuthed) fetchSubscriptions();
+    }, 3000);
+
+    document.getElementById("refresh-btn").addEventListener("click", () => {
+      fetchSubscriptions();
+      showToast("تم تحديث البيانات من السحابة بنجاح 🔄");
+    });
+
+    // Search & Filter listeners
+    document.getElementById("search-input").addEventListener("input", (e) => {
+      currentSearch = e.target.value.toLowerCase().trim();
+      renderDashboard();
+    });
+
+    document.querySelectorAll(".filter-pill").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".filter-pill").forEach((b) => {
+          b.className = "filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800";
+        });
+        btn.className = "filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-purple-600 text-white";
+        currentFilter = btn.dataset.filter;
+        renderDashboard();
+      });
+    });
+
+    // Actions on Subscriptions
+    window.activateSub = async function(id, days) {
+      const now = new Date();
+      const expires = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+      try {
+        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+          method: "PATCH",
+          headers: REST_HEADERS,
+          body: JSON.stringify({
+            status: "ACTIVE",
+            activatedAt: now.toISOString(),
+            expiresAt: expires.toISOString(),
+            durationDays: days,
+            updatedAt: now.toISOString()
+          })
+        });
+        if (res.ok) {
+          showToast(`✅ تم تفعيل الاشتراك بنجاح لمدة ${days} يوم!`);
+          fetchSubscriptions();
+        }
+      } catch (e) {
+        showToast("فشل التفعيل", false);
+      }
+    };
+
+    window.suspendSub = async function(id) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+          method: "PATCH",
+          headers: REST_HEADERS,
+          body: JSON.stringify({
+            status: "SUSPENDED",
+            updatedAt: new Date().toISOString()
+          })
+        });
+        if (res.ok) {
+          showToast("⏸️ تم تعليق الاشتراك وإيقاف عمل البرنامج فورياً.");
+          fetchSubscriptions();
+        }
+      } catch (e) {
+        showToast("فشل التعليق", false);
+      }
+    };
+
+    window.deleteSub = async function(id) {
+      if (!confirm("هل أنت متأكد من رغبتك في حذف هذا الاشتراك نهائياً؟")) return;
+      try {
+        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+          method: "DELETE",
+          headers: REST_HEADERS
+        });
+        if (res.ok) {
+          showToast("🗑️ تم حذف الاشتراك بنجاح.");
+          fetchSubscriptions();
+        }
+      } catch (e) {
+        showToast("فشل الحذف", false);
+      }
+    };
+
+    window.addDevice = async function(id) {
+      const input = document.getElementById(`add-device-${id}`);
+      const newMachineId = input.value.trim();
+      if (!newMachineId) {
+        showToast("يرجى إدخال معرّف الجهاز (Machine ID)", false);
+        return;
+      }
+
+      const sub = allSubscriptions.find((s) => s.id === id);
+      if (!sub) return;
+
+      const currentDevices = Array.isArray(sub.allowedMachineIds) ? sub.allowedMachineIds : [sub.machineId];
+      if (currentDevices.includes(newMachineId)) {
+        showToast("هذا الجهاز مضاف بالفعل لهذا المشترك!", false);
+        return;
+      }
+
+      const updatedDevices = [...currentDevices, newMachineId];
+      try {
+        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+          method: "PATCH",
+          headers: REST_HEADERS,
+          body: JSON.stringify({
+            allowedMachineIds: updatedDevices,
+            updatedAt: new Date().toISOString()
+          })
+        });
+        if (res.ok) {
+          showToast(`📱 تم ربط الجهاز الإضافي بنجاح (${newMachineId})`);
+          input.value = "";
+          fetchSubscriptions();
+        }
+      } catch (e) {
+        showToast("فشل إضافة الجهاز", false);
+      }
+    };
+
+    window.removeDevice = async function(id, deviceToRemove) {
+      const sub = allSubscriptions.find((s) => s.id === id);
+      if (!sub) return;
+
+      const currentDevices = Array.isArray(sub.allowedMachineIds) ? sub.allowedMachineIds : [sub.machineId];
+      const updatedDevices = currentDevices.filter((d) => d !== deviceToRemove);
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+          method: "PATCH",
+          headers: REST_HEADERS,
+          body: JSON.stringify({
+            allowedMachineIds: updatedDevices,
+            updatedAt: new Date().toISOString()
+          })
+        });
+        if (res.ok) {
+          showToast(`❌ تم فصل الجهاز (${deviceToRemove})`);
+          fetchSubscriptions();
+        }
+      } catch (e) {
+        showToast("فشل فصل الجهاز", false);
+      }
+    };
+
+    window.copyText = function(text, label) {
+      navigator.clipboard.writeText(text);
+      showToast(`تم نسخ ${label}: ${text}`);
+    };
+
+    // Render Dashboard & Cards
+    function renderDashboard() {
+      // 1. Calculate metrics
+      const total = allSubscriptions.length;
+      const active = allSubscriptions.filter((s) => s.status === "ACTIVE").length;
+      const pending = allSubscriptions.filter((s) => s.status === "PENDING").length;
+      const trial = allSubscriptions.filter((s) => s.isTrial).length;
+
+      document.getElementById("metric-total").innerText = total;
+      document.getElementById("metric-active").innerText = active;
+      document.getElementById("metric-pending").innerText = pending;
+      document.getElementById("metric-trial").innerText = trial;
+
+      // 2. Filter records
+      let filtered = allSubscriptions.filter((sub) => {
+        // Status filter
+        if (currentFilter === "PENDING" && sub.status !== "PENDING") return false;
+        if (currentFilter === "ACTIVE" && sub.status !== "ACTIVE") return false;
+        if (currentFilter === "FREE_TRIAL" && !sub.isTrial) return false;
+
+        // Search query
+        if (currentSearch) {
+          const matchDoc = (sub.doctorName || "").toLowerCase().includes(currentSearch);
+          const matchClinic = (sub.clinicName || "").toLowerCase().includes(currentSearch);
+          const matchSubId = (sub.subscriberId || "").toLowerCase().includes(currentSearch);
+          const matchMachine = (sub.machineId || "").toLowerCase().includes(currentSearch);
+          const matchPhone = (sub.senderPhone || "").toLowerCase().includes(currentSearch);
+          const matchRef = (sub.transactionRef || "").toLowerCase().includes(currentSearch);
+          const matchPlan = (sub.planName || "").toLowerCase().includes(currentSearch);
+          return matchDoc || matchClinic || matchSubId || matchMachine || matchPhone || matchRef || matchPlan;
+        }
+        return true;
+      });
+
+      const container = document.getElementById("subscribers-container");
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="glass-card p-12 rounded-3xl text-center space-y-3">
+            <i data-lucide="inbox" class="w-12 h-12 text-slate-600 mx-auto"></i>
+            <h3 class="text-base font-black text-slate-300">لا توجد اشتراكات مطابقة حالياً</h3>
+            <p class="text-xs text-slate-500">عندما يطلب الأطباء تفعيل ترخيص من البرنامج ستظهر طلباتهم هنا فوراً.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = filtered.map((sub) => {
+        const subscriberId = sub.subscriberId || "SUB-PENDING";
+        const primaryMachine = sub.machineId;
+        const devices = Array.isArray(sub.allowedMachineIds) && sub.allowedMachineIds.length > 0
+          ? sub.allowedMachineIds
+          : [primaryMachine];
+
+        const isExpired = sub.expiresAt && new Date(sub.expiresAt) < new Date();
+        let statusBadge = "";
+
+        if (sub.status === "ACTIVE") {
+          statusBadge = `<span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black">نشط ✅</span>`;
+        } else if (sub.status === "PENDING") {
+          statusBadge = `<span class="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black animate-pulse">بالانتظار ⏳</span>`;
+        } else {
+          statusBadge = `<span class="px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-black">معلق ⛔</span>`;
+        }
+
+        // WhatsApp greeting link
+        const waMsg = encodeURIComponent(`مرحباً دكتور ${sub.doctorName || ""}، بخصوص اشتراكك في منصة PenRX+ الطبية (كود المشترك: ${subscriberId})...`);
+        const waLink = sub.senderPhone ? `https://wa.me/2${sub.senderPhone.replace(/^0+/, '')}?text=${waMsg}` : '#';
+
+        return `
+          <div class="glass-card rounded-3xl p-6 border ${sub.status === 'PENDING' ? 'border-amber-500/40 shadow-amber-950/30 shadow-xl' : 'border-slate-800'} space-y-6 transition-all">
+            <!-- Header row -->
+            <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600/30 to-indigo-600/30 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                  <i data-lucide="user" class="w-6 h-6"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-base font-black text-slate-100">${sub.doctorName || 'طبيب غير مسمى'}</h3>
+                    ${sub.isTrial ? '<span class="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-black">تجريبي</span>' : ''}
+                  </div>
+                  <p class="text-xs text-slate-400 font-bold">${sub.clinicName || 'العيادة التخصصية'}</p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3">
+                ${statusBadge}
+                <button onclick="deleteSub('${sub.id}')" class="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs transition-colors" title="حذف الاشتراك">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Identifiers Grid: Subscriber ID vs Devices -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Subscriber ID -->
+              <div class="p-4 rounded-2xl bg-slate-950/80 border border-purple-500/30 space-y-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
+                    <i data-lucide="users" class="w-3.5 h-3.5"></i>
+                    <span>معرّف المشترك الدائم (Subscriber ID):</span>
+                  </span>
+                  <button onclick="copyText('${subscriberId}', 'كود المشترك')" class="text-[10px] text-purple-400 hover:text-purple-300 font-bold">نسخ 📋</button>
+                </div>
+                <div class="font-mono font-black text-purple-200 text-sm tracking-wider" dir="ltr">${subscriberId}</div>
+              </div>
+
+              <!-- Primary Machine ID -->
+              <div class="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                    <i data-lucide="laptop" class="w-3.5 h-3.5 text-emerald-400"></i>
+                    <span>الجهاز الأساسي (Primary Device):</span>
+                  </span>
+                  <button onclick="copyText('${primaryMachine}', 'كود الجهاز الأساسي')" class="text-[10px] text-slate-400 hover:text-slate-200 font-bold">نسخ 📋</button>
+                </div>
+                <div class="font-mono font-black text-emerald-400 text-xs sm:text-sm tracking-wider truncate" dir="ltr">${primaryMachine}</div>
+              </div>
+            </div>
+
+            <!-- Multi-Devices Section (تعدد الأجهزة) -->
+            <div class="p-4 rounded-2xl bg-slate-950/90 border border-slate-800/80 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-300 flex items-center gap-2">
+                  <i data-lucide="network" class="w-4 h-4 text-cyan-400"></i>
+                  <span>الأجهزة المصرح لها بالعمل لهذا المشترك (${devices.length} أجهزة):</span>
+                </span>
+              </div>
+
+              <!-- Devices Pills -->
+              <div class="flex flex-wrap gap-2">
+                ${devices.map((dev) => `
+                  <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-[11px] font-mono text-slate-300">
+                    <i data-lucide="cpu" class="w-3.5 h-3.5 text-emerald-400"></i>
+                    <span dir="ltr">${dev}</span>
+                    <button onclick="removeDevice('${sub.id}', '${dev}')" class="p-0.5 rounded text-rose-400 hover:bg-rose-500/20" title="فصل هذا الجهاز">
+                      <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                `).join('')}
+              </div>
+
+              <!-- Add New Device Input -->
+              <div class="flex items-center gap-2 pt-1">
+                <input
+                  id="add-device-${sub.id}"
+                  type="text"
+                  placeholder="أدخل كود الجهاز الجديد (PRX-XXXX-XXXX-XXXX) لربطه..."
+                  class="flex-1 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-cyan-500"
+                />
+                <button
+                  onclick="addDevice('${sub.id}')"
+                  class="px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-black transition-all flex items-center gap-1.5 shrink-0"
+                >
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  <span>ربط الجهاز</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Subscription Details & Payment Info -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80">
+              <div>
+                <span class="text-slate-500 block text-[10px] font-bold">الباقة:</span>
+                <span class="font-black text-slate-200">${sub.planName} (${sub.price} ج.م)</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[10px] font-bold">طريقة الدفع:</span>
+                <span class="font-bold text-slate-300 capitalize">${sub.paymentMethod}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[10px] font-bold">رقم هاتف المحول:</span>
+                <span class="font-mono font-bold text-emerald-400" dir="ltr">${sub.senderPhone || '-'}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[10px] font-bold">رقم العملية:</span>
+                <span class="font-mono font-bold text-purple-300 truncate block" dir="ltr">${sub.transactionRef || '-'}</span>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <button onclick="activateSub('${sub.id}', 30)" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-950/40 transition-all flex items-center gap-1.5">
+                  <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                  <span>تفعيل شهر (30 يوم)</span>
+                </button>
+                <button onclick="activateSub('${sub.id}', 90)" class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all">
+                  3 شهور (90 يوم)
+                </button>
+                <button onclick="activateSub('${sub.id}', 365)" class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all">
+                  سنة كاملة (365 يوم)
+                </button>
+                ${sub.status === 'ACTIVE' ? `
+                  <button onclick="suspendSub('${sub.id}')" class="px-3.5 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center gap-1">
+                    <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+                    <span>إيقاف مؤقت</span>
+                  </button>
+                ` : ''}
+              </div>
+
+              ${sub.senderPhone ? `
+                <a href="${waLink}" target="_blank" class="px-4 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-black transition-all flex items-center gap-2">
+                  <i data-lucide="message-circle" class="w-4 h-4"></i>
+                  <span>مراسلة الطبيب واتساب</span>
+                </a>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    // Initialize check
+    checkAuth();
+  </script>
+</body>
+</html>

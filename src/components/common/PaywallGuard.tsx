@@ -19,10 +19,9 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [syncWithServer]);
 
-  // Allow unrestricted access to subscriptions page, admin portal, or public pages
+  // Allow unrestricted access to subscriptions page or public api
   if (
     pathname?.startsWith("/subscriptions") ||
-    pathname?.startsWith("/admin") ||
     pathname?.startsWith("/api")
   ) {
     return <>{children}</>;
