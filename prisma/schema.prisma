@@ -1,0 +1,195 @@
+// Prisma schema for Rosheta - Medical Prescription PWA
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DOCTOR
+  ASSISTANT
+  ADMIN
+}
+
+enum PaperSize {
+  A4
+  A5
+}
+
+model Clinic {
+  id             String         @id @default(uuid())
+  name           String
+  specialty      String         @default("General Medicine")
+  logoUrl        String?
+  primaryColor   String         @default("#059669") // Medical Emerald
+  headerText     String?
+  footerText     String?
+  showHeader     Boolean        @default(true)
+  showFooter     Boolean        @default(true)
+  notesTemplate  String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  branches       Branch[]
+  users          User[]
+  patients       Patient[]
+  prescriptions  Prescription[]
+}
+
+model Branch {
+  id           String         @id @default(uuid())
+  clinicId     String
+  clinic       Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  name         String
+  nameAr       String?
+  address      String
+  phone        String
+  workingHours String?
+  isDefault    Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  prescriptions Prescription[]
+
+  @@index([clinicId])
+}
+
+model User {
+  id           String         @id @default(uuid())
+  clinicId     String
+  clinic       Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  name         String
+  email        String         @unique
+  role         Role           @default(DOCTOR)
+  title        String         @default("Consultant") // e.g. أخصائي / استشاري
+  syndicateId  String?        // رقم القيد بالنقابة
+  phone        String?
+  specialty    String?
+  passwordHash String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  prescriptions Prescription[]
+
+  @@index([clinicId])
+}
+
+model Patient {
+  id             String         @id @default(uuid())
+  clinicId       String
+  clinic         Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  name           String
+  nameAr         String?
+  phone          String?
+  age            Int?
+  gender         String?        // Male / Female
+  bloodType      String?        // A+, O+, etc.
+  medicalHistory String?        // Chronic conditions e.g. Diabetes, Hypertension
+  allergyNotes   String?        // Drug allergies e.g. Penicillin
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  prescriptions  Prescription[]
+
+  @@index([clinicId])
+  @@index([name])
+}
+
+model Drug {
+  id                 String             @id @default(uuid())
+  name               String             // Commercial English name (e.g. Panadol Extra)
+  nameAr             String?            // Commercial Arabic name (e.g. بنادول إكسترا)
+  activeIngredient   String             // Active Ingredient (e.g. Paracetamol + Caffeine)
+  activeIngredientAr String?            // Active Ingredient in Arabic
+  company            String?            // Manufacturer (e.g. GlaxoSmithKline, Epico, Amoun)
+  price              Float?             // Price in EGP
+  dosageForm         String?            // Tablet, Syrup, Capsule, Cream, Drops, Injection
+  category           String?            // Analgesic, Antibiotic, Antihistamine, Cosmetics, Dental
+  isControlled       Boolean            @default(false) // جدول / controlled substance
+  createdAt          DateTime           @default(now())
+
+  prescriptionItems  PrescriptionItem[]
+
+  @@index([name])
+  @@index([nameAr])
+  @@index([activeIngredient])
+}
+
+model Prescription {
+  id             String             @id @default(uuid())
+  prescriptionNo String             @unique
+  clinicId       String
+  clinic         Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  branchId       String
+  branch         Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  doctorId       String
+  doctor         User               @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patientId      String
+  patient        Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  diagnosis      String?
+  notes          String?
+  paperSize      PaperSize          @default(A4)
+  qrCodeUrl      String?
+  isManual       Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  items          PrescriptionItem[]
+
+  @@index([clinicId])
+  @@index([branchId])
+  @@index([patientId])
+  @@index([prescriptionNo])
+}
+
+model PrescriptionItem {
+  id               String       @id @default(uuid())
+  prescriptionId   String
+  prescription     Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  drugId           String?
+  drug             Drug?        @relation(fields: [drugId], references: [id], onDelete: SetNull)
+  
+  drugName         String       // Display name (from catalog or manual free-text)
+  activeIngredient String?
+  doseQuantity     String       // e.g. "1 قرص", "5 مل"
+  doseForm         String?      // Tablet, Syrup, etc.
+  frequency        String       // e.g. "كل 8 ساعات بعد الاكل"
+  duration         String       // e.g. "لمدة 5 أيام"
+  instructions     String?      // Special remarks / advice
+  isManual         Boolean      @default(false)
+  sortOrder        Int          @default(0)
+
+  @@index([prescriptionId])
+}
+
+model Subscription {
+  id                String    @id @default(uuid())
+  subscriberId      String?
+  planId            String
+  planName          String
+  price             Float
+  paymentMethod     String
+  senderPhone       String
+  transactionRef    String
+  status            String    @default("PENDING")
+  machineId         String
+  allowedMachineIds String[]  @default([])
+  doctorName        String?
+  clinicName        String?
+  durationDays      Int?      @default(30)
+  isTrial           Boolean?  @default(false)
+  activatedAt       DateTime?
+  expiresAt         DateTime?
+  signatureToken    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([machineId])
+  @@index([subscriberId])
+}
+
