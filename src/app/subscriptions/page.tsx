@@ -61,11 +61,13 @@ export default function SubscriptionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
   const [linkMessage, setLinkMessage] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   const TRANSFER_NUMBER = "01094085228";
 
   // Fast polling sync (every 2.5 seconds) for instant unlock upon portal action
   useEffect(() => {
+    setMounted(true);
     syncWithServer();
     const interval = setInterval(syncWithServer, 2500);
     return () => clearInterval(interval);
@@ -253,9 +255,9 @@ export default function SubscriptionsPage() {
             </p>
           </div>
 
-          <div className={`px-4 py-2 rounded-2xl border text-xs font-black flex items-center gap-2 shadow-lg ${subDetails.badgeColor}`}>
+          <div className={`px-4 py-2 rounded-2xl border text-xs font-black flex items-center gap-2 shadow-lg ${subDetails.badgeColor}`} suppressHydrationWarning>
             <Sparkles className="w-4 h-4" />
-            <span>{subDetails.statusLabel}</span>
+            <span suppressHydrationWarning>{subDetails.statusLabel}</span>
           </div>
         </div>
 
@@ -274,8 +276,8 @@ export default function SubscriptionsPage() {
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <span className="font-mono font-black text-purple-300 text-lg sm:text-xl tracking-wider" dir="ltr">
-                {activeSubscriberId}
+              <span className="font-mono font-black text-purple-300 text-lg sm:text-xl tracking-wider" dir="ltr" suppressHydrationWarning>
+                {mounted ? activeSubscriberId : "SUB-..."}
               </span>
               <button
                 type="button"
@@ -304,8 +306,8 @@ export default function SubscriptionsPage() {
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <span className="font-mono font-black text-emerald-400 text-sm sm:text-base tracking-wider truncate" dir="ltr">
-                {machineId}
+              <span className="font-mono font-black text-emerald-400 text-sm sm:text-base tracking-wider truncate" dir="ltr" suppressHydrationWarning>
+                {mounted ? machineId : "PRX-..."}
               </span>
               <button
                 type="button"

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { registerCustomDrug } from "@/lib/drugSearchEngine";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

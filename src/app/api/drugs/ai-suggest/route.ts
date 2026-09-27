@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 /**
  * AI-assisted Drug Synthesizer & Medical Suggestion Route
  * Informs the doctor of suspected active ingredient, common dosage forms, and typical frequencies.

@@ -56,6 +56,7 @@ export function Navbar() {
                 src="/logo-penrx.jpg"
                 alt="PenRX+"
                 fill
+                sizes="48px"
                 priority
                 className="object-cover"
               />
@@ -108,10 +109,11 @@ export function Navbar() {
             {/* Subscription Status Chip */}
             <Link
               href="/subscriptions"
+              suppressHydrationWarning
               className={`px-3 py-1.5 rounded-xl border text-[11px] font-black flex items-center gap-1.5 transition-all shadow-sm ${subDetails.badgeColor}`}
             >
               <Crown className="w-3.5 h-3.5" />
-              <span>{subDetails.statusLabel}</span>
+              <span suppressHydrationWarning>{subDetails.statusLabel}</span>
               {subDetails.isActive && (
                 <span className="font-mono text-emerald-300">({subDetails.daysRemaining}ي)</span>
               )}
@@ -120,7 +122,7 @@ export function Navbar() {
             {/* Hardware Machine ID Tag */}
             <div className="hidden xl:flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[10px] text-slate-400 font-mono" title="Machine ID">
               <Laptop className="w-3 h-3 text-emerald-400" />
-              <span>{mounted ? machineId.substring(0, 12) + "..." : "PRX-..."}</span>
+              <span suppressHydrationWarning>{mounted ? machineId.substring(0, 12) + "..." : "PRX-..."}</span>
             </div>
           </div>
 
@@ -128,10 +130,11 @@ export function Navbar() {
           <div className="flex lg:hidden items-center gap-2">
             <Link
               href="/subscriptions"
+              suppressHydrationWarning
               className={`px-2.5 py-1 rounded-xl border text-[10px] font-black flex items-center gap-1 ${subDetails.badgeColor}`}
             >
               <Crown className="w-3 h-3" />
-              <span>{subDetails.isActive ? `${subDetails.daysRemaining}ي` : "تفعيل"}</span>
+              <span suppressHydrationWarning>{subDetails.isActive ? `${subDetails.daysRemaining}ي` : "تفعيل"}</span>
             </Link>
 
             <button
