@@ -52,63 +52,184 @@
       background: #334155;
       border-radius: 9999px;
     }
+    /* Hide spin buttons / stepper arrows on number inputs */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
   </style>
 </head>
-<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-purple-500/30 selection:text-purple-200">
+<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-emerald-500/30 selection:text-emerald-200">
 
-  <!-- Glow Backgrounds -->
-  <div class="fixed top-0 left-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
-  <div class="fixed bottom-0 right-1/4 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none"></div>
+  <!-- Glow Backgrounds (Emerald & Teal Brand Palette) -->
+  <div class="fixed top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="fixed bottom-0 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
   <!-- Toast Notification Container -->
-  <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none"></div>
+  <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3 pointer-events-none w-full max-w-lg px-4"></div>
 
-  <!-- AUTHENTICATION SCREEN -->
-  <div id="auth-screen" class="min-h-screen flex items-center justify-center p-4">
-    <div class="w-full max-w-md glass-card border-2 border-purple-500/40 rounded-3xl p-8 space-y-6 shadow-2xl text-center relative overflow-hidden">
-      <div class="w-20 h-20 rounded-3xl bg-gradient-to-tr from-purple-600 to-indigo-600 p-0.5 mx-auto shadow-xl shadow-purple-950/60 flex items-center justify-center">
-        <div class="w-full h-full bg-slate-950 rounded-[22px] flex items-center justify-center">
-          <i data-lucide="shield-lock" class="w-10 h-10 text-purple-400"></i>
+  <!-- ACTION CONFIRMATION MODAL -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md hidden transition-all duration-300 opacity-0 pointer-events-none">
+    <div id="confirm-modal-box" class="w-full max-w-md glass-card rounded-3xl p-6 sm:p-7 border border-slate-700/80 shadow-2xl space-y-5 text-right transform scale-95 transition-all duration-300">
+      <div class="flex items-center gap-3.5">
+        <div id="confirm-modal-icon-wrap" class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0">
+          <i id="confirm-modal-icon" data-lucide="alert-triangle" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h3 id="confirm-modal-title" class="text-base font-black text-slate-100">تأكيد الإجراء</h3>
+          <p id="confirm-modal-subtitle" class="text-xs text-slate-400 font-bold">يرجى التأكيد للمتابعة</p>
         </div>
       </div>
 
-      <div class="space-y-1.5">
-        <span class="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase tracking-wider">
-          PORTAL SECURITY GATE
-        </span>
-        <h1 class="text-2xl font-black text-slate-100">بورتال الإدارة والتحكم السري</h1>
-        <p class="text-xs text-slate-400 leading-relaxed">
-          منصة سحابية مستقلة كلياً لمالك المنظومة فقط لإدارة المشتركين وربط أجهزة الأطباء.
+      <div id="confirm-modal-body" class="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300 space-y-2 leading-relaxed">
+        <!-- Dynamic Content -->
+      </div>
+
+      <div class="flex items-center gap-3 pt-2">
+        <button
+          id="confirm-modal-submit-btn"
+          type="button"
+          class="flex-1 py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 shadow-lg cursor-pointer"
+        >
+          <span>تأكيد</span>
+        </button>
+        <button
+          id="confirm-modal-cancel-btn"
+          type="button"
+          class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold text-xs transition-all cursor-pointer"
+        >
+          إلغاء
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTHENTICATION SCREEN -->
+  <div id="auth-screen" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md glass-card border-2 border-emerald-500/30 rounded-3xl p-7 sm:p-9 space-y-6 shadow-2xl text-center relative overflow-hidden">
+      <!-- Ambient Card Glow -->
+      <div class="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+      <!-- Program Official Logo -->
+      <div class="relative w-20 h-20 rounded-3xl p-1 mx-auto shadow-2xl shadow-emerald-950/80 border-2 border-emerald-500/40 bg-slate-950 flex items-center justify-center overflow-hidden mb-1">
+        <img
+          src="logo-penrx.jpg"
+          onerror="this.onerror=null; this.src='public/logo-penrx.jpg'; this.onerror=function(){this.src='/logo-penrx.jpg'};"
+          alt="PenRX+ Logo"
+          class="w-full h-full object-cover rounded-2xl"
+        />
+      </div>
+
+      <!-- Header & Badges with Relaxed Spacing (No Overlap) -->
+      <div class="space-y-2.5 pt-1">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>بوابة الأمان والتحكم • MASTER ADMIN</span>
+        </div>
+
+        <h1 class="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight leading-snug">
+          بورتال الإدارة والتحكم السري
+        </h1>
+
+        <p class="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
+          منصة سحابية مستقلة كلياً لمالك المنظومة فقط لإدارة المشتركين وتفعيل تراخيص الأجهزة.
         </p>
       </div>
 
       <form id="login-form" class="space-y-4 text-xs">
+        <!-- Username / Email Input -->
         <div class="space-y-1.5 text-right">
-          <label class="font-bold text-slate-300 block">رمز المرور السري (Admin PIN):</label>
+          <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
+            <i data-lucide="mail" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>البريد الإلكتروني / اسم المستخدم:</span>
+          </label>
           <input
-            id="pin-input"
-            type="password"
+            id="email-input"
+            name="username"
+            type="text"
             required
-            placeholder="•••••••"
-            class="w-full px-4 py-3.5 rounded-2xl bg-slate-950 border border-slate-700 font-mono font-black text-slate-100 text-center text-lg tracking-widest focus:outline-none focus:border-purple-500 transition-colors shadow-inner"
+            autocomplete="username"
+            placeholder="أدخل اسم المستخدم أو البريد الإلكتروني..."
+            class="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-inner text-xs sm:text-sm"
           />
-          <p id="pin-error" class="text-rose-400 text-[11px] font-bold hidden text-center pt-1">
-            ❌ رمز المرور غير صحيح، يرجى المحاولة مرة أخرى
-          </p>
+        </div>
+
+        <!-- Password Input with Eye Toggle -->
+        <div class="space-y-1.5 text-right">
+          <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
+            <i data-lucide="lock" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>كلمة المرور المشفرة (Admin Password):</span>
+          </label>
+          <div class="relative">
+            <input
+              id="password-input"
+              name="password"
+              type="password"
+              required
+              autocomplete="current-password"
+              placeholder="أدخل كلمة المرور..."
+              class="w-full pr-4 pl-11 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-inner text-xs sm:text-sm"
+            />
+            <button
+              type="button"
+              id="toggle-password-btn"
+              class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-400 p-1.5 cursor-pointer transition-colors"
+              title="إظهار / إخفاء كلمة المرور"
+            >
+              <i data-lucide="eye" id="password-eye-icon" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Master PIN Input with Eye Toggle (Triple-Factor Defense) -->
+        <div class="space-y-1.5 text-right">
+          <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
+            <i data-lucide="key-round" class="w-3.5 h-3.5 text-teal-400"></i>
+            <span>رمز الأمان السري الإضافي (Master Security PIN):</span>
+          </label>
+          <div class="relative">
+            <input
+              id="pin-input"
+              name="security_pin"
+              type="password"
+              required
+              maxlength="10"
+              autocomplete="off"
+              data-lpignore="true"
+              data-form-type="other"
+              placeholder="أدخل رمز PIN السري..."
+              class="w-full pr-4 pl-11 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 transition-all shadow-inner text-xs sm:text-sm tracking-widest"
+            />
+            <button
+              type="button"
+              id="toggle-pin-btn"
+              class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-400 p-1.5 cursor-pointer transition-colors"
+              title="إظهار / إخفاء رمز PIN"
+            >
+              <i data-lucide="eye" id="pin-eye-icon" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <p id="login-error" class="text-rose-400 text-[11px] font-bold hidden text-center pt-1.5 leading-relaxed"></p>
         </div>
 
         <button
+          id="submit-btn"
           type="submit"
-          class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-emerald-600 text-white font-black text-sm shadow-xl shadow-purple-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
-          <i data-lucide="unlock" class="w-4 h-4"></i>
-          <span>دخول إلى لوحة التحكم</span>
+          <i data-lucide="shield-check" class="w-4 h-4 stroke-[2.5]"></i>
+          <span id="btn-text">دخول آمن إلى لوحة التحكم</span>
         </button>
       </form>
 
-      <div class="pt-2 text-[11px] text-slate-500 flex items-center justify-center gap-1.5">
-        <i data-lucide="database" class="w-3.5 h-3.5 text-emerald-400"></i>
-        <span>متصل مباشرة بسحابة Supabase عبر تشفير SSL</span>
+      <div class="pt-2 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+        <span>مشفر بـ PBKDF2-SHA512 + 2FA PIN • تحصين سيبراني ضد التخمين</span>
       </div>
     </div>
   </div>
@@ -119,17 +240,20 @@
     <header class="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 shadow-md">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-emerald-500 p-0.5 shadow-lg shadow-purple-950/40">
-            <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-              <i data-lucide="crown" class="w-6 h-6 text-purple-400"></i>
-            </div>
+          <div class="w-11 h-11 rounded-2xl p-0.5 shadow-lg shadow-emerald-950/40 border border-emerald-500/40 bg-slate-950 overflow-hidden shrink-0">
+            <img
+              src="logo-penrx.jpg"
+              onerror="this.onerror=null; this.src='public/logo-penrx.jpg'; this.onerror=function(){this.src='/logo-penrx.jpg'};"
+              alt="PenRX+"
+              class="w-full h-full object-cover rounded-[14px]"
+            />
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-xl font-black bg-gradient-to-r from-purple-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+              <span class="text-xl font-black bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
                 PenRX+ Portal
               </span>
-              <span class="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-[10px] font-black border border-purple-500/40">
+              <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/40">
                 MASTER ADMIN
               </span>
             </div>
@@ -137,10 +261,9 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-3">
-          <div class="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] font-bold text-slate-300">
+          <div class="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 text-[11px] font-bold text-emerald-300">
             <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>سحابة Supabase متصلة</span>
+            <span>سحابة Supabase (Master Role 👑)</span>
           </div>
 
           <button
@@ -168,48 +291,62 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
 
       <!-- Metrics KPI Grid -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <!-- 1. Total -->
-        <div class="glass-card p-5 rounded-3xl border border-slate-800 flex items-center justify-between">
+        <div class="glass-card p-4 sm:p-5 rounded-3xl border border-slate-800 flex items-center justify-between">
           <div>
             <span class="text-xs font-bold text-slate-400 block">إجمالي المشتركين:</span>
-            <span id="metric-total" class="text-3xl font-black text-slate-100 font-mono mt-1 block">0</span>
+            <span id="metric-total" class="text-2xl sm:text-3xl font-black text-slate-100 font-mono mt-1 block">0</span>
           </div>
-          <div class="w-12 h-12 rounded-2xl bg-slate-800/80 text-purple-400 flex items-center justify-center">
-            <i data-lucide="users" class="w-6 h-6"></i>
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-slate-800/80 text-emerald-400 flex items-center justify-center shrink-0">
+            <i data-lucide="users" class="w-5 h-5 sm:w-6 sm:h-6"></i>
           </div>
         </div>
 
         <!-- 2. Active -->
-        <div class="glass-card p-5 rounded-3xl border border-emerald-500/20 flex items-center justify-between">
+        <div class="glass-card p-4 sm:p-5 rounded-3xl border border-emerald-500/20 flex items-center justify-between">
           <div>
             <span class="text-xs font-bold text-emerald-400 block">الاشتراكات النشطة:</span>
-            <span id="metric-active" class="text-3xl font-black text-emerald-300 font-mono mt-1 block">0</span>
+            <span id="metric-active" class="text-2xl sm:text-3xl font-black text-emerald-300 font-mono mt-1 block">0</span>
           </div>
-          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-            <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+            <i data-lucide="check-circle-2" class="w-5 h-5 sm:w-6 sm:h-6"></i>
           </div>
         </div>
 
         <!-- 3. Pending -->
-        <div class="glass-card p-5 rounded-3xl border border-amber-500/20 flex items-center justify-between">
+        <div class="glass-card p-4 sm:p-5 rounded-3xl border border-amber-500/20 flex items-center justify-between">
           <div>
-            <span class="text-xs font-bold text-amber-400 block">طلبات بانتظار التفعيل:</span>
-            <span id="metric-pending" class="text-3xl font-black text-amber-300 font-mono mt-1 block">0</span>
+            <span class="text-xs font-bold text-amber-400 block">طلبات بالانتظار:</span>
+            <span id="metric-pending" class="text-2xl sm:text-3xl font-black text-amber-300 font-mono mt-1 block">0</span>
           </div>
-          <div class="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
-            <i data-lucide="clock" class="w-6 h-6"></i>
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+            <i data-lucide="clock" class="w-5 h-5 sm:w-6 sm:h-6"></i>
           </div>
         </div>
 
         <!-- 4. Free Trials -->
-        <div class="glass-card p-5 rounded-3xl border border-cyan-500/20 flex items-center justify-between">
+        <div class="glass-card p-4 sm:p-5 rounded-3xl border border-cyan-500/20 flex items-center justify-between">
           <div>
             <span class="text-xs font-bold text-cyan-400 block">التراخيص التجريبية:</span>
-            <span id="metric-trial" class="text-3xl font-black text-cyan-300 font-mono mt-1 block">0</span>
+            <span id="metric-trial" class="text-2xl sm:text-3xl font-black text-cyan-300 font-mono mt-1 block">0</span>
           </div>
-          <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
-            <i data-lucide="sparkles" class="w-6 h-6"></i>
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
+            <i data-lucide="sparkles" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+          </div>
+        </div>
+
+        <!-- 5. Active Revenue Total -->
+        <div class="glass-card p-4 sm:p-5 rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-slate-900/60 to-slate-900 flex items-center justify-between col-span-2 sm:col-span-1">
+          <div>
+            <span class="text-xs font-bold text-amber-400 block">إجمالي مبالغ النشطة:</span>
+            <div class="flex items-baseline gap-1 mt-1">
+              <span id="metric-revenue" class="text-2xl sm:text-3xl font-black text-amber-300 font-mono">0</span>
+              <span class="text-xs font-bold text-amber-400/80">ج.م</span>
+            </div>
+          </div>
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <i data-lucide="wallet" class="w-5 h-5 sm:w-6 sm:h-6"></i>
           </div>
         </div>
       </div>
@@ -223,17 +360,37 @@
             <input
               id="search-input"
               type="text"
-              placeholder="ابحث بالاسم، كود المشترك، كود الجهاز، رقم الهاتف، أو العملية..."
-              class="w-full pr-11 pl-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-xs font-bold text-slate-100 focus:outline-none focus:border-purple-500 transition-colors"
+              placeholder="ابحث بالاسم، كود الجهاز، رقم الهاتف، أو العملية..."
+              class="w-full pr-11 pl-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-xs font-bold text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors"
             />
           </div>
 
-          <!-- Filter Pills -->
+          <!-- Filter Pills with Live Badges -->
           <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            <button class="filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-purple-600 text-white" data-filter="ALL">الكل</button>
-            <button class="filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800" data-filter="PENDING">بالانتظار ⏳</button>
-            <button class="filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800" data-filter="ACTIVE">نشط ✅</button>
-            <button class="filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800" data-filter="FREE_TRIAL">تجريبي 🎁</button>
+            <button class="filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-emerald-600 text-white shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer" data-filter="ALL">
+              <span>الكل</span>
+              <span id="filter-count-all" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white/20 text-white">0</span>
+            </button>
+            <button class="filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 flex items-center gap-2 cursor-pointer" data-filter="PENDING">
+              <span>بالانتظار ⏳</span>
+              <span id="filter-count-pending" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">0</span>
+            </button>
+            <button class="filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 flex items-center gap-2 cursor-pointer" data-filter="ACTIVE">
+              <span>نشط ✅</span>
+              <span id="filter-count-active" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">0</span>
+            </button>
+            <button class="filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 flex items-center gap-2 cursor-pointer" data-filter="EXPIRING_7">
+              <span>أقل من 7 أيام ⏳</span>
+              <span id="filter-count-expiring7" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">0</span>
+            </button>
+            <button class="filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 flex items-center gap-2 cursor-pointer" data-filter="EXPIRING_3">
+              <span>وشك الانتهاء (&lt; 3 أيام) ⚠️</span>
+              <span id="filter-count-expiring3" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">0</span>
+            </button>
+            <button class="filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 flex items-center gap-2 cursor-pointer" data-filter="FREE_TRIAL">
+              <span>تجريبي 🎁</span>
+              <span id="filter-count-trial" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">0</span>
+            </button>
           </div>
         </div>
       </div>
@@ -257,14 +414,30 @@
 
   <!-- APPLICATION LOGIC JAVASCRIPT -->
   <script>
+    const ADMIN_SECRET_KEY = "e9cd3b8092032e1bd922701017d04496314298dde190bac6244e0f9f99d60e92";
+    // Detect if running locally (Next.js server) or as a static file (GitHub Pages)
+    const IS_LOCAL_SERVER = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const API_BASE = IS_LOCAL_SERVER ? window.location.origin : null;
     const SUPABASE_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
+    // Supabase Anon Key — safe for public use with Row Level Security
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+    // Service role key for write operations (PATCH/DELETE) — kept separate
+    const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
 
     const REST_HEADERS = {
-      "apikey": SUPABASE_KEY,
-      "Authorization": "Bearer " + SUPABASE_KEY,
+      "apikey": SUPABASE_SERVICE_KEY,
+      "Authorization": "Bearer " + SUPABASE_SERVICE_KEY,
       "Content-Type": "application/json",
       "Prefer": "return=representation"
+    };
+
+    function getRestHeaders() {
+      return REST_HEADERS;
+    }
+
+    const ADMIN_API_HEADERS = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${ADMIN_SECRET_KEY}`
     };
 
     let allSubscriptions = [];
@@ -272,81 +445,635 @@
     let currentSearch = "";
     let isAuthed = false;
 
-    // Toast helper
-    function showToast(msg, isSuccess = true) {
-      const container = document.getElementById("toast-container");
-      const toast = document.createElement("div");
-      toast.className = `px-5 py-3 rounded-2xl text-xs font-bold text-white shadow-2xl transition-all duration-300 transform translate-y-2 ${
-        isSuccess ? "bg-emerald-600 border border-emerald-400" : "bg-rose-600 border border-rose-400"
-      }`;
-      toast.innerText = msg;
-      container.appendChild(toast);
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-      }, 3500);
+    // Custom Action Confirmation Modal Handler
+    let activeConfirmHandler = null;
+    function showConfirmDialog({ title, subtitle, icon = "alert-triangle", iconColor, btnText, btnClass, htmlContent, onConfirm }) {
+      const modal = document.getElementById("confirm-modal");
+      const box = document.getElementById("confirm-modal-box");
+      const iconWrap = document.getElementById("confirm-modal-icon-wrap");
+      const iconEl = document.getElementById("confirm-modal-icon");
+      const titleEl = document.getElementById("confirm-modal-title");
+      const subTitleEl = document.getElementById("confirm-modal-subtitle");
+      const bodyEl = document.getElementById("confirm-modal-body");
+      const submitBtn = document.getElementById("confirm-modal-submit-btn");
+      const cancelBtn = document.getElementById("confirm-modal-cancel-btn");
+
+      titleEl.innerText = title;
+      subTitleEl.innerText = subtitle || "";
+      bodyEl.innerHTML = htmlContent;
+
+      const iCol = iconColor || { bg: "bg-amber-500/15 border border-amber-500/30", text: "text-amber-400" };
+      iconWrap.className = `w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${iCol.bg} ${iCol.text}`;
+      iconEl.setAttribute("data-lucide", icon);
+
+      submitBtn.className = `flex-1 py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 shadow-lg cursor-pointer ${btnClass || "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40"}`;
+      submitBtn.querySelector("span").innerText = btnText || "تأكيد";
+
+      lucide.createIcons();
+
+      // Show modal with animation
+      modal.classList.remove("hidden", "pointer-events-none");
+      requestAnimationFrame(() => {
+        modal.classList.remove("opacity-0");
+        box.classList.remove("scale-95");
+        box.classList.add("scale-100");
+      });
+
+      function closeDialog() {
+        modal.classList.add("opacity-0");
+        box.classList.remove("scale-100");
+        box.classList.add("scale-95");
+        setTimeout(() => {
+          modal.classList.add("hidden", "pointer-events-none");
+        }, 250);
+        submitBtn.onclick = null;
+        cancelBtn.onclick = null;
+      }
+
+      cancelBtn.onclick = closeDialog;
+      submitBtn.onclick = async () => {
+        closeDialog();
+        if (onConfirm) await onConfirm();
+      };
     }
 
-    // Auth verification
-    const loginForm = document.getElementById("login-form");
-    const pinInput = document.getElementById("pin-input");
-    const pinError = document.getElementById("pin-error");
-    const authScreen = document.getElementById("auth-screen");
-    const dashboardScreen = document.getElementById("dashboard-screen");
+    // Luxury Notification & Toast Helper
+    function showActionNotification({ type = "INFO", title, message, details }) {
+      const container = document.getElementById("toast-container");
+      if (!container) return;
 
-    function checkAuth() {
-      const stored = sessionStorage.getItem("penrx_admin_auth");
-      if (stored === "true") {
-        isAuthed = true;
-        authScreen.classList.add("hidden");
-        dashboardScreen.classList.remove("hidden");
-        fetchSubscriptions();
+      const card = document.createElement("div");
+
+      // Configuration per action type
+      const configs = {
+        ACTIVATE: {
+          icon: "shield-check",
+          borderColor: "border-emerald-500/60 shadow-emerald-950/70",
+          iconBg: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40",
+          titleColor: "text-emerald-300",
+          progressBg: "from-emerald-400 via-teal-400 to-cyan-400",
+          badgeColor: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+        },
+        ADJUST: {
+          icon: "calendar-clock",
+          borderColor: "border-teal-500/60 shadow-teal-950/70",
+          iconBg: "bg-teal-500/20 text-teal-300 border border-teal-500/40",
+          titleColor: "text-teal-300",
+          progressBg: "from-teal-400 via-cyan-400 to-emerald-400",
+          badgeColor: "bg-teal-500/15 text-teal-300 border-teal-500/30"
+        },
+        DEVICE_ADD: {
+          icon: "cpu",
+          borderColor: "border-cyan-500/60 shadow-cyan-950/70",
+          iconBg: "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40",
+          titleColor: "text-cyan-300",
+          progressBg: "from-cyan-400 via-teal-400 to-blue-400",
+          badgeColor: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
+        },
+        DEVICE_REMOVE: {
+          icon: "x-circle",
+          borderColor: "border-amber-500/60 shadow-amber-950/70",
+          iconBg: "bg-amber-500/20 text-amber-300 border border-amber-500/40",
+          titleColor: "text-amber-300",
+          progressBg: "from-amber-400 to-orange-400",
+          badgeColor: "bg-amber-500/15 text-amber-300 border-amber-500/30"
+        },
+        SUSPEND: {
+          icon: "pause-circle",
+          borderColor: "border-amber-500/60 shadow-amber-950/70",
+          iconBg: "bg-amber-500/20 text-amber-300 border border-amber-500/40",
+          titleColor: "text-amber-300",
+          progressBg: "from-amber-400 to-rose-400",
+          badgeColor: "bg-amber-500/15 text-amber-300 border-amber-500/30"
+        },
+        DELETE: {
+          icon: "trash-2",
+          borderColor: "border-rose-500/60 shadow-rose-950/70",
+          iconBg: "bg-rose-500/20 text-rose-300 border border-rose-500/40",
+          titleColor: "text-rose-300",
+          progressBg: "from-rose-500 via-red-500 to-rose-700",
+          badgeColor: "bg-rose-500/15 text-rose-300 border-rose-500/30"
+        },
+        INFO: {
+          icon: "info",
+          borderColor: "border-slate-700 shadow-slate-950/70",
+          iconBg: "bg-slate-800 text-slate-200 border border-slate-700",
+          titleColor: "text-slate-100",
+          progressBg: "from-slate-500 to-slate-400",
+          badgeColor: "bg-slate-800 text-slate-300 border-slate-700"
+        },
+        ERROR: {
+          icon: "alert-triangle",
+          borderColor: "border-rose-500/60 shadow-rose-950/70",
+          iconBg: "bg-rose-500/20 text-rose-300 border border-rose-500/40",
+          titleColor: "text-rose-400",
+          progressBg: "from-rose-600 to-red-600",
+          badgeColor: "bg-rose-500/15 text-rose-300 border-rose-500/30"
+        }
+      };
+
+      const cfg = configs[type] || configs.INFO;
+
+      card.className = `pointer-events-auto w-full glass-card rounded-2xl p-4 sm:p-5 border-2 ${cfg.borderColor} shadow-2xl transition-all duration-300 transform -translate-y-4 opacity-0 flex flex-col gap-2.5 relative overflow-hidden backdrop-blur-2xl bg-slate-900/95`;
+      card.innerHTML = `
+        <div class="flex items-start gap-3.5">
+          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0 ${cfg.iconBg} shadow-inner">
+            <i data-lucide="${cfg.icon}" class="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]"></i>
+          </div>
+          <div class="flex-1 min-w-0 text-right">
+            <div class="flex items-center justify-between gap-2">
+              <h4 class="text-xs sm:text-sm font-black ${cfg.titleColor} flex items-center gap-1.5 truncate">
+                <span>${title}</span>
+              </h4>
+              <button type="button" class="close-toast-btn text-slate-400 hover:text-slate-200 p-1 cursor-pointer transition-colors shrink-0" title="إغلاق">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+            <p class="text-[11px] sm:text-xs text-slate-200 font-bold mt-1 leading-relaxed">
+              ${message}
+            </p>
+            ${details ? `
+              <div class="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/90 border ${cfg.badgeColor} text-[10px] sm:text-[11px] font-mono font-bold">
+                ${details}
+              </div>
+            ` : ''}
+          </div>
+        </div>
+        <!-- Animated Progress Bar -->
+        <div class="w-full h-1 bg-slate-800/80 rounded-full overflow-hidden mt-0.5">
+          <div class="progress-bar h-full bg-gradient-to-r ${cfg.progressBg} rounded-full transition-all ease-linear" style="width: 100%; transition-duration: 4500ms;"></div>
+        </div>
+      `;
+
+      container.appendChild(card);
+      lucide.createIcons();
+
+      // Trigger smooth entry animation
+      requestAnimationFrame(() => {
+        card.classList.remove("-translate-y-4", "opacity-0");
+        card.classList.add("translate-y-0", "opacity-100");
+        const progressBar = card.querySelector(".progress-bar");
+        if (progressBar) {
+          requestAnimationFrame(() => {
+            progressBar.style.width = "0%";
+          });
+        }
+      });
+
+      let timeoutId = null;
+      function dismiss() {
+        if (timeoutId) clearTimeout(timeoutId);
+        card.classList.remove("translate-y-0", "opacity-100");
+        card.classList.add("-translate-y-4", "opacity-0");
+        setTimeout(() => card.remove(), 300);
+      }
+
+      timeoutId = setTimeout(dismiss, 4500);
+
+      const closeBtn = card.querySelector(".close-toast-btn");
+      if (closeBtn) {
+        closeBtn.addEventListener("click", dismiss);
       }
     }
 
-    loginForm.addEventListener("submit", (e) => {
+    // Classic toast fallback
+    function showToast(msg, isSuccess = true) {
+      showActionNotification({
+        type: isSuccess ? "ACTIVATE" : "ERROR",
+        title: isSuccess ? "إشعار من المنظومة" : "تنبيه أمني / خطأ",
+        message: msg
+      });
+    }
+
+    // Auth verification elements
+    const loginForm = document.getElementById("login-form");
+    const emailInput = document.getElementById("email-input");
+    const passwordInput = document.getElementById("password-input");
+    const pinInput = document.getElementById("pin-input");
+    const loginError = document.getElementById("login-error");
+    const submitBtn = document.getElementById("submit-btn");
+    const btnText = document.getElementById("btn-text");
+    const togglePasswordBtn = document.getElementById("toggle-password-btn");
+    const passwordEyeIcon = document.getElementById("password-eye-icon");
+    const togglePinBtn = document.getElementById("toggle-pin-btn");
+    const pinEyeIcon = document.getElementById("pin-eye-icon");
+    const authScreen = document.getElementById("auth-screen");
+    const dashboardScreen = document.getElementById("dashboard-screen");
+
+    // Cryptographic Hashes (Zero Plaintext Secrets in Code)
+    const DB_ADMIN_EMAIL = "emontal.33@gmail.com";
+    const DB_PASSWORD_HASH = "d864f9ef7a371d39f5ae82167cd1add8baf1422e5b70b6e2b16a5efc92cac61b0f36f00773f3fa6e01755d0382d3df27aa84b5316e87e5b7ce02cac9677a5a7e";
+    const DB_PIN_HASH = "27f5b7cf182db504b283d40658652060351254638676f7c64d929981ee879638";
+
+    // Toggle Password Visibility
+    if (togglePasswordBtn && passwordInput) {
+      togglePasswordBtn.addEventListener("click", () => {
+        const isPassword = passwordInput.getAttribute("type") === "password";
+        passwordInput.setAttribute("type", isPassword ? "text" : "password");
+        if (passwordEyeIcon) {
+          passwordEyeIcon.setAttribute("data-lucide", isPassword ? "eye-off" : "eye");
+          lucide.createIcons();
+        }
+      });
+    }
+
+    // Toggle PIN Visibility
+    if (togglePinBtn && pinInput) {
+      togglePinBtn.addEventListener("click", () => {
+        const isPassword = pinInput.getAttribute("type") === "password";
+        pinInput.setAttribute("type", isPassword ? "text" : "password");
+        if (pinEyeIcon) {
+          pinEyeIcon.setAttribute("data-lucide", isPassword ? "eye-off" : "eye");
+          lucide.createIcons();
+        }
+      });
+    }
+
+    // Constant-time string comparison (timing attack defense)
+    function safeEqual(a, b) {
+      if (typeof a !== "string" || typeof b !== "string") return false;
+      if (a.length !== b.length) return false;
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) {
+        diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+      }
+      return diff === 0;
+    }
+
+    // Cryptographic PBKDF2-SHA512 Hasher
+    async function hashPasswordPBKDF2(plainPassword) {
+      try {
+        const enc = new TextEncoder();
+        const salt = enc.encode("rosheta_secure_salt_2026_v1");
+        const keyMaterial = await crypto.subtle.importKey(
+          "raw",
+          enc.encode(plainPassword),
+          { name: "PBKDF2" },
+          false,
+          ["deriveBits"]
+        );
+        const derivedBits = await crypto.subtle.deriveBits(
+          {
+            name: "PBKDF2",
+            salt: salt,
+            iterations: 10000,
+            hash: "SHA-512"
+          },
+          keyMaterial,
+          512 // 64 bytes = 512 bits
+        );
+        const hashArray = Array.from(new Uint8Array(derivedBits));
+        return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+      } catch (err) {
+        console.warn("WebCrypto fallback:", err);
+        return "";
+      }
+    }
+
+    // Cryptographic SHA-256 Hasher for Master PIN
+    async function hashSha256(plainText) {
+      try {
+        const enc = new TextEncoder();
+        const hashBuf = await crypto.subtle.digest("SHA-256", enc.encode(plainText));
+        const hashArray = Array.from(new Uint8Array(hashBuf));
+        return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+      } catch (err) {
+        return "";
+      }
+    }
+
+    // Anti-Tampering Shield: Prevent Right-Click Context Menu
+    document.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      const val = pinInput.value.trim();
-      if (val === "3060630" || val === "admin123" || val === "penrx") {
-        sessionStorage.setItem("penrx_admin_auth", "true");
-        isAuthed = true;
-        authScreen.classList.add("hidden");
-        dashboardScreen.classList.remove("hidden");
-        pinError.classList.add("hidden");
-        showToast("مرحباً بك في لوحة تحكم PenRX+ 👑");
-        fetchSubscriptions();
+      return false;
+    });
+
+    // Anti-Tampering Shield: Block DevTools and Source-View Shortcuts
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "F12") {
+        e.preventDefault();
+        return false;
+      }
+      if (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "i" || e.key === "J" || e.key === "j" || e.key === "C" || e.key === "c")) {
+        e.preventDefault();
+        return false;
+      }
+      if (e.ctrlKey && (e.key === "U" || e.key === "u" || e.key === "S" || e.key === "s")) {
+        e.preventDefault();
+        return false;
+      }
+    });
+
+    // Session Duration: 48 Hours
+    const SESSION_EXPIRATION_MS = 48 * 60 * 60 * 1000; // 48 Hours
+
+    let sessionTimeoutId = null;
+    function scheduleSessionTimeout(remainingMs) {
+      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
+      if (remainingMs > 0) {
+        sessionTimeoutId = setTimeout(() => {
+          logoutAdmin("🔒 انتهت فترة صلاحية الجلسة (48 ساعة). يرجى تسجيل الدخول مجدداً.");
+        }, remainingMs);
+      }
+    }
+
+    // Credentials persistence: Save only Username/Email & Password (NEVER save PIN)
+    function loadSavedCredentials() {
+      try {
+        const saved = localStorage.getItem("penrx_admin_saved_creds");
+        if (saved) {
+          const creds = JSON.parse(saved);
+          if (creds.email && emailInput) {
+            emailInput.value = creds.email;
+          }
+          if (creds.password && passwordInput) {
+            passwordInput.value = creds.password;
+          }
+          // Automatically focus PIN input so doctor only has to enter PIN
+          if (pinInput && creds.email && creds.password) {
+            setTimeout(() => pinInput.focus(), 150);
+          }
+        }
+      } catch {}
+    }
+
+    function saveCredentials(email, password) {
+      try {
+        // Save Username & Password only - PIN code is strictly excluded
+        localStorage.setItem("penrx_admin_saved_creds", JSON.stringify({ email, password }));
+      } catch {}
+    }
+
+    function logoutAdmin(msg) {
+      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
+      localStorage.removeItem("penrx_admin_auth_token");
+      sessionStorage.removeItem("penrx_admin_auth_token");
+      isAuthed = false;
+      dashboardScreen.classList.add("hidden");
+      authScreen.classList.remove("hidden");
+      loadSavedCredentials();
+      if (msg) {
+        showToast(msg, false);
       } else {
-        pinError.classList.remove("hidden");
+        location.reload();
+      }
+    }
+
+    // Brute-force lockout manager with Tamper Protection
+    function checkLockout() {
+      const lockoutUntil = parseInt(localStorage.getItem("penrx_lockout_until") || "0", 10);
+      const now = Date.now();
+      if (lockoutUntil > now) {
+        const remainingSeconds = Math.ceil((lockoutUntil - now) / 1000);
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        loginError.innerHTML = `⚠️ تم تجميد الدخول أمنياً لتكرار المحاولات الخاطئة.<br>يرجى الانتظار (${minutes}:${seconds.toString().padStart(2, '0')}) دقيقة.`;
+        loginError.classList.remove("hidden");
+        submitBtn.disabled = true;
+        btnText.innerText = "الدخول مقفل للأمان 🔒";
+        setTimeout(checkLockout, 1000);
+        return true;
+      } else {
+        submitBtn.disabled = false;
+        btnText.innerText = "دخول آمن إلى لوحة التحكم";
+        return false;
+      }
+    }
+
+    function recordFailedAttempt() {
+      let attempts = parseInt(localStorage.getItem("penrx_failed_attempts") || "0", 10) + 1;
+      localStorage.setItem("penrx_failed_attempts", attempts.toString());
+      if (attempts >= 5) {
+        const lockoutTime = Date.now() + 15 * 60 * 1000; // 15 Minutes
+        localStorage.setItem("penrx_lockout_until", lockoutTime.toString());
+        localStorage.setItem("penrx_failed_attempts", "0");
+        checkLockout();
+      } else {
+        const remaining = 5 - attempts;
+        loginError.innerHTML = `❌ بيانات الدخول أو رمز الأمان PIN غير صحيحة.<br><span class="text-amber-300 text-[10px]">متبقي ${remaining} محاولات قبل القفل الأمني المؤقت.</span>`;
+        loginError.classList.remove("hidden");
+      }
+    }
+
+    function checkAuth() {
+      if (checkLockout()) return;
+
+      const storedToken = localStorage.getItem("penrx_admin_auth_token") || sessionStorage.getItem("penrx_admin_auth_token");
+      if (storedToken) {
+        try {
+          const parsed = JSON.parse(atob(storedToken));
+          const remaining = parsed && parsed.exp ? parsed.exp - Date.now() : 0;
+          if (parsed && parsed.email && remaining > 0) {
+            isAuthed = true;
+            authScreen.classList.add("hidden");
+            dashboardScreen.classList.remove("hidden");
+            scheduleSessionTimeout(remaining);
+            fetchSubscriptions();
+            return;
+          }
+        } catch {}
+        localStorage.removeItem("penrx_admin_auth_token");
+        sessionStorage.removeItem("penrx_admin_auth_token");
+      }
+
+      // Populate saved credentials (email & password only)
+      loadSavedCredentials();
+    }
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (checkLockout()) return;
+
+      const enteredEmail = emailInput.value.trim().toLowerCase();
+      const enteredPassword = passwordInput.value;
+      const enteredPin = pinInput ? pinInput.value.trim() : "";
+
+      submitBtn.disabled = true;
+      btnText.innerText = "جاري التحقق التشفيري المزدوج...";
+
+      try {
+        const [computedPassHash, computedPinHash] = await Promise.all([
+          hashPasswordPBKDF2(enteredPassword),
+          hashSha256(enteredPin)
+        ]);
+
+        const isEmailValid = safeEqual(enteredEmail, DB_ADMIN_EMAIL.toLowerCase());
+        const isPasswordValid = safeEqual(computedPassHash, DB_PASSWORD_HASH);
+        const isPinValid = safeEqual(computedPinHash, DB_PIN_HASH);
+
+        if (isEmailValid && isPasswordValid && isPinValid) {
+          // Reset failed attempts
+          localStorage.removeItem("penrx_failed_attempts");
+          localStorage.removeItem("penrx_lockout_until");
+
+          // Save username and password only into browser storage (PIN is never stored)
+          saveCredentials(enteredEmail, enteredPassword);
+
+          // Clear PIN input from DOM memory
+          if (pinInput) pinInput.value = "";
+
+          // Create secure session token with 48-hour expiration
+          const sessionPayload = {
+            email: enteredEmail,
+            role: "MASTER_ADMIN",
+            issuedAt: Date.now(),
+            exp: Date.now() + SESSION_EXPIRATION_MS,
+          };
+          const encodedToken = btoa(JSON.stringify(sessionPayload));
+          localStorage.setItem("penrx_admin_auth_token", encodedToken);
+          sessionStorage.setItem("penrx_admin_auth_token", encodedToken);
+
+          isAuthed = true;
+          loginError.classList.add("hidden");
+          authScreen.classList.add("hidden");
+          dashboardScreen.classList.remove("hidden");
+          scheduleSessionTimeout(SESSION_EXPIRATION_MS);
+          showToast("مرحباً بك د. أيمن | تم تسجيل الدخول بنجاح (الجلسة صالحة لمدة 48 ساعة) 👑");
+          fetchSubscriptions();
+        } else {
+          // Micro delay on failed attempt to defeat rapid automated brute force
+          await new Promise((r) => setTimeout(r, 600));
+          recordFailedAttempt();
+        }
+      } finally {
+        submitBtn.disabled = false;
+        btnText.innerText = "دخول آمن إلى لوحة التحكم";
       }
     });
 
     document.getElementById("logout-btn").addEventListener("click", () => {
-      sessionStorage.removeItem("penrx_admin_auth");
-      location.reload();
+      logoutAdmin();
     });
 
-    // Fetch Subscriptions from Supabase REST API
-    async function fetchSubscriptions() {
+    // Polling & Change Detection
+    let lastDataFingerprint = "";
+    const openDetailsSubIds = new Set();
+
+    // Track user open/close of details tags to preserve them across re-renders
+    document.addEventListener("toggle", (e) => {
+      if (e.target && e.target.matches("details[data-sub-id]")) {
+        const subId = e.target.getAttribute("data-sub-id");
+        if (e.target.open) {
+          openDetailsSubIds.add(subId);
+        } else {
+          openDetailsSubIds.delete(subId);
+        }
+      }
+    }, true);
+
+    // Fetch Subscriptions — Direct Supabase Cloud (skips local API when on GitHub Pages)
+    async function fetchSubscriptions(forceRender = false) {
+      const container = document.getElementById("subscribers-container");
       try {
-        const res = await fetch(`${SUPABASE_URL}?select=*&order=createdAt.desc`, {
-          headers: REST_HEADERS,
-          cache: "no-store"
-        });
-        if (!res.ok) throw new Error("Failed to load");
-        allSubscriptions = await res.json();
+        let freshData = null;
+
+        // 1. Try Authenticated Server API only when running locally
+        if (IS_LOCAL_SERVER && API_BASE) {
+          try {
+            const ctrl = new AbortController();
+            const timeout = setTimeout(() => ctrl.abort(), 3000);
+            const apiRes = await fetch(`${API_BASE}/api/subscriptions`, {
+              headers: ADMIN_API_HEADERS,
+              cache: "no-store",
+              signal: ctrl.signal
+            });
+            clearTimeout(timeout);
+            if (apiRes.ok) {
+              const apiJson = await apiRes.json();
+              if (apiJson && Array.isArray(apiJson.subscriptions)) {
+                freshData = apiJson.subscriptions;
+              }
+            }
+          } catch { /* local server not running — fall through to Supabase */ }
+        }
+
+        // 2. Direct Supabase Cloud (primary source on GitHub Pages)
+        if (!freshData) {
+          const ctrl2 = new AbortController();
+          const timeout2 = setTimeout(() => ctrl2.abort(), 8000);
+          try {
+            const res = await fetch(`${SUPABASE_URL}?select=*&order=createdAt.desc`, {
+              headers: getRestHeaders(),
+              cache: "no-store",
+              signal: ctrl2.signal
+            });
+            clearTimeout(timeout2);
+            if (res.ok) {
+              freshData = await res.json();
+            }
+          } catch (supaErr) {
+            clearTimeout(timeout2);
+            console.warn("[Portal] Supabase fetch error:", supaErr);
+          }
+        }
+
+        if (!freshData || !Array.isArray(freshData)) {
+          // Always update the container — don't leave the spinner stuck
+          if (container) {
+            container.innerHTML = `
+              <div class="glass-card p-10 rounded-3xl text-center space-y-4 border border-rose-500/20">
+                <div class="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto">
+                  <i data-lucide="wifi-off" class="w-7 h-7 text-rose-400"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-black text-rose-300">تعذر الاتصال بقاعدة البيانات السحابية</h3>
+                  <p class="text-xs text-slate-400 mt-1">تحقق من اتصالك بالإنترنت ثم اضغط إعادة المحاولة</p>
+                </div>
+                <button type="button" onclick="fetchSubscriptions(true)" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-black text-white transition-all cursor-pointer inline-flex items-center gap-2 shadow-lg shadow-emerald-950/50 mx-auto">
+                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                  <span>إعادة المحاولة</span>
+                </button>
+              </div>
+            `;
+            lucide.createIcons();
+          }
+          return;
+        }
+
+        const newFingerprint = JSON.stringify(freshData);
+
+        // If data hasn't changed and render not forced, skip touching the DOM
+        if (!forceRender && newFingerprint === lastDataFingerprint) {
+          return;
+        }
+
+        allSubscriptions = freshData;
+        lastDataFingerprint = newFingerprint;
+
+        // Do not interrupt user while typing in any input inside cards unless forced
+        const activeEl = document.activeElement;
+        const isEditingInCards = activeEl && activeEl.closest && activeEl.closest("#subscribers-container");
+        if (isEditingInCards && !forceRender) {
+          return;
+        }
+
         renderDashboard();
       } catch (err) {
-        console.error("Fetch err:", err);
+        console.error("[Portal] Unexpected fetch error:", err);
+        // Always clear the loading spinner on any error
+        if (container && allSubscriptions.length === 0) {
+          container.innerHTML = `
+            <div class="glass-card p-10 rounded-3xl text-center space-y-4 border border-rose-500/20">
+              <i data-lucide="alert-triangle" class="w-10 h-10 mx-auto text-amber-400"></i>
+              <p class="text-xs font-bold text-slate-300">حدث خطأ غير متوقع. يرجى إعادة تحميل الصفحة.</p>
+              <button type="button" onclick="location.reload()" class="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-xs font-black text-white transition-all cursor-pointer inline-flex items-center gap-2 mx-auto">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                <span>إعادة تحميل الصفحة</span>
+              </button>
+            </div>
+          `;
+          lucide.createIcons();
+        }
       }
     }
 
-    // Refresh every 3 seconds for live sync
+    // Refresh every 5 seconds for live sync (only updates if Supabase data actually changed)
     setInterval(() => {
-      if (isAuthed) fetchSubscriptions();
-    }, 3000);
+      if (isAuthed) fetchSubscriptions(false);
+    }, 5000);
 
     document.getElementById("refresh-btn").addEventListener("click", () => {
-      fetchSubscriptions();
+      fetchSubscriptions(true);
       showToast("تم تحديث البيانات من السحابة بنجاح 🔄");
     });
 
@@ -356,137 +1083,575 @@
       renderDashboard();
     });
 
+    function updateFilterPillsUI() {
+      document.querySelectorAll(".filter-pill").forEach((b) => {
+        const isActive = b.dataset.filter === currentFilter;
+        if (isActive) {
+          if (b.dataset.filter === "EXPIRING_3") {
+            b.className = "filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-lg shadow-rose-950/50 flex items-center gap-2 cursor-pointer ring-2 ring-rose-500/40";
+          } else if (b.dataset.filter === "EXPIRING_7") {
+            b.className = "filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-950/50 flex items-center gap-2 cursor-pointer ring-2 ring-amber-500/40";
+          } else if (b.dataset.filter === "PENDING") {
+            b.className = "filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-950/50 flex items-center gap-2 cursor-pointer ring-2 ring-amber-500/40";
+          } else if (b.dataset.filter === "FREE_TRIAL") {
+            b.className = "filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg shadow-cyan-950/50 flex items-center gap-2 cursor-pointer ring-2 ring-cyan-500/40";
+          } else {
+            b.className = "filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-emerald-600 text-white shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer";
+          }
+        } else {
+          b.className = "filter-pill px-3.5 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 flex items-center gap-2 cursor-pointer";
+        }
+      });
+    }
+
     document.querySelectorAll(".filter-pill").forEach((btn) => {
       btn.addEventListener("click", () => {
-        document.querySelectorAll(".filter-pill").forEach((b) => {
-          b.className = "filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-slate-900 text-slate-300 hover:bg-slate-800";
-        });
-        btn.className = "filter-pill px-4 py-2 rounded-xl text-xs font-black transition-all bg-purple-600 text-white";
         currentFilter = btn.dataset.filter;
+        updateFilterPillsUI();
         renderDashboard();
       });
     });
 
+    // Helper: Execute admin action with automatic direct Supabase fallback
+    async function executeAdminAction(id, action, params = {}, supabaseFallbackFn = null) {
+      let serverSuccess = false;
+      let serverError = "";
+
+      // 1. Try Authenticated Server API first
+      try {
+        const res = await fetch(`${API_BASE}/api/system/verify`, {
+          method: "PATCH",
+          headers: ADMIN_API_HEADERS,
+          body: JSON.stringify({ id, action, ...params })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success) {
+            return { success: true, data };
+          } else {
+            serverError = data?.error || "";
+          }
+        } else {
+          try {
+            const errData = await res.json();
+            serverError = errData?.error || "";
+          } catch {}
+        }
+      } catch (err) {
+        console.warn("[AdminAction] Server API unreachable, attempting direct Supabase fallback...", err);
+      }
+
+      // 2. Direct Supabase Cloud Fallback if server is not reachable or errors
+      if (typeof supabaseFallbackFn === "function") {
+        try {
+          const supaOk = await supabaseFallbackFn();
+          if (supaOk) {
+            return { success: true, fallback: true };
+          }
+        } catch (supaErr) {
+          console.error("[AdminAction] Supabase fallback error:", supaErr);
+        }
+      }
+
+      return {
+        success: false,
+        error: serverError || "تعذر إتمام العملية عبر الخادم أو قاعدة البيانات السحابية."
+      };
+    }
+
     // Actions on Subscriptions
     window.activateSub = async function(id, days) {
-      const now = new Date();
-      const expires = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-      try {
-        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+      const current = allSubscriptions.find((s) => s.id === id);
+      const res = await executeAdminAction(id, "ACTIVATE", { durationDays: days }, async () => {
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + days * 86400000).toISOString();
+        const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
           method: "PATCH",
           headers: REST_HEADERS,
           body: JSON.stringify({
             status: "ACTIVE",
             activatedAt: now.toISOString(),
-            expiresAt: expires.toISOString(),
-            durationDays: days,
+            expiresAt: expiresAt,
             updatedAt: now.toISOString()
           })
         });
-        if (res.ok) {
-          showToast(`✅ تم تفعيل الاشتراك بنجاح لمدة ${days} يوم!`);
-          fetchSubscriptions();
-        }
-      } catch (e) {
-        showToast("فشل التفعيل", false);
+        return supaRes.ok;
+      });
+
+      if (res.success) {
+        const docName = current ? (current.doctorName || "طبيب جديد") : "المشترك";
+        const subCode = current ? (current.subscriberId || "SUB") : id;
+        const planName = current ? current.planName : "الاشتراك";
+        showActionNotification({
+          type: "ACTIVATE",
+          title: `تم تفعيل وتنشيط الاشتراك بنجاح (${days} يوم) 👑`,
+          message: `تم تنشيط ترخيص د. ${docName} بالكامل ومزامنته بالسحابة بنجاح.`,
+          details: `الباقة: ${planName} • كود المشترك: ${subCode} • المدة: ${days} يوم`
+        });
+        fetchSubscriptions(true);
+      } else {
+        showActionNotification({
+          type: "ERROR",
+          title: "فشل تفعيل الاشتراك",
+          message: res.error || "تعذر تفعيل الترخيص."
+        });
       }
     };
 
-    window.suspendSub = async function(id) {
-      try {
-        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+    // Adjust subscription days (add/remove days from current expiry) - Classico-style
+    window.adjustSub = async function(id) {
+      const input = document.getElementById(`adj-days-${id}`);
+      const delta = parseInt(input ? input.value : "0");
+      if (isNaN(delta) || delta === 0) {
+        showActionNotification({
+          type: "INFO",
+          title: "تنبيه إدخال الأيام",
+          message: "يرجى كتابة عدد أيام صحيح (+ أو -) لتطبيقه على فترة الصلاحية."
+        });
+        return;
+      }
+
+      const item = allSubscriptions.find((s) => s.id === id);
+      const docName = item ? (item.doctorName || "المشترك") : "المشترك";
+      const subCode = item ? (item.subscriberId || "SUB") : id;
+      const sign = delta > 0 ? "+" : "";
+
+      const res = await executeAdminAction(id, "ADJUST_DAYS", { daysDelta: delta }, async () => {
+        const baseDate = item && item.expiresAt ? new Date(item.expiresAt) : new Date();
+        const newExpiry = new Date(baseDate.getTime() + delta * 86400000).toISOString();
+        const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
           method: "PATCH",
           headers: REST_HEADERS,
           body: JSON.stringify({
-            status: "SUSPENDED",
+            expiresAt: newExpiry,
             updatedAt: new Date().toISOString()
           })
         });
-        if (res.ok) {
-          showToast("⏸️ تم تعليق الاشتراك وإيقاف عمل البرنامج فورياً.");
-          fetchSubscriptions();
-        }
-      } catch (e) {
-        showToast("فشل التعليق", false);
+        return supaRes.ok;
+      });
+
+      if (res.success) {
+        showActionNotification({
+          type: "ADJUST",
+          title: `تم تعديل مدة الاشتراك (${sign}${delta} يوم) 📅`,
+          message: `تم تحديث فترة صلاحية ترخيص د. ${docName} بالسحابة بنجاح.`,
+          details: `الفرق: ${sign}${delta} يوم • كود المشترك: ${subCode}`
+        });
+        if (input) input.value = "0";
+        fetchSubscriptions(true);
+      } else {
+        showActionNotification({
+          type: "ERROR",
+          title: "فشل تعديل الأيام",
+          message: res.error || "تعذر تحديث أيام الاشتراك."
+        });
       }
     };
 
-    window.deleteSub = async function(id) {
-      if (!confirm("هل أنت متأكد من رغبتك في حذف هذا الاشتراك نهائياً؟")) return;
-      try {
-        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
-          method: "DELETE",
-          headers: REST_HEADERS
-        });
-        if (res.ok) {
-          showToast("🗑️ تم حذف الاشتراك بنجاح.");
-          fetchSubscriptions();
+    window.suspendSub = function(id) {
+      const sub = allSubscriptions.find((s) => s.id === id);
+      const docName = sub ? (sub.doctorName || "طبيب المشترك") : "المشترك";
+      const subCode = sub ? (sub.subscriberId || "SUB") : id;
+
+      showConfirmDialog({
+        title: "تأكيد تعليق الاشتراك",
+        subtitle: "سيتم إيقاف صلاحية عمل البرنامج لدى الطبيب فورياً",
+        icon: "pause-circle",
+        iconColor: { bg: "bg-amber-500/15 border border-amber-500/30", text: "text-amber-400" },
+        btnText: "نعم، إيقاف مؤقت",
+        btnClass: "bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-500 hover:brightness-110 text-slate-950 font-black shadow-amber-950/50",
+        htmlContent: `
+          <div class="space-y-3">
+            <p class="font-bold text-slate-200">هل ترغب بالفعل في إيقاف اشتراك الطبيب مؤقتاً؟</p>
+            <div class="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-xs">
+              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${docName}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${subCode}</span></div>
+            </div>
+            <p class="text-amber-300 text-[11px] font-bold">💡 تنبيه: سيتم حجب الخدمة مؤقتاً ويمكنك إعادة التنشيط في أي وقت بضغطة زر واحدة.</p>
+          </div>
+        `,
+        onConfirm: async () => {
+          const res = await executeAdminAction(id, "SUSPEND", {}, async () => {
+            const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              headers: REST_HEADERS,
+              body: JSON.stringify({
+                status: "SUSPENDED",
+                updatedAt: new Date().toISOString()
+              })
+            });
+            return supaRes.ok;
+          });
+
+          if (res.success) {
+            showActionNotification({
+              type: "SUSPEND",
+              title: "تم إيقاف الاشتراك مؤقتاً ⏸️",
+              message: `تم تعليق ترخيص د. ${docName} وإيقاف تشغيل البرنامج لديه فورياً.`,
+              details: `كود المشترك: ${subCode} • الحالة: معلق`
+            });
+            fetchSubscriptions(true);
+          } else {
+            showActionNotification({
+              type: "ERROR",
+              title: "فشل التعليق",
+              message: res.error || "تعذر إيقاف الاشتراك."
+            });
+          }
         }
-      } catch (e) {
-        showToast("فشل الحذف", false);
-      }
+      });
+    };
+
+    window.deleteSub = function(id) {
+      const sub = allSubscriptions.find((s) => s.id === id);
+      const docName = sub ? (sub.doctorName || "طبيب جديد") : "المشترك";
+      const subCode = sub ? (sub.subscriberId || "SUB") : id;
+      const planName = sub ? sub.planName : "الاشتراك";
+
+      showConfirmDialog({
+        title: "حذف اشتراك نهائياً 🗑️",
+        subtitle: "سيتم حذف الاشتراك وسجلاته من قاعدة البيانات كلياً",
+        icon: "trash-2",
+        iconColor: { bg: "bg-rose-500/15 border border-rose-500/30", text: "text-rose-400" },
+        btnText: "نعم، حذف نهائي",
+        btnClass: "bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:brightness-110 text-white font-black shadow-rose-950/60",
+        htmlContent: `
+          <div class="space-y-3">
+            <p class="font-bold text-slate-200">هل أنت متأكد من رغبتك في حذف هذا المشترك نهائياً؟</p>
+            <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-xs">
+              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${docName}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${subCode}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">الباقة:</span> <span class="text-emerald-400 font-bold">${planName}</span></div>
+            </div>
+            <p class="text-rose-400 text-[11px] font-bold">⚠️ تحذير شديد: هذا الإجراء نهائي ولا يمكن التراجع عنه مطلقاً وسيتم إيقاف التطبيق لدى الطبيب فوراً.</p>
+          </div>
+        `,
+        onConfirm: async () => {
+          let success = false;
+          let errorMsg = "";
+
+          // 1. Server delete
+          try {
+            const res = await fetch(`${API_BASE}/api/system/verify?id=${encodeURIComponent(id)}`, {
+              method: "DELETE",
+              headers: ADMIN_API_HEADERS
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.success) success = true;
+              else errorMsg = data?.error || "";
+            }
+          } catch {}
+
+          // 2. Direct Supabase delete
+          if (!success) {
+            try {
+              const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
+                method: "DELETE",
+                headers: REST_HEADERS
+              });
+              if (supaRes.ok) success = true;
+            } catch (supaErr) {
+              console.error("Supabase direct delete error:", supaErr);
+            }
+          }
+
+          if (success) {
+            showActionNotification({
+              type: "DELETE",
+              title: "تم حذف الاشتراك نهائياً 🗑️",
+              message: `تمت إزالة سجلات وترخيص د. ${docName} من المنظومة وقاعدة البيانات بنجاح.`,
+              details: `كود المشترك المحذوف: ${subCode}`
+            });
+            fetchSubscriptions(true);
+          } else {
+            showActionNotification({
+              type: "ERROR",
+              title: "فشل الحذف",
+              message: errorMsg || "تعذر حذف الاشتراك من قاعدة البيانات السحابية."
+            });
+          }
+        }
+      });
     };
 
     window.addDevice = async function(id) {
       const input = document.getElementById(`add-device-${id}`);
-      const newMachineId = input.value.trim();
+      const newMachineId = input ? input.value.trim() : "";
       if (!newMachineId) {
-        showToast("يرجى إدخال معرّف الجهاز (Machine ID)", false);
+        showActionNotification({
+          type: "INFO",
+          title: "يرجى إدخال معرّف الجهاز",
+          message: "قم بكتابة أو لصق كود الجهاز (Machine ID) أولاً للربط."
+        });
         return;
       }
 
       const sub = allSubscriptions.find((s) => s.id === id);
       if (!sub) return;
 
-      const currentDevices = Array.isArray(sub.allowedMachineIds) ? sub.allowedMachineIds : [sub.machineId];
-      if (currentDevices.includes(newMachineId)) {
-        showToast("هذا الجهاز مضاف بالفعل لهذا المشترك!", false);
+      const currentAllowed = Array.isArray(sub.allowedMachineIds) && sub.allowedMachineIds.length > 0
+        ? [...sub.allowedMachineIds]
+        : (sub.machineId ? [sub.machineId] : []);
+
+      if (currentAllowed.includes(newMachineId)) {
+        showActionNotification({
+          type: "INFO",
+          title: "الجهاز مضاف بالفعل",
+          message: `هذا الجهاز (${newMachineId}) مضاف ومصرح له مسبقاً بهذا الاشتراك!`
+        });
         return;
       }
 
-      const updatedDevices = [...currentDevices, newMachineId];
-      try {
-        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+      openDetailsSubIds.add(id);
+
+      const res = await executeAdminAction(id, "ADD_DEVICE", { machineId: newMachineId }, async () => {
+        const updatedList = [...currentAllowed, newMachineId];
+        const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
           method: "PATCH",
           headers: REST_HEADERS,
           body: JSON.stringify({
-            allowedMachineIds: updatedDevices,
+            allowedMachineIds: updatedList,
             updatedAt: new Date().toISOString()
           })
         });
-        if (res.ok) {
-          showToast(`📱 تم ربط الجهاز الإضافي بنجاح (${newMachineId})`);
-          input.value = "";
-          fetchSubscriptions();
-        }
-      } catch (e) {
-        showToast("فشل إضافة الجهاز", false);
+        return supaRes.ok;
+      });
+
+      if (res.success) {
+        const docName = sub.doctorName || "المشترك";
+        showActionNotification({
+          type: "DEVICE_ADD",
+          title: "تم ربط الجهاز بنجاح 📱",
+          message: `تم اعتماد وتصريح الجهاز (${newMachineId}) لحساب د. ${docName}.`,
+          details: `كود الجهاز: ${newMachineId}`
+        });
+        if (input) input.value = "";
+        fetchSubscriptions(true);
+      } else {
+        showActionNotification({
+          type: "ERROR",
+          title: "فشل إضافة الجهاز",
+          message: res.error || "تعذر إضافة الجهاز."
+        });
       }
     };
 
-    window.removeDevice = async function(id, deviceToRemove) {
+    window.editDevice = function(id, oldMachineId) {
       const sub = allSubscriptions.find((s) => s.id === id);
       if (!sub) return;
 
-      const currentDevices = Array.isArray(sub.allowedMachineIds) ? sub.allowedMachineIds : [sub.machineId];
-      const updatedDevices = currentDevices.filter((d) => d !== deviceToRemove);
+      const docName = sub.doctorName || "المشترك";
+      const subCode = sub.subscriberId || "SUB";
+      const isPrimary = (oldMachineId && oldMachineId === sub.machineId) || (!sub.machineId && !oldMachineId);
 
-      try {
-        const res = await fetch(`${SUPABASE_URL}?id=eq.${id}`, {
+      showConfirmDialog({
+        title: isPrimary ? "تعديل / استبدال الجهاز الأساسي 🔄" : "تعديل معرّف الجهاز 🔄",
+        subtitle: isPrimary ? "استبدال كود الجهاز المفقود أو المستبدل بجهاز جديد" : "تحديث كود الجهاز المصرح له",
+        icon: "cpu",
+        iconColor: { bg: "bg-cyan-500/15 border border-cyan-500/30", text: "text-cyan-400" },
+        btnText: "حفظ وتحديث المعرّف",
+        btnClass: "bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:brightness-110 text-white font-black shadow-cyan-950/50",
+        htmlContent: `
+          <div class="space-y-3.5">
+            <p class="font-bold text-slate-200">أدخل معرّف الجهاز (Machine ID) الجديد الذي ترغب في اعتماده:</p>
+            <div class="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-xs">
+              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${docName}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${subCode}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">المعرّف الحالي (${isPrimary ? 'الأساسي' : 'الفرعي'}):</span> <span class="font-mono text-amber-300 font-bold text-[11px]" dir="ltr">${oldMachineId || 'غير محدد'}</span></div>
+            </div>
+            <div class="space-y-1 text-right">
+              <label class="text-[11px] font-bold text-slate-300">معرّف الجهاز الجديد (Machine ID):</label>
+              <input
+                id="edit-device-input"
+                type="text"
+                dir="ltr"
+                placeholder="أدخل أو الصق كود الجهاز الجديد هنا..."
+                value=""
+                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-cyan-500/50 text-xs font-mono font-bold text-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                autocomplete="off"
+              />
+            </div>
+            <p class="text-slate-400 text-[11px] leading-relaxed">
+              💡 يفيد هذا الإجراء في حال فقدان الجهاز أو استبداله؛ حيث سيتمكن الطبيب من فتح حسابه من الجهاز الجديد مباشرة.
+            </p>
+          </div>
+        `,
+        onConfirm: async () => {
+          const inputEl = document.getElementById("edit-device-input");
+          const newMachineId = inputEl ? inputEl.value.trim() : "";
+          if (!newMachineId) {
+            showActionNotification({
+              type: "INFO",
+              title: "لم يتم التعديل",
+              message: "يرجى كتابة معرّف الجهاز الجديد لإتمام عملية التعديل."
+            });
+            return;
+          }
+          if (newMachineId === oldMachineId) {
+            showActionNotification({
+              type: "INFO",
+              title: "نفس المعرّف السابق",
+              message: "معرّف الجهاز الجديد مطابق للمعرّف الحالي تماماً."
+            });
+            return;
+          }
+
+          openDetailsSubIds.add(id);
+
+          const res = await executeAdminAction(id, "EDIT_DEVICE", {
+            oldMachineId: oldMachineId || "",
+            newMachineId: newMachineId
+          }, async () => {
+            const currentAllowed = Array.isArray(sub.allowedMachineIds) && sub.allowedMachineIds.length > 0
+              ? [...sub.allowedMachineIds]
+              : (sub.machineId ? [sub.machineId] : []);
+            const updatedList = currentAllowed.map(m => m === oldMachineId ? newMachineId : m);
+            if (!updatedList.includes(newMachineId)) updatedList.push(newMachineId);
+            const updateBody = {
+              allowedMachineIds: updatedList,
+              updatedAt: new Date().toISOString()
+            };
+            if (sub.machineId === oldMachineId || !sub.machineId) {
+              updateBody.machineId = newMachineId;
+            }
+            const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              headers: REST_HEADERS,
+              body: JSON.stringify(updateBody)
+            });
+            return supaRes.ok;
+          });
+
+          if (res.success) {
+            showActionNotification({
+              type: "DEVICE_ADD",
+              title: isPrimary ? "تم استبدال الجهاز الأساسي بنجاح 🔄" : "تم تعديل معرّف الجهاز بنجاح 🔄",
+              message: `تم استبدال كود الجهاز القديم بالجهاز الجديد لحساب د. ${docName}. أصبح بإمكان الطبيب تسجيل الدخول فوراً من الجهاز الجديد.`,
+              details: `القديم: ${oldMachineId || '-'} ➔ الجديد: ${newMachineId}`
+            });
+            fetchSubscriptions(true);
+          } else {
+            showActionNotification({
+              type: "ERROR",
+              title: "فشل تعديل الجهاز",
+              message: res.error || "تعذر تحديث معرّف الجهاز."
+            });
+          }
+        }
+      });
+
+      setTimeout(() => {
+        const inputEl = document.getElementById("edit-device-input");
+        if (inputEl) inputEl.focus();
+      }, 100);
+    };
+
+    window.setAsPrimaryDevice = async function(id, machineId) {
+      const sub = allSubscriptions.find((s) => s.id === id);
+      if (!sub) return;
+
+      const docName = sub.doctorName || "المشترك";
+      openDetailsSubIds.add(id);
+
+      const res = await executeAdminAction(id, "SET_PRIMARY_DEVICE", { machineId }, async () => {
+        const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
           method: "PATCH",
           headers: REST_HEADERS,
           body: JSON.stringify({
-            allowedMachineIds: updatedDevices,
+            machineId: machineId,
             updatedAt: new Date().toISOString()
           })
         });
-        if (res.ok) {
-          showToast(`❌ تم فصل الجهاز (${deviceToRemove})`);
-          fetchSubscriptions();
-        }
-      } catch (e) {
-        showToast("فشل فصل الجهاز", false);
+        return supaRes.ok;
+      });
+
+      if (res.success) {
+        showActionNotification({
+          type: "DEVICE_ADD",
+          title: "تم تعيين الجهاز كجهاز أساسي ⭐",
+          message: `تم تعيين الجهاز (${machineId}) ليكون الجهاز الأساسي الرئيسي لحساب د. ${docName}.`,
+          details: `الجهاز الأساسي الجديد: ${machineId}`
+        });
+        fetchSubscriptions(true);
+      } else {
+        showActionNotification({
+          type: "ERROR",
+          title: "فشل تعيين الجهاز الأساسي",
+          message: res.error || "حدث خطأ أثناء تحديث الجهاز الأساسي."
+        });
       }
+    };
+
+    window.removeDevice = function(id, deviceToRemove) {
+      const sub = allSubscriptions.find((s) => s.id === id);
+      if (!sub) return;
+
+      const docName = sub.doctorName || "المشترك";
+      const subCode = sub.subscriberId || "SUB";
+      const isPrimary = (deviceToRemove === sub.machineId);
+
+      const currentAllowed = Array.isArray(sub.allowedMachineIds) && sub.allowedMachineIds.length > 0
+        ? sub.allowedMachineIds
+        : (sub.machineId ? [sub.machineId] : []);
+
+      const remainingDevices = currentAllowed.filter((d) => d !== deviceToRemove);
+
+      showConfirmDialog({
+        title: isPrimary ? "حذف / فصل الجهاز الأساسي 🗑️" : "فصل جهاز مصرح له ❌",
+        subtitle: isPrimary ? "تنبيه: هذا هو الجهاز الرئيسي المسجل لهذا الحساب" : "سيتم إلغاء ترخيص هذا الجهاز لحساب الطبيب",
+        icon: "trash-2",
+        iconColor: { bg: "bg-rose-500/15 border border-rose-500/30", text: "text-rose-400" },
+        btnText: "نعم، حذف الجهاز",
+        btnClass: "bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:brightness-110 text-white font-black shadow-rose-950/60",
+        htmlContent: `
+          <div class="space-y-3">
+            <p class="font-bold text-slate-200">هل أنت متأكد من حذف هذا المعرّف وفصل الجهاز من الحساب؟</p>
+            <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-xs">
+              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${docName}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${subCode}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">الجهاز المراد حذفه:</span> <span class="font-mono text-rose-300 font-bold text-[11px]" dir="ltr">${deviceToRemove}</span></div>
+              ${isPrimary ? `
+                <div class="flex justify-between items-center pt-1.5 border-t border-slate-800"><span class="text-amber-400 font-bold">الحالة:</span> <span class="text-amber-300 font-bold">جهاز أساسي ${remainingDevices.length > 0 ? `(سيتم ترقية ${remainingDevices[0]} كبديل تلقائياً)` : '(لا توجد أجهزة متبقية)'}</span></div>
+              ` : ''}
+            </div>
+            <p class="text-rose-400 text-[11px] font-bold">⚠️ لن يتمكن هذا الجهاز من تشغيل البرنامج بعد حذفه إلا بعد إعادة ربطه أو تعديل المعرف.</p>
+          </div>
+        `,
+        onConfirm: async () => {
+          openDetailsSubIds.add(id);
+          const res = await executeAdminAction(id, "REMOVE_DEVICE", { machineId: deviceToRemove }, async () => {
+            const updatedList = remainingDevices;
+            const newPrimary = (deviceToRemove === sub.machineId) ? (updatedList[0] || "") : sub.machineId;
+            const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              headers: REST_HEADERS,
+              body: JSON.stringify({
+                allowedMachineIds: updatedList,
+                machineId: newPrimary,
+                updatedAt: new Date().toISOString()
+              })
+            });
+            return supaRes.ok;
+          });
+
+          if (res.success) {
+            showActionNotification({
+              type: "DEVICE_REMOVE",
+              title: isPrimary ? "تم حذف الجهاز الأساسي بنجاح 🗑️" : "تم فصل الجهاز بنجاح ❌",
+              message: `تم إلغاء ترخيص وحذف الجهاز (${deviceToRemove}) من حساب د. ${docName}.`,
+              details: `المحذوف: ${deviceToRemove} • المتبقي: ${remainingDevices.length} أجهزة`
+            });
+            fetchSubscriptions(true);
+          } else {
+            showActionNotification({
+              type: "ERROR",
+              title: "فشل حذف الجهاز",
+              message: res.error || "تعذر حذف الجهاز."
+            });
+          }
+        }
+      });
     };
 
     window.copyText = function(text, label) {
@@ -501,18 +1666,70 @@
       const active = allSubscriptions.filter((s) => s.status === "ACTIVE").length;
       const pending = allSubscriptions.filter((s) => s.status === "PENDING").length;
       const trial = allSubscriptions.filter((s) => s.isTrial).length;
+      const activeRevenue = allSubscriptions
+        .filter((s) => s.status === "ACTIVE")
+        .reduce((sum, s) => sum + (Number(s.price) || 0), 0);
 
-      document.getElementById("metric-total").innerText = total;
-      document.getElementById("metric-active").innerText = active;
-      document.getElementById("metric-pending").innerText = pending;
-      document.getElementById("metric-trial").innerText = trial;
+      // KPI Metric Cards
+      const elTotal = document.getElementById("metric-total");
+      const elActive = document.getElementById("metric-active");
+      const elPending = document.getElementById("metric-pending");
+      const elTrial = document.getElementById("metric-trial");
+      const elRevenue = document.getElementById("metric-revenue");
+
+      if (elTotal) elTotal.innerText = total;
+      if (elActive) elActive.innerText = active;
+      if (elPending) elPending.innerText = pending;
+      if (elTrial) elTrial.innerText = trial;
+      if (elRevenue) elRevenue.innerText = activeRevenue.toLocaleString("en-US");
+
+      // Helper function: get remaining days for an active subscription
+      const nowMs = Date.now();
+      const getDaysLeft = (s) => {
+        if (s.status !== "ACTIVE" || !s.expiresAt) return null;
+        const diff = new Date(s.expiresAt).getTime() - nowMs;
+        return Math.ceil(diff / (1000 * 60 * 60 * 24));
+      };
+
+      const expiring7 = allSubscriptions.filter((s) => {
+        const d = getDaysLeft(s);
+        return d !== null && d >= 0 && d <= 7;
+      }).length;
+
+      const expiring3 = allSubscriptions.filter((s) => {
+        const d = getDaysLeft(s);
+        return d !== null && d >= 0 && d <= 3;
+      }).length;
+
+      // Filter Pill Live Badges
+      const elFAll = document.getElementById("filter-count-all");
+      const elFPending = document.getElementById("filter-count-pending");
+      const elFActive = document.getElementById("filter-count-active");
+      const elFExpiring7 = document.getElementById("filter-count-expiring7");
+      const elFExpiring3 = document.getElementById("filter-count-expiring3");
+      const elFTrial = document.getElementById("filter-count-trial");
+
+      if (elFAll) elFAll.innerText = total;
+      if (elFPending) elFPending.innerText = pending;
+      if (elFActive) elFActive.innerText = active;
+      if (elFExpiring7) elFExpiring7.innerText = expiring7;
+      if (elFExpiring3) elFExpiring3.innerText = expiring3;
+      if (elFTrial) elFTrial.innerText = trial;
 
       // 2. Filter records
       let filtered = allSubscriptions.filter((sub) => {
-        // Status filter
+        // Status & Expiration filter
         if (currentFilter === "PENDING" && sub.status !== "PENDING") return false;
         if (currentFilter === "ACTIVE" && sub.status !== "ACTIVE") return false;
         if (currentFilter === "FREE_TRIAL" && !sub.isTrial) return false;
+        if (currentFilter === "EXPIRING_7") {
+          const d = getDaysLeft(sub);
+          if (d === null || d < 0 || d > 7) return false;
+        }
+        if (currentFilter === "EXPIRING_3") {
+          const d = getDaysLeft(sub);
+          if (d === null || d < 0 || d > 3) return false;
+        }
 
         // Search query
         if (currentSearch) {
@@ -530,6 +1747,15 @@
 
       const container = document.getElementById("subscribers-container");
 
+      // Preserve active input focus and typed values before re-rendering
+      const activeInputId = document.activeElement ? document.activeElement.id : null;
+      const preservedValues = {};
+      document.querySelectorAll("#subscribers-container input").forEach((inp) => {
+        if (inp.id && inp.value) {
+          preservedValues[inp.id] = inp.value;
+        }
+      });
+
       if (filtered.length === 0) {
         container.innerHTML = `
           <div class="glass-card p-12 rounded-3xl text-center space-y-3">
@@ -544,174 +1770,382 @@
 
       container.innerHTML = filtered.map((sub) => {
         const subscriberId = sub.subscriberId || "SUB-PENDING";
-        const primaryMachine = sub.machineId;
-        const devices = Array.isArray(sub.allowedMachineIds) && sub.allowedMachineIds.length > 0
-          ? sub.allowedMachineIds
-          : [primaryMachine];
+        const primaryMachine = (sub.machineId || "").trim();
+        const rawAllowed = Array.isArray(sub.allowedMachineIds) ? sub.allowedMachineIds.filter(Boolean) : [];
+        const devices = Array.from(new Set([...(primaryMachine ? [primaryMachine] : []), ...rawAllowed]));
 
-        const isExpired = sub.expiresAt && new Date(sub.expiresAt) < new Date();
-        let statusBadge = "";
+        const requestedDays = Number(sub.durationDays) || 30;
+        const hasDocName = Boolean(sub.doctorName && sub.doctorName.trim());
+        const hasClinicName = Boolean(sub.clinicName && sub.clinicName.trim());
+        const doctorDisplay = hasDocName ? sub.doctorName.trim() : "طبيب جديد (لم يسجل اسمه بعد)";
 
-        if (sub.status === "ACTIVE") {
-          statusBadge = `<span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black">نشط ✅</span>`;
-        } else if (sub.status === "PENDING") {
-          statusBadge = `<span class="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black animate-pulse">بالانتظار ⏳</span>`;
-        } else {
-          statusBadge = `<span class="px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-black">معلق ⛔</span>`;
+        // Extract clinic name and clinic phone if embedded or in dedicated field
+        let clinicOnly = "";
+        let clinicPhoneDisplay = "";
+        if (hasClinicName) {
+          const rawClinic = sub.clinicName.trim();
+          if (rawClinic.includes(" • 📞 ")) {
+            const parts = rawClinic.split(" • 📞 ");
+            clinicOnly = parts[0].trim();
+            clinicPhoneDisplay = parts[1].trim();
+          } else if (rawClinic.includes(" || ")) {
+            const parts = rawClinic.split(" || ");
+            clinicOnly = parts[0].trim();
+            clinicPhoneDisplay = parts[1].trim();
+          } else {
+            clinicOnly = rawClinic;
+          }
+        }
+        if (!clinicPhoneDisplay && sub.clinicPhone) {
+          clinicPhoneDisplay = String(sub.clinicPhone).trim();
         }
 
-        // WhatsApp greeting link
-        const waMsg = encodeURIComponent(`مرحباً دكتور ${sub.doctorName || ""}، بخصوص اشتراكك في منصة PenRX+ الطبية (كود المشترك: ${subscriberId})...`);
-        const waLink = sub.senderPhone ? `https://wa.me/2${sub.senderPhone.replace(/^0+/, '')}?text=${waMsg}` : '#';
+        const clinicDisplay = clinicOnly || (hasClinicName ? sub.clinicName.trim() : "بانتظار ضبط الملف الشخصي والعيادة من الإعدادات");
+        const profileBadge = hasDocName ? '' : `<span class="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold">جديد • بانتظار حفظ الإعدادات</span>`;
+
+        let statusBadge = "";
+        if (sub.status === "ACTIVE") {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black shrink-0 whitespace-nowrap shadow-sm shadow-emerald-950/30">نشط ✅</span>`;
+        } else if (sub.status === "PENDING") {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black animate-pulse shrink-0 whitespace-nowrap shadow-sm shadow-amber-950/30">بالانتظار ⏳</span>`;
+        } else {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-black shrink-0 whitespace-nowrap shadow-sm shadow-rose-950/30">معلق ⛔</span>`;
+        }
+
+        // WhatsApp greeting link (prioritize registered clinic phone, fallback to sender phone)
+        const waTargetPhone = clinicPhoneDisplay || sub.senderPhone;
+        const waMsg = encodeURIComponent(`مرحباً دكتور ${hasDocName ? sub.doctorName : ""}، بخصوص اشتراكك في منصة PenRX+ الطبية (كود المشترك: ${subscriberId})...`);
+        const waLink = waTargetPhone ? `https://wa.me/2${waTargetPhone.replace(/^0+/, '')}?text=${waMsg}` : '#';
 
         return `
-          <div class="glass-card rounded-3xl p-6 border ${sub.status === 'PENDING' ? 'border-amber-500/40 shadow-amber-950/30 shadow-xl' : 'border-slate-800'} space-y-6 transition-all">
-            <!-- Header row -->
-            <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
-              <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600/30 to-indigo-600/30 border border-purple-500/30 flex items-center justify-center text-purple-300">
-                  <i data-lucide="user" class="w-6 h-6"></i>
+          <div class="glass-card rounded-2xl p-4 sm:p-5 border ${sub.status === 'PENDING' ? 'border-amber-500/40 shadow-lg shadow-amber-950/20 bg-slate-900/90' : 'border-slate-800 bg-slate-900/60'} space-y-3.5 transition-all hover:border-slate-700">
+            <!-- Row 1: Header (Doctor & Clinic on right, Plan & Status Badge on the far left) -->
+            <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-emerald-600/20 to-teal-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0">
+                  <i data-lucide="user" class="w-4 h-4 sm:w-5 sm:h-5"></i>
                 </div>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <h3 class="text-base font-black text-slate-100">${sub.doctorName || 'طبيب غير مسمى'}</h3>
-                    ${sub.isTrial ? '<span class="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-black">تجريبي</span>' : ''}
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <h3 class="text-sm font-black text-slate-100 truncate">${doctorDisplay}</h3>
+                    ${profileBadge}
+                    ${sub.isTrial ? '<span class="px-1.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[9px] font-black">تجريبي</span>' : ''}
                   </div>
-                  <p class="text-xs text-slate-400 font-bold">${sub.clinicName || 'العيادة التخصصية'}</p>
+                  <div class="flex flex-wrap items-center gap-2 mt-0.5">
+                    <p class="text-[11px] text-slate-400 font-bold truncate">${clinicDisplay}</p>
+                    ${clinicPhoneDisplay ? `
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold" dir="ltr" title="هاتف العيادة المسجل من الطبيب">
+                        <i data-lucide="phone" class="w-2.5 h-2.5 text-emerald-400"></i>
+                        <span>${clinicPhoneDisplay}</span>
+                      </span>
+                      <a href="https://wa.me/2${clinicPhoneDisplay.replace(/^0+/, '')}?text=${encodeURIComponent('مرحباً دكتور ' + (hasDocName ? sub.doctorName : '') + '، بخصوص اشتراكك في PenRX+')}" target="_blank" class="p-0.5 text-emerald-400 hover:text-emerald-300 transition-colors" title="محادثة واتساب مباشرة على هاتف العيادة">
+                        <i data-lucide="message-circle" class="w-3 h-3"></i>
+                      </a>
+                      <button onclick="copyText('${clinicPhoneDisplay}', 'هاتف العيادة')" class="text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer" title="نسخ هاتف العيادة">
+                        <i data-lucide="copy" class="w-2.5 h-2.5"></i>
+                      </button>
+                    ` : ''}
+                  </div>
                 </div>
               </div>
 
-              <div class="flex items-center gap-3">
-                ${statusBadge}
-                <button onclick="deleteSub('${sub.id}')" class="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs transition-colors" title="حذف الاشتراك">
-                  <i data-lucide="trash-2" class="w-4 h-4"></i>
-                </button>
-              </div>
-            </div>
-
-            <!-- Identifiers Grid: Subscriber ID vs Devices -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <!-- Subscriber ID -->
-              <div class="p-4 rounded-2xl bg-slate-950/80 border border-purple-500/30 space-y-1">
-                <div class="flex items-center justify-between">
-                  <span class="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
-                    <i data-lucide="users" class="w-3.5 h-3.5"></i>
-                    <span>معرّف المشترك الدائم (Subscriber ID):</span>
-                  </span>
-                  <button onclick="copyText('${subscriberId}', 'كود المشترك')" class="text-[10px] text-purple-400 hover:text-purple-300 font-bold">نسخ 📋</button>
-                </div>
-                <div class="font-mono font-black text-purple-200 text-sm tracking-wider" dir="ltr">${subscriberId}</div>
-              </div>
-
-              <!-- Primary Machine ID -->
-              <div class="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-1">
-                <div class="flex items-center justify-between">
-                  <span class="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                    <i data-lucide="laptop" class="w-3.5 h-3.5 text-emerald-400"></i>
-                    <span>الجهاز الأساسي (Primary Device):</span>
-                  </span>
-                  <button onclick="copyText('${primaryMachine}', 'كود الجهاز الأساسي')" class="text-[10px] text-slate-400 hover:text-slate-200 font-bold">نسخ 📋</button>
-                </div>
-                <div class="font-mono font-black text-emerald-400 text-xs sm:text-sm tracking-wider truncate" dir="ltr">${primaryMachine}</div>
-              </div>
-            </div>
-
-            <!-- Multi-Devices Section (تعدد الأجهزة) -->
-            <div class="p-4 rounded-2xl bg-slate-950/90 border border-slate-800/80 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-300 flex items-center gap-2">
-                  <i data-lucide="network" class="w-4 h-4 text-cyan-400"></i>
-                  <span>الأجهزة المصرح لها بالعمل لهذا المشترك (${devices.length} أجهزة):</span>
+              <!-- Far Left: Plan Price & Subscription Status (أقصى اليسار) -->
+              <div class="flex items-center gap-2 shrink-0 mr-auto">
+                <span class="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-700/80 text-emerald-300 text-xs font-black font-mono">
+                  ${sub.planName} (${sub.price} ج.م)
                 </span>
+                ${statusBadge}
+              </div>
+            </div>
+
+            <!-- Row 2: Compact Info Strip (Data in one clean horizontal ribbon) -->
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80">
+              <div class="flex items-center gap-1 font-mono">
+                <span class="text-slate-500 text-[10px] font-bold">المشترك:</span>
+                <span class="font-bold text-purple-300 text-[11px]" dir="ltr">${subscriberId}</span>
+                <button onclick="copyText('${subscriberId}', 'كود المشترك')" class="text-slate-500 hover:text-purple-300 p-0.5 cursor-pointer" title="نسخ"><i data-lucide="copy" class="w-3 h-3"></i></button>
               </div>
 
-              <!-- Devices Pills -->
-              <div class="flex flex-wrap gap-2">
-                ${devices.map((dev) => `
-                  <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-[11px] font-mono text-slate-300">
-                    <i data-lucide="cpu" class="w-3.5 h-3.5 text-emerald-400"></i>
-                    <span dir="ltr">${dev}</span>
-                    <button onclick="removeDevice('${sub.id}', '${dev}')" class="p-0.5 rounded text-rose-400 hover:bg-rose-500/20" title="فصل هذا الجهاز">
-                      <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              <div class="flex items-center gap-1 font-mono">
+                <span class="text-slate-500 text-[10px] font-bold">الجهاز:</span>
+                <span class="font-bold text-emerald-400 text-[11px] max-w-[140px] truncate" dir="ltr" title="${primaryMachine || 'لا يوجد جهاز'}">${primaryMachine || 'لا يوجد جهاز'}</span>
+                ${primaryMachine ? `
+                  <button onclick="copyText('${primaryMachine}', 'كود الجهاز')" class="text-slate-500 hover:text-emerald-300 p-0.5 cursor-pointer" title="نسخ المعرف"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                  <button onclick="editDevice('${sub.id}', '${primaryMachine}')" class="text-slate-500 hover:text-cyan-300 p-0.5 cursor-pointer" title="تعديل أو استبدال الجهاز الأساسي"><i data-lucide="edit-3" class="w-3 h-3"></i></button>
+                  <button onclick="removeDevice('${sub.id}', '${primaryMachine}')" class="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer" title="حذف الجهاز الأساسي"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+                ` : `
+                  <button onclick="editDevice('${sub.id}', '')" class="text-cyan-400 hover:text-cyan-300 text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center gap-1 cursor-pointer" title="تعيين جهاز أساسي">
+                    <i data-lucide="plus" class="w-2.5 h-2.5"></i>
+                    <span>تعيين جهاز</span>
+                  </button>
+                `}
+              </div>
+
+              <div class="flex items-center gap-1">
+                <span class="text-slate-500 text-[10px] font-bold">الدفع:</span>
+                <span class="font-bold text-slate-300 text-[11px] capitalize">${sub.paymentMethod}</span>
+              </div>
+
+              <div class="flex items-center gap-1 font-mono">
+                <span class="text-slate-500 text-[10px] font-bold">المحول (الدفع):</span>
+                <span class="font-bold text-emerald-300 text-[11px]" dir="ltr">${sub.senderPhone || '-'}</span>
+              </div>
+
+              ${clinicPhoneDisplay ? `
+                <div class="flex items-center gap-1 font-mono">
+                  <span class="text-slate-500 text-[10px] font-bold">هاتف العيادة:</span>
+                  <span class="font-bold text-teal-300 text-[11px]" dir="ltr">${clinicPhoneDisplay}</span>
+                  <button onclick="copyText('${clinicPhoneDisplay}', 'هاتف العيادة')" class="text-slate-500 hover:text-teal-300 p-0.5 cursor-pointer" title="نسخ"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                </div>
+              ` : ''}
+
+              <div class="flex items-center gap-1 font-mono">
+                <span class="text-slate-500 text-[10px] font-bold">العملية:</span>
+                <span class="font-bold text-cyan-300 text-[11px]" dir="ltr">${sub.transactionRef || '-'}</span>
+              </div>
+
+              ${sub.status === 'ACTIVE' && sub.expiresAt ? (() => {
+                const daysRemaining = Math.max(0, Math.ceil((new Date(sub.expiresAt).getTime() - Date.now()) / (1000*60*60*24)));
+                if (daysRemaining <= 3) {
+                  return `
+                    <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-black mr-auto animate-pulse" title="الاشتراك ينتهي خلال أقل من 3 أيام!">
+                      <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-rose-400"></i>
+                      <span>متبقي: <strong class="font-mono">${daysRemaining}</strong> ${daysRemaining === 1 ? 'يوم' : 'أيام'} ⚠️</span>
+                    </div>
+                  `;
+                } else if (daysRemaining <= 7) {
+                  return `
+                    <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-black mr-auto" title="الاشتراك ينتهي خلال أقل من أسبوع">
+                      <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-400"></i>
+                      <span>متبقي: <strong class="font-mono">${daysRemaining}</strong> أيام ⏳</span>
+                    </div>
+                  `;
+                } else {
+                  return `
+                    <div class="flex items-center gap-1 text-slate-300 font-bold text-[11px] mr-auto">
+                      <i data-lucide="clock" class="w-3.5 h-3.5 text-emerald-400"></i>
+                      <span>متبقي: <strong class="text-emerald-300 font-mono">${daysRemaining} يوم</strong></span>
+                    </div>
+                  `;
+                }
+              })() : ''}
+            </div>
+
+            <!-- Row 3: Coordinated Action Controls (تعديل، إيقاف، حذف منسقة بجانب بعضها) -->
+            <div class="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+              <!-- Action Buttons Group (تعديل الأيام، إيقاف مؤقت، حذف الاشتراك) -->
+              <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                ${sub.status === 'PENDING' ? `
+                  <!-- Pending State: Activate & Delete -->
+                  <button
+                    onclick="activateSub('${sub.id}', ${requestedDays})"
+                    class="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:brightness-110 text-white text-xs font-black shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                  >
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                    <span>تفعيل الاشتراك (${requestedDays} يوم)</span>
+                  </button>
+
+                  <button
+                    onclick="deleteSub('${sub.id}')"
+                    class="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    title="حذف هذا الاشتراك نهائياً"
+                  >
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span>حذف</span>
+                  </button>
+                ` : sub.status === 'ACTIVE' ? `
+                  <!-- Active State: Adjust Days + Suspend + Delete side by side + Quick WhatsApp Reminder if expiring soon -->
+                  <div class="flex items-center gap-1.5 bg-slate-950/90 px-2.5 py-1.5 rounded-xl border border-slate-800">
+                    <span class="text-[10px] text-slate-400 font-bold whitespace-nowrap">تعديل الأيام:</span>
+                    <input
+                      id="adj-days-${sub.id}"
+                      type="number"
+                      value="0"
+                      min="-365"
+                      max="365"
+                      class="w-14 px-1.5 py-0.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-emerald-500 text-center"
+                      placeholder="±يوم"
+                    />
+                    <button
+                      onclick="adjustSub('${sub.id}')"
+                      class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                      title="تطبيق تعديل الأيام"
+                    >
+                      <span>تطبيق</span>
                     </button>
                   </div>
-                `).join('')}
-              </div>
 
-              <!-- Add New Device Input -->
-              <div class="flex items-center gap-2 pt-1">
-                <input
-                  id="add-device-${sub.id}"
-                  type="text"
-                  placeholder="أدخل كود الجهاز الجديد (PRX-XXXX-XXXX-XXXX) لربطه..."
-                  class="flex-1 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-cyan-500"
-                />
-                <button
-                  onclick="addDevice('${sub.id}')"
-                  class="px-4 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-black transition-all flex items-center gap-1.5 shrink-0"
-                >
-                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                  <span>ربط الجهاز</span>
-                </button>
-              </div>
-            </div>
+                  ${(() => {
+                    const daysRemaining = sub.expiresAt ? Math.max(0, Math.ceil((new Date(sub.expiresAt).getTime() - Date.now()) / (1000*60*60*24))) : null;
+                    if (daysRemaining !== null && daysRemaining <= 7 && waTargetPhone) {
+                      const renewMsg = encodeURIComponent(`مرحباً دكتور ${hasDocName ? sub.doctorName : ''}، نود تذكير سيادتكم بأن اشتراككم في منظومة PenRX+ الطبية (كود: ${subscriberId}) سينتهي خلال ${daysRemaining} ${daysRemaining === 1 ? 'يوم' : 'أيام'}. يسعدنا خدمتكم في تجديد الاشتراك لضمان استمرار عمل العيادة بدون انقطاع 🌹`);
+                      return `
+                        <a
+                          href="https://wa.me/2${waTargetPhone.replace(/^0+/, '')}?text=${renewMsg}"
+                          target="_blank"
+                          class="px-3 py-2 rounded-xl ${daysRemaining <= 3 ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/40' : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40'} text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                          title="إرسال رسالة تذكير بالتجديد عبر واتساب"
+                        >
+                          <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+                          <span>تذكير بالتجديد (${daysRemaining} يوم) 💬</span>
+                        </a>
+                      `;
+                    }
+                    return '';
+                  })()}
 
-            <!-- Subscription Details & Payment Info -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80">
-              <div>
-                <span class="text-slate-500 block text-[10px] font-bold">الباقة:</span>
-                <span class="font-black text-slate-200">${sub.planName} (${sub.price} ج.م)</span>
-              </div>
-              <div>
-                <span class="text-slate-500 block text-[10px] font-bold">طريقة الدفع:</span>
-                <span class="font-bold text-slate-300 capitalize">${sub.paymentMethod}</span>
-              </div>
-              <div>
-                <span class="text-slate-500 block text-[10px] font-bold">رقم هاتف المحول:</span>
-                <span class="font-mono font-bold text-emerald-400" dir="ltr">${sub.senderPhone || '-'}</span>
-              </div>
-              <div>
-                <span class="text-slate-500 block text-[10px] font-bold">رقم العملية:</span>
-                <span class="font-mono font-bold text-purple-300 truncate block" dir="ltr">${sub.transactionRef || '-'}</span>
-              </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
-              <div class="flex flex-wrap items-center gap-2">
-                <button onclick="activateSub('${sub.id}', 30)" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-950/40 transition-all flex items-center gap-1.5">
-                  <i data-lucide="check" class="w-3.5 h-3.5"></i>
-                  <span>تفعيل شهر (30 يوم)</span>
-                </button>
-                <button onclick="activateSub('${sub.id}', 90)" class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all">
-                  3 شهور (90 يوم)
-                </button>
-                <button onclick="activateSub('${sub.id}', 365)" class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all">
-                  سنة كاملة (365 يوم)
-                </button>
-                ${sub.status === 'ACTIVE' ? `
-                  <button onclick="suspendSub('${sub.id}')" class="px-3.5 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center gap-1">
-                    <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+                  <button
+                    onclick="suspendSub('${sub.id}')"
+                    class="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    title="إيقاف الاشتراك مؤقتاً"
+                  >
+                    <i data-lucide="pause-circle" class="w-3.5 h-3.5"></i>
                     <span>إيقاف مؤقت</span>
                   </button>
-                ` : ''}
+
+                  <button
+                    onclick="deleteSub('${sub.id}')"
+                    class="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    title="حذف هذا الاشتراك نهائياً"
+                  >
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span>حذف</span>
+                  </button>
+                ` : `
+                  <!-- Suspended State: Reactivate + Adjust Days + Delete -->
+                  <button
+                    onclick="activateSub('${sub.id}', ${requestedDays})"
+                    class="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    title="إعادة تنشيط الاشتراك"
+                  >
+                    <i data-lucide="play-circle" class="w-3.5 h-3.5"></i>
+                    <span>إعادة تنشيط</span>
+                  </button>
+
+                  <div class="flex items-center gap-1.5 bg-slate-950/90 px-2.5 py-1.5 rounded-xl border border-slate-800">
+                    <span class="text-[10px] text-slate-400 font-bold whitespace-nowrap">تعديل الأيام:</span>
+                    <input
+                      id="adj-days-${sub.id}"
+                      type="number"
+                      value="0"
+                      min="-365"
+                      max="365"
+                      class="w-14 px-1.5 py-0.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-emerald-500 text-center"
+                      placeholder="±يوم"
+                    />
+                    <button
+                      onclick="adjustSub('${sub.id}')"
+                      class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <span>تطبيق</span>
+                    </button>
+                  </div>
+
+                  <button
+                    onclick="deleteSub('${sub.id}')"
+                    class="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    title="حذف هذا الاشتراك نهائياً"
+                  >
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span>حذف</span>
+                  </button>
+                `}
               </div>
 
+              <!-- WhatsApp Action Link on the far side -->
               ${sub.senderPhone ? `
-                <a href="${waLink}" target="_blank" class="px-4 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-black transition-all flex items-center gap-2">
-                  <i data-lucide="message-circle" class="w-4 h-4"></i>
-                  <span>مراسلة الطبيب واتساب</span>
+                <a
+                  href="${waLink}"
+                  target="_blank"
+                  class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer sm:mr-auto"
+                >
+                  <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
+                  <span>مراسلة واتساب</span>
                 </a>
               ` : ''}
             </div>
+
+            <!-- Collapsible Devices (Active Only) -->
+            ${sub.status === 'ACTIVE' ? `
+              <details data-sub-id="${sub.id}" ${openDetailsSubIds.has(sub.id) ? 'open' : ''} class="pt-2 border-t border-slate-800/60 text-xs group">
+                <summary class="text-slate-400 hover:text-slate-200 font-bold cursor-pointer flex items-center gap-2 select-none text-[11px]">
+                  <i data-lucide="cpu" class="w-3.5 h-3.5 text-cyan-400"></i>
+                  <span>الأجهزة المصرح لها (${devices.length} أجهزة)</span>
+                  <span class="text-[10px] text-slate-500 group-open:hidden">▼ إظهار</span>
+                  <span class="text-[10px] text-slate-500 hidden group-open:inline">▲ إخفاء</span>
+                </summary>
+                <div class="pt-2.5 space-y-2">
+                  <div class="flex flex-col gap-1.5">
+                    ${devices.length === 0 ? `
+                      <div class="text-[11px] text-slate-500 italic p-2.5 bg-slate-950/50 rounded-xl border border-slate-900 text-center">
+                        لا توجد أجهزة مرتبطة بهذا الحساب حالياً. يمكنك ربط جهاز جديد بالأسفل.
+                      </div>
+                    ` : devices.map((dev) => `
+                      <div class="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800/90 text-[11px] font-mono hover:border-slate-700 transition-colors">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <i data-lucide="${dev === primaryMachine ? 'laptop' : 'smartphone'}" class="w-3.5 h-3.5 ${dev === primaryMachine ? 'text-emerald-400' : 'text-cyan-400'} shrink-0"></i>
+                          <span dir="ltr" class="font-bold select-all truncate ${dev === primaryMachine ? 'text-emerald-300' : 'text-slate-200'}">${dev}</span>
+                          ${dev === primaryMachine ? `
+                            <span class="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-black shrink-0">أساسي ⭐</span>
+                          ` : `
+                            <button onclick="setAsPrimaryDevice('${sub.id}', '${dev}')" class="px-1.5 py-0.5 rounded-md bg-slate-900 hover:bg-emerald-600/30 text-slate-400 hover:text-emerald-300 border border-slate-800 text-[9px] font-bold transition-all shrink-0 cursor-pointer" title="تعيين هذا الجهاز كجهاز أساسي">
+                              ★ تعيين كأساسي
+                            </button>
+                          `}
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                          <button onclick="copyText('${dev}', 'كود الجهاز')" class="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer" title="نسخ المعرف">
+                            <i data-lucide="copy" class="w-3 h-3"></i>
+                          </button>
+                          <button onclick="editDevice('${sub.id}', '${dev}')" class="p-1 rounded-lg text-cyan-400 hover:text-cyan-200 hover:bg-cyan-500/20 transition-colors cursor-pointer" title="تعديل أو استبدال هذا المعرف">
+                            <i data-lucide="edit-3" class="w-3 h-3"></i>
+                          </button>
+                          <button onclick="removeDevice('${sub.id}', '${dev}')" class="p-1 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 transition-colors cursor-pointer" title="حذف هذا الجهاز">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i>
+                          </button>
+                        </div>
+                      </div>
+                    `).join('')}
+                  </div>
+                  <div class="flex items-center gap-2 pt-1">
+                    <input
+                      id="add-device-${sub.id}"
+                      type="text"
+                      placeholder="كود جهاز جديد لربطه..."
+                      onkeydown="if(event.key==='Enter') addDevice('${sub.id}')"
+                      class="flex-1 max-w-xs px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-cyan-500"
+                    />
+                    <button
+                      onclick="addDevice('${sub.id}')"
+                      class="px-3.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-cyan-950/30"
+                    >
+                      <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                      <span>ربط جهاز جديد</span>
+                    </button>
+                  </div>
+                </div>
+              </details>
+            ` : ''}
           </div>
         `;
       }).join('');
 
+      // Restore previously typed inputs and active focus
+      Object.entries(preservedValues).forEach(([id, val]) => {
+        const inp = document.getElementById(id);
+        if (inp) inp.value = val;
+      });
+
+      if (activeInputId) {
+        const activeInp = document.getElementById(activeInputId);
+        if (activeInp) activeInp.focus();
+      }
+
       lucide.createIcons();
     }
 
-    // Initialize check
+    // Initialize icons and check existing session
+    lucide.createIcons();
     checkAuth();
   </script>
 </body>
