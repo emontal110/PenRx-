@@ -60,29 +60,52 @@
 
 ## 🚀 تشغيل وبناء التطبيق
 
+### 🌟 مركز التحكم الشامل التفاعلي (Master Control):
+يمكنك فتح مركز التحكم التفاعلي الموحد بنقرة واحدة لاختيار أي عملية تشغيل أو بناء أو إصدار:
+```bash
+bat\PenRX-Master-Control.bat
+```
+
 ### 1. تشغيل نسخة الويب محلياً:
 ```bash
-Start-PenRX-Web.bat
+bat\Start-PenRX-Web.bat
 # أو
 npm run dev
 ```
 
 ### 2. تشغيل نسخة الكمبيوتر (Electron Desktop):
 ```bash
-Start-PenRX-Desktop.bat
+bat\Start-PenRX-Desktop.bat
 # أو
 npm run electron:dev
 ```
 
-### 3. بناء ملف التثبيت لويندوز (.exe):
+### 3. فتح بورتال الإدارة السحابي (Admin Portal):
 ```bash
-Build-Electron-Installer.bat
+bat\Start-Admin-Portal.bat
+```
+
+### 4. بناء ملف التثبيت لويندوز (.exe):
+```bash
+bat\Build-Electron-Installer.bat
 # أو
 npm run electron:build
 ```
-سيكون ملف التثبيت متاحاً في مجلد `dist-electron/`.
+سيكون ملف التثبيت متاحاً في مجلد `dist-electron/` ومجلد `releases/`.
 
-### 4. بناء تطبيق الأندرويد (APK) وبرنامج الكمبيوتر عبر GitHub:
+### 5. بناء تطبيق الأندرويد المحلي (APK):
+```bash
+bat\Build-Android-APK.bat
+# أو فتح المشروع في أندرويد ستوديو:
+bat\Open-Android-Studio.bat
+```
+
+### 6. إطلاق ونشر إصدار شامل سحابياً (Release Manager):
+```bash
+bat\Release-New-Version.bat
+```
+
+### 7. بناء تطبيق الأندرويد (APK) وبرنامج الكمبيوتر عبر GitHub:
 تم تجهيز ملف الأتمتة الكامل:
 `.github/workflows/build-and-release.yml`
 بمجرد رفع الكود على مستودع GitHub وعمل Release جديد:

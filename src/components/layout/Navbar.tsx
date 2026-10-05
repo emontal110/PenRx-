@@ -10,23 +10,19 @@ import {
   Building2,
   Settings,
   Crown,
-  LayoutDashboard,
-  ShieldCheck,
-  Laptop,
-  Menu,
-  X,
+  Home,
+  Plus,
   Sparkles,
-  Fingerprint,
 } from "lucide-react";
 import { useSubscriptionStore, getSubscriptionDetails } from "@/store/useSubscriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
-import versionConfig from "@/config/version.json";
+import { showGlobalToast } from "@/components/common/GlobalToast";
+import packageInfo from "../../../package.json";
 
 export function Navbar() {
   const pathname = usePathname();
   const { subscriptions, machineId, syncWithServer } = useSubscriptionStore();
   const { clinic } = useClinicStore();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -35,146 +31,231 @@ export function Navbar() {
   }, [syncWithServer]);
 
   const subDetails = getSubscriptionDetails(subscriptions, machineId);
+  const isTrialAccount = Boolean(
+    subDetails.record?.isTrial === true ||
+    subDetails.record?.planId === "trial" ||
+    subDetails.record?.planName?.includes("تجريب")
+  );
 
-  const NAV_LINKS = [
-    { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
-    { href: "/prescriptions/new", label: "كتابة الروشتات", icon: FileText, highlight: true },
-    { href: "/history", label: "سجل الروشتات والمرضى", icon: Clock },
-    { href: "/branches", label: "الفروع والعيادات", icon: Building2 },
-    { href: "/settings", label: "الإعدادات العامة", icon: Settings },
-    { href: "/subscriptions", label: "الاشتراكات", icon: Crown },
+  // Expiry notification when entering/logging in the app
+  useEffect(() => {
+    if (!mounted || !subDetails.isActive) return;
+
+    try {
+      const warned = sessionStorage.getItem("penrx_session_expiry_warned");
+      if (warned) return;
+
+      const days = subDetails.daysRemaining;
+      if (days <= 3) {
+        showGlobalToast(
+          `🚨 تنبيه عاجل: متبقي فقط ${days} ${days === 1 ? "يوم واحد" : "أيام"} على انتهاء اشتراكك في PenRX+! يرجى التجديد لضمان استمرار الخدمة.`,
+          "error"
+        );
+        sessionStorage.setItem("penrx_session_expiry_warned", "true");
+      } else if (days <= 7) {
+        showGlobalToast(
+          `⏳ تنبيه: متبقي ${days} أيام على انتهاء صلاحية اشتراكك في PenRX+. نوصي بتجديد الاشتراك مبكراً.`,
+          "info"
+        );
+        sessionStorage.setItem("penrx_session_expiry_warned", "true");
+      }
+    } catch {
+      // ignore storage error if any
+    }
+  }, [mounted, subDetails.isActive, subDetails.daysRemaining]);
+
+  // Desktop navigation items (clean, no "لوحة التحكم", focused on doctor workflow)
+  const DESKTOP_LINKS = [
+    { href: "/prescriptions/new", label: "روشتة", icon: Plus, highlight: true },
+    { href: "/history", label: "سجل الروشتات", icon: Clock },
+    { href: "/settings", label: "الإعدادات", icon: Settings },
+  ];
+
+  // Mobile bottom dock items for thumb ergonomics
+  const MOBILE_DOCK = [
+    { href: "/", label: "الرئيسية", icon: Home },
+    { href: "/history", label: "السجل", icon: Clock },
+    { href: "/prescriptions/new", label: "روشتة", icon: Plus, isAction: true },
+    { href: "/settings", label: "الإعدادات", icon: Settings },
   ];
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20">
-          {/* Logo & Brand */}
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl overflow-hidden border-2 border-emerald-500/40 shadow-lg shadow-emerald-950/50 group-hover:border-emerald-400 transition-all">
-              <Image
-                src="/logo-penrx.jpg"
-                alt="PenRX+"
-                fill
-                sizes="48px"
-                priority
-                className="object-cover"
-              />
-            </div>
-            <div className="flex flex-col">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xl sm:text-2xl font-black bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent font-sans tracking-tight">
-                  PenRX+
-                </span>
-                <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/30">
-                  PRO
-                </span>
-                <span className="px-1.5 py-0.5 rounded-md bg-slate-800/90 text-emerald-300 text-[10px] font-mono font-bold border border-slate-700/80 shadow-sm" title={`الإصدار الحالي: v${versionConfig.version}`}>
-                  v{versionConfig.version}
+    <>
+      {/* ===== TOP DESKTOP & MOBILE HEADER ===== */}
+      <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-2xl border-b border-slate-800/80 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16 sm:h-18">
+            {/* Right: Brand & Clinic */}
+            <Link href="/" className="flex items-center gap-3 group shrink-0">
+              {/* 1. الشعار على اليمين */}
+              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-md shadow-emerald-950/40 group-hover:border-emerald-400 group-hover:scale-105 transition-all">
+                <Image
+                  src="/logo-penrx.jpg"
+                  alt="PenRX+"
+                  fill
+                  priority
+                  sizes="40px"
+                  className="object-cover"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  {/* 2. يليه مباشرة شارة PRO 👑 أو TRIAL 🎁 (اضغط عليها للدخول للاشتراك) */}
+                  {mounted && subDetails.isActive && (
+                    isTrialAccount ? (
+                      <span
+                        onClick={(e) => {
+                          e.preventDefault();
+                          window.location.href = "/subscriptions";
+                        }}
+                        className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-black border border-cyan-500/35 shadow-sm shadow-cyan-950/30 shrink-0 cursor-pointer transition-all"
+                        title="باقة تجريبية - اضغط للاشتراك والدفع"
+                      >
+                        TRIAL 🎁
+                      </span>
+                    ) : (
+                      <span
+                        onClick={(e) => {
+                          e.preventDefault();
+                          window.location.href = "/subscriptions";
+                        }}
+                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-black border shadow-sm shrink-0 cursor-pointer transition-all ${
+                          subDetails.daysRemaining <= 3
+                            ? "bg-rose-500/25 hover:bg-rose-500/35 text-rose-300 border-rose-500/50 shadow-rose-950/30 animate-pulse"
+                            : subDetails.daysRemaining <= 7
+                            ? "bg-amber-500/25 hover:bg-amber-500/35 text-amber-300 border-amber-500/50 shadow-amber-950/30"
+                            : "bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border-orange-500/40 shadow-orange-950/30"
+                        }`}
+                        title={
+                          subDetails.daysRemaining <= 7
+                            ? `تنبيه: متبقي ${subDetails.daysRemaining} أيام - اضغط للتجديد`
+                            : "باقة PRO نشطة - اضغط لإدارة الاشتراك"
+                        }
+                      >
+                        {subDetails.daysRemaining <= 3
+                          ? `PRO ⚠️ (${subDetails.daysRemaining}ي)`
+                          : subDetails.daysRemaining <= 7
+                          ? `PRO ⏳ (${subDetails.daysRemaining}ي)`
+                          : "PRO 👑"}
+                      </span>
+                    )
+                  )}
+
+                  {/* 3. اسم التطبيق PenRX مع + بعد حرف X */}
+                  <span dir="ltr" className="text-lg sm:text-xl font-black bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent tracking-tight inline-flex items-center">
+                    PenRX<span className="text-emerald-400 font-black">+</span>
+                  </span>
+
+                  {/* 4. الفيرجن مرتبط بملف الباكدج */}
+                  <span dir="ltr" className="hidden sm:inline-block px-1.5 py-0.5 rounded-md bg-slate-900 text-slate-400 text-[10px] font-mono font-bold border border-slate-800 shrink-0">
+                    v{packageInfo.version}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-slate-400 -mt-0.5 truncate max-w-[140px] sm:max-w-[220px]">
+                  {mounted ? (clinic.nameAr || clinic.name || "العيادة") : ""}
                 </span>
               </div>
-              <span className="text-[11px] font-bold text-slate-400 -mt-1 truncate max-w-[150px] sm:max-w-[200px]">
-                {clinic.nameAr || clinic.name}
-              </span>
-            </div>
-          </Link>
-
-          {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-1.5">
-            {NAV_LINKS.map((link) => {
-              const Icon = link.icon;
-              const isActive = pathname === link.href;
-
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                    isActive
-                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-md"
-                      : link.highlight
-                      ? "bg-emerald-600 text-white hover:bg-emerald-500 shadow-md shadow-emerald-950/40 hover:scale-105"
-                      : "text-slate-300 hover:text-white hover:bg-slate-900 border border-transparent"
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span>{link.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Right Status / Device Badge */}
-          <div className="hidden sm:flex items-center gap-3">
-            {/* Subscription Status Chip */}
-            <Link
-              href="/subscriptions"
-              suppressHydrationWarning
-              className={`px-3 py-1.5 rounded-xl border text-[11px] font-black flex items-center gap-1.5 transition-all shadow-sm ${subDetails.badgeColor}`}
-            >
-              <Crown className="w-3.5 h-3.5" />
-              <span suppressHydrationWarning>{subDetails.statusLabel}</span>
-              {subDetails.isActive && (
-                <span className="font-mono text-emerald-300">({subDetails.daysRemaining}ي)</span>
-              )}
             </Link>
 
-            {/* Hardware Machine ID Tag */}
-            <div className="hidden xl:flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[10px] text-slate-400 font-mono" title="Machine ID">
-              <Laptop className="w-3 h-3 text-emerald-400" />
-              <span suppressHydrationWarning>{mounted ? machineId.substring(0, 12) + "..." : "PRX-..."}</span>
+            {/* Center: Desktop Navigation Pills (Clean & Elegant) */}
+            <nav className="hidden md:flex items-center gap-1.5 bg-slate-900/60 p-1.5 rounded-2xl border border-slate-800/80 shadow-inner">
+              {DESKTOP_LINKS.map((link) => {
+                const Icon = link.icon;
+                const isActive = pathname === link.href;
+
+                if (link.highlight) {
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-md shadow-emerald-950/40 hover:brightness-110 active:scale-95"
+                    >
+                      <Icon className="w-3.5 h-3.5 shrink-0 stroke-[3]" />
+                      <span>{link.label}</span>
+                    </Link>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                      isActive
+                        ? "bg-slate-800 text-emerald-300 border border-emerald-500/30 shadow-sm"
+                        : "text-slate-300 hover:text-white hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{link.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* Left: Subscription Status Pill (Distinctive Premium Orange Theme) */}
+            <div className="flex items-center gap-2.5">
+              <Link
+                href="/subscriptions"
+                suppressHydrationWarning
+                className="px-3.5 py-1.5 rounded-xl border text-xs font-black flex items-center gap-2 transition-all hover:scale-105 shadow-md shadow-orange-950/50 bg-gradient-to-r from-orange-500/20 via-amber-500/20 to-orange-500/15 border-orange-500/50 hover:border-orange-400 text-orange-300 hover:text-orange-100 cursor-pointer"
+                title="إدارة الباقة والاشتراك والدفع"
+              >
+                <Crown className="w-3.5 h-3.5 shrink-0 text-orange-400" />
+                <span suppressHydrationWarning className="font-black">
+                  {!mounted ? (
+                    <span className="inline-block w-16 h-3 bg-orange-500/20 rounded animate-pulse" />
+                  ) : subDetails.isActive ? (
+                    `نشط (${subDetails.daysRemaining} يوم)`
+                  ) : subDetails.isPending ? (
+                    "قيد المراجعة ⏳"
+                  ) : (
+                    "اشترك الآن ⚡"
+                  )}
+                </span>
+              </Link>
             </div>
-          </div>
-
-          {/* Mobile Menu Toggle Button */}
-          <div className="flex lg:hidden items-center gap-2">
-            <Link
-              href="/subscriptions"
-              suppressHydrationWarning
-              className={`px-2.5 py-1 rounded-xl border text-[10px] font-black flex items-center gap-1 ${subDetails.badgeColor}`}
-            >
-              <Crown className="w-3 h-3" />
-              <span suppressHydrationWarning>{subDetails.isActive ? `${subDetails.daysRemaining}ي` : "تفعيل"}</span>
-            </Link>
-
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl bg-slate-900 text-slate-300 border border-slate-800 hover:text-white"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden bg-slate-950/95 border-b border-slate-800 p-4 space-y-2 backdrop-blur-2xl animate-in slide-in-from-top-4 duration-150">
-          {NAV_LINKS.map((link) => {
-            const Icon = link.icon;
-            const isActive = pathname === link.href;
+      {/* ===== MOBILE BOTTOM DOCK (Clean, Ergonomic & Modern) ===== */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-2xl border-t border-slate-800/80 px-3 py-2 shadow-2xl safe-area-bottom">
+        <div className="flex items-center justify-around max-w-md mx-auto">
+          {MOBILE_DOCK.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+
+            if (item.isAction) {
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="-mt-5 p-3 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 shadow-xl shadow-emerald-950/60 border-2 border-slate-950 active:scale-95 transition-transform flex flex-col items-center justify-center"
+                >
+                  <Icon className="w-6 h-6 stroke-[2.5]" />
+                </Link>
+              );
+            }
 
             return (
               <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-black transition-all ${
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
                   isActive
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                    : link.highlight
-                    ? "bg-emerald-600 text-white font-extrabold"
-                    : "text-slate-300 hover:bg-slate-900"
+                    ? "text-emerald-400 font-black"
+                    : "text-slate-400 hover:text-slate-200 font-semibold"
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{link.label}</span>
+                <Icon className={`w-5 h-5 ${isActive ? "text-emerald-400 stroke-[2.5]" : "text-slate-400"}`} />
+                <span className="text-[10px] tracking-tight">{item.label}</span>
               </Link>
             );
           })}
         </div>
-      )}
-    </header>
+      </div>
+    </>
   );
 }

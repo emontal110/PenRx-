@@ -260,8 +260,80 @@ ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "allowedMachineIds" TEXT[] D
 CREATE INDEX IF NOT EXISTS "Subscription_machineId_idx" ON "Subscription"("machineId");
 CREATE INDEX IF NOT EXISTS "Subscription_subscriberId_idx" ON "Subscription"("subscriberId");
 
--- Enable unrestricted access for doctor apps and admin portal to sync subscriptions
-ALTER TABLE "Subscription" DISABLE ROW LEVEL SECURITY;
+-- =========================================================================
+-- Security Hardening: Enable Strict Row Level Security (RLS) on Subscription
+-- =========================================================================
+ALTER TABLE "Subscription" ENABLE ROW LEVEL SECURITY;
+
+-- Drop legacy/insecure policies if exist
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "anon_insert_pending_sub" ON "Subscription";
+    DROP POLICY IF EXISTS "anon_select_sub" ON "Subscription";
+    DROP POLICY IF EXISTS "service_role_all_sub" ON "Subscription";
+EXCEPTION WHEN undefined_object THEN null; END $$;
+
+-- 1. Anonymous users can ONLY insert new subscription requests in PENDING status
+CREATE POLICY "anon_insert_pending_sub" ON "Subscription"
+    FOR INSERT
+    TO anon, authenticated
+    WITH CHECK ("status" = 'PENDING');
+
+-- 2. Anonymous/doctor instances can only query subscriptions for verification
+CREATE POLICY "anon_select_sub" ON "Subscription"
+    FOR SELECT
+    TO anon, authenticated
+    USING (true);
+
+-- 3. Strictly BLOCK any anonymous UPDATE or DELETE.
+-- Updates and deletions are exclusively reserved for service_role or server-side API.
+CREATE POLICY "service_role_all_sub" ON "Subscription"
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+-- =========================================================================
+-- Table for Cloud Synchronization of Prescriptions (Multi-Tenant)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS "CloudPrescription" (
+    "id" TEXT NOT NULL,
+    "subscriberId" TEXT NOT NULL,
+    "prescriptionNo" TEXT NOT NULL,
+    "branchId" TEXT,
+    "branchName" TEXT,
+    "patientName" TEXT NOT NULL,
+    "patientPhone" TEXT,
+    "patientAge" TEXT,
+    "patientGender" TEXT,
+    "diagnosis" TEXT,
+    "notes" TEXT,
+    "itemsJson" JSONB NOT NULL DEFAULT '[]'::jsonb,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "CloudPrescription_pkey" PRIMARY KEY ("id")
+);
+
+-- Fast lookup indexes partitioned by subscriber and date
+CREATE INDEX IF NOT EXISTS "CloudPrescription_subscriberId_idx" ON "CloudPrescription"("subscriberId");
+CREATE INDEX IF NOT EXISTS "CloudPrescription_createdAt_idx" ON "CloudPrescription"("createdAt");
+
+-- =========================================================================
+-- Security Hardening: Enable Strict Row Level Security (RLS) on CloudPrescription
+-- =========================================================================
+ALTER TABLE "CloudPrescription" ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "anon_access_prescriptions" ON "CloudPrescription";
+    DROP POLICY IF EXISTS "service_role_prescriptions" ON "CloudPrescription";
+EXCEPTION WHEN undefined_object THEN null; END $$;
+
+-- Anonymous direct SELECT/DELETE is blocked. Sync is brokered via authenticated server API or service_role
+CREATE POLICY "service_role_prescriptions" ON "CloudPrescription"
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
 
 
 -- Seed Admin User and System Clinic in Database
@@ -283,3 +355,30 @@ VALUES (
 ON CONFLICT ("email") DO UPDATE SET
     "role" = 'ADMIN',
     "passwordHash" = 'd864f9ef7a371d39f5ae82167cd1add8baf1422e5b70b6e2b16a5efc92cac61b0f36f00773f3fa6e01755d0382d3df27aa84b5316e87e5b7ce02cac9677a5a7e';
+
+-- =========================================================================
+-- Table for Multi-Tenant Secure Cloud Backups (Partitioned by subscriberId)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS "CloudBackup" (
+    "id" TEXT NOT NULL,
+    "subscriberId" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "fileSizeKb" INTEGER NOT NULL DEFAULT 0,
+    "payloadBase64" TEXT NOT NULL,
+    "metadataJson" JSONB NOT NULL DEFAULT '{}'::jsonb,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "CloudBackup_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "CloudBackup_subscriberId_idx" ON "CloudBackup"("subscriberId");
+CREATE INDEX IF NOT EXISTS "CloudBackup_createdAt_idx" ON "CloudBackup"("createdAt");
+
+ALTER TABLE "CloudBackup" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_cloud_backup" ON "CloudBackup"
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+

@@ -136,6 +136,9 @@ model Prescription {
   paperSize      PaperSize          @default(A4)
   qrCodeUrl      String?
   isManual       Boolean            @default(false)
+  isArchived     Boolean            @default(false)
+  archivedAt     DateTime?
+  subscriberId   String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
@@ -145,6 +148,8 @@ model Prescription {
   @@index([branchId])
   @@index([patientId])
   @@index([prescriptionNo])
+  @@index([subscriberId])
+  @@index([isArchived])
 }
 
 model PrescriptionItem {

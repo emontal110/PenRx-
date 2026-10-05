@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import versionConfig from "@/config/version.json";
+import packageInfo from "../../../../../package.json";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ function compareSemver(current: string, latest: string): boolean {
 }
 
 export async function GET() {
-  const currentVersion = versionConfig.version || "1.0.0";
+  const currentVersion = packageInfo.version || versionConfig.version || "1.0.0";
   const repo = versionConfig.githubRepo || "emontal110/PenRx-";
 
   try {

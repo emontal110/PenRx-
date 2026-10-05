@@ -1,42 +1,82 @@
-# dependencies
-/node_modules
-/.pnpm-store
+# ==========================================
+# PenRX+ Official Git Ignore Configuration
+# ==========================================
 
-# next.js
-/.next/
-/out/
+# 1. Dependencies & Package Stores
+node_modules/
+.pnpm-store/
+.yarn/
+vendor/
 
-# production
-/build
+# 2. Next.js & Web Application Outputs
+.next/
+out/
+build/
+dist/
+dist-ssr/
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# OS & IDE
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-
-# Distribution & Build Outputs
+# 3. Desktop Electron & Native Build Artifacts
 dist-electron/
 release-packages/
 releases/
+*.exe
+*.msi
+*.dmg
+*.app
+*.zip
+*.tar.gz
+
+# 4. Mobile & Android Native Builds (Capacitor)
 android/.gradle/
 android/app/build/
 android/build/
+android/captures/
+android/.idea/
 *.apk
-*.exe
+*.aab
+*.keystore
+*.jks
 
+# 5. Environment Variables & Secret Keys
+.env
+.env*.local
+.env.development
+.env.test
+.env.production
+!.env.example
+
+# 6. Local Scratch & Temporary Test Scripts
+scratch/
+tmp/
+temp/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 7. Database Files & Caches
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 8. TypeScript & Transpiler Caches
+*.tsbuildinfo
+next-env.d.ts
+
+# 9. IDEs & Operating System Artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+.gemini/
+.agents/
+
+# 10. Cloud Deployment Platforms (if any)
+.vercel

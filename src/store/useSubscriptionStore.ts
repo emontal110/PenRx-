@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { getOrCreateMachineId } from "@/lib/deviceSecurity";
+import { getOrCreateMachineId, initializeHardwareMachineId } from "@/lib/deviceSecurity";
+
+const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
+// NEXT_PUBLIC_ variables are intentionally public (Supabase anonymous key).
+// We do NOT provide a hardcoded fallback to avoid exposing it in source code.
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 export interface SubscriptionRecord {
   id: string;
@@ -31,9 +36,13 @@ interface SubscriptionStoreState {
   subscriptions: SubscriptionRecord[];
   currentSubscription: SubscriptionRecord | null;
   lastSyncedAt: number;
+  signatureToken: string | null;     // HMAC-signed offline token (mirrors Classico)
+  lastOnlineCheck: number;           // Timestamp of last successful online verification
 
   setMachineId: (id: string) => void;
   setSubscriberId: (id: string) => void;
+  setSignatureToken: (token: string | null) => void;
+  initHardwareId: () => Promise<void>; // Call once on mount in Electron mode
 
   submitSubscriptionRequest: (req: {
     planId: string;
@@ -48,7 +57,8 @@ interface SubscriptionStoreState {
     isTrial?: boolean;
   }) => Promise<SubscriptionRecord>;
 
-  linkDeviceToSubscriber: (targetSubscriberId: string) => Promise<boolean>;
+  cancelPendingRequest: () => Promise<void>;
+  linkDeviceToSubscriber: (targetSubscriberId: string, verificationPhone?: string) => Promise<{ success: boolean; error?: string }>;
   activateSubscription: (id: string, days?: number) => Promise<void>;
   suspendSubscription: (id: string) => Promise<void>;
   deleteSubscription: (id: string) => Promise<void>;
@@ -58,13 +68,29 @@ interface SubscriptionStoreState {
   syncWithServer: () => Promise<void>;
 }
 
+export function hasUsedFreeTrial(subscriptions: SubscriptionRecord[], currentMachineId: string): boolean {
+  if (typeof window !== "undefined") {
+    if (localStorage.getItem("penrx_trial_claimed") === "true") return true;
+  }
+  return subscriptions.some(
+    (s) =>
+      (s.machineId === currentMachineId || (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(currentMachineId))) &&
+      (s.isTrial === true || s.planId === "trial")
+  );
+}
+
 export function getSubscriptionDetails(subscriptions: SubscriptionRecord[], currentMachineId: string) {
-  // Find subscription matching current machine ID (either as primary or in allowedMachineIds)
-  const sub = subscriptions.find(
+  // Find subscriptions matching current machine ID (either as primary or in allowedMachineIds)
+  const matchingSubs = subscriptions.filter(
     (s) =>
       s.machineId === currentMachineId ||
       (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(currentMachineId))
   );
+
+  // Prioritize ACTIVE, then PENDING, then most recent record
+  const activeSub = matchingSubs.find((s) => s.status === "ACTIVE") || subscriptions.find((s) => s.status === "ACTIVE");
+  const pendingSub = matchingSubs.find((s) => s.status === "PENDING") || subscriptions.find((s) => s.status === "PENDING");
+  const sub = activeSub || pendingSub || matchingSubs[0] || subscriptions[0] || null;
 
   if (!sub) {
     return {
@@ -93,7 +119,8 @@ export function getSubscriptionDetails(subscriptions: SubscriptionRecord[], curr
   }
 
   const isExpired = sub.status === "ACTIVE" && daysRemaining <= 0;
-  const isActive = sub.status === "ACTIVE" && daysRemaining > 0;
+  // If subscription status is ACTIVE on database/portal, it is unlocked and active
+  const isActive = sub.status === "ACTIVE" && (daysRemaining > 0 || (sub.durationDays && sub.durationDays > 0));
   const isPending = sub.status === "PENDING";
   const isSuspended = sub.status === "SUSPENDED";
 
@@ -139,9 +166,19 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       subscriptions: [],
       currentSubscription: null,
       lastSyncedAt: 0,
+      signatureToken: null,
+      lastOnlineCheck: 0,
 
       setMachineId: (id: string) => set({ machineId: id }),
       setSubscriberId: (id: string) => set({ subscriberId: id }),
+      setSignatureToken: (token: string | null) => set({ signatureToken: token }),
+
+      // Initialize real hardware machine ID from Electron (called once on app mount)
+      initHardwareId: async () => {
+        await initializeHardwareMachineId((newId) => {
+          set({ machineId: newId });
+        });
+      },
 
       submitSubscriptionRequest: async (req) => {
         const machineId = get().machineId || getOrCreateMachineId();
@@ -176,7 +213,23 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           currentSubscription: newRecord,
         }));
 
-        // Send to server
+        // 1. Direct Supabase Cloud sync (Instant appearance in portal.html!)
+        try {
+          await fetch(SUPABASE_REST_URL, {
+            method: "POST",
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + SUPABASE_ANON_KEY,
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            },
+            body: JSON.stringify(newRecord),
+          });
+        } catch (cloudErr) {
+          console.warn("Direct Supabase cloud sync notice:", cloudErr);
+        }
+
+        // 2. Also send to local server API
         try {
           const res = await fetch("/api/subscriptions", {
             method: "POST",
@@ -184,7 +237,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             body: JSON.stringify(newRecord),
           });
           const data = await res.json();
-          if (data.subscription) {
+          if (data && data.subscription) {
             set((state) => ({
               subscriberId: data.subscription.subscriberId || subscriberId,
               subscriptions: [
@@ -200,7 +253,42 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         return newRecord;
       },
 
-      linkDeviceToSubscriber: async (targetSubscriberId: string) => {
+      cancelPendingRequest: async () => {
+        const machineId = get().machineId;
+        const pending = get().subscriptions.find(
+          (s) =>
+            (s.machineId === machineId ||
+              (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(machineId))) &&
+            s.status === "PENDING"
+        );
+
+        if (pending) {
+          set((state) => ({
+            subscriptions: state.subscriptions.filter((s) => s.id !== pending.id),
+            currentSubscription: null,
+          }));
+
+          // Direct Delete from Supabase Cloud
+          try {
+            await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(pending.id)}`, {
+              method: "DELETE",
+              headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: "Bearer " + SUPABASE_ANON_KEY,
+              },
+            });
+          } catch {}
+
+          // Also delete from local API
+          try {
+            await fetch(`/api/system/verify?id=${pending.id}`, { method: "DELETE" });
+          } catch (err) {
+            console.warn("Server subscription delete deferred:", err);
+          }
+        }
+      },
+
+      linkDeviceToSubscriber: async (targetSubscriberId: string, verificationPhone?: string) => {
         const machineId = get().machineId || getOrCreateMachineId();
         const cleanSubId = targetSubscriberId.toUpperCase().trim();
 
@@ -212,22 +300,24 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               action: "link_device",
               subscriberId: cleanSubId,
               machineId,
+              verificationPhone: verificationPhone?.trim(),
             }),
           });
           const data = await res.json();
           if (data.success && data.subscription) {
             set((state) => ({
               subscriberId: cleanSubId,
+              signatureToken: data.subscription.signatureToken || state.signatureToken,
               subscriptions: [
                 data.subscription,
                 ...state.subscriptions.filter((s) => s.id !== data.subscription.id),
               ],
             }));
-            return true;
+            return { success: true };
           }
-          return false;
-        } catch {
-          return false;
+          return { success: false, error: data.error || "فشل ربط الجهاز بهذا الاشتراك" };
+        } catch (err: any) {
+          return { success: false, error: err.message || "تعذر الاتصال بالخادم" };
         }
       },
 
@@ -253,7 +343,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/admin/subscriptions", {
+          await fetch("/api/system/verify", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, action: "ACTIVATE", durationDays: duration }),
@@ -269,7 +359,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/admin/subscriptions", {
+          await fetch("/api/system/verify", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, action: "SUSPEND" }),
@@ -283,7 +373,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch(`/api/admin/subscriptions?id=${encodeURIComponent(id)}`, {
+          await fetch(`/api/system/verify?id=${encodeURIComponent(id)}`, {
             method: "DELETE",
           });
         } catch {}
@@ -306,7 +396,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/admin/subscriptions", {
+          await fetch("/api/system/verify", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, action: "ADJUST_DAYS", daysDelta }),
@@ -330,7 +420,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/admin/subscriptions", {
+          await fetch("/api/system/verify", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id: subscriptionId, action: "ADD_DEVICE", machineId: cleanMachine }),
@@ -350,7 +440,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/admin/subscriptions", {
+          await fetch("/api/system/verify", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id: subscriptionId, action: "REMOVE_DEVICE", machineId: targetMachineId }),
@@ -359,12 +449,82 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       },
 
       syncWithServer: async () => {
+        const machineId = get().machineId || getOrCreateMachineId();
+        const subId = get().subscriberId;
+        const offlineToken = get().signatureToken;
+
+        // 1. Fetch own subscription from local Next.js API (fast, strictly isolated to this machine)
         try {
-          const res = await fetch("/api/subscriptions", { cache: "no-store" });
-          if (!res.ok) return;
-          const data = await res.json();
-          if (Array.isArray(data.subscriptions)) {
-            set({ subscriptions: data.subscriptions, lastSyncedAt: Date.now() });
+          let query = `machineId=${encodeURIComponent(machineId)}`;
+          if (subId && subId !== "SUB-0000") {
+            query += `&subscriberId=${encodeURIComponent(subId)}`;
+          }
+          const res = await fetch(`/api/subscriptions?${query}`, {
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.subscription) {
+              const fresh = data.subscription;
+              set((state) => ({
+                subscriptions: [
+                  fresh,
+                  ...state.subscriptions.filter((s) => s.id !== fresh.id),
+                ],
+                currentSubscription: fresh,
+                subscriberId: fresh.subscriberId || state.subscriberId,
+                signatureToken: fresh.signatureToken || state.signatureToken,
+                lastSyncedAt: Date.now(),
+              }));
+            }
+          }
+        } catch {
+          // Offline fallback: Direct single-row query for this machine only from Supabase
+          try {
+            const encodedId = encodeURIComponent(machineId);
+            const cloudRes = await fetch(
+              `${SUPABASE_REST_URL}?or=(machineId.eq.${encodedId},allowedMachineIds.cs.{${encodedId}})&select=*&limit=1`,
+              {
+                headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: "Bearer " + SUPABASE_ANON_KEY,
+                },
+                cache: "no-store",
+              }
+            );
+            if (cloudRes.ok) {
+              const rows = await cloudRes.json();
+              if (Array.isArray(rows) && rows.length > 0) {
+                const mySub = rows[0];
+                set((state) => ({
+                  subscriptions: [mySub, ...state.subscriptions.filter((s) => s.id !== mySub.id)],
+                  currentSubscription: mySub,
+                  lastSyncedAt: Date.now(),
+                }));
+              }
+            }
+          } catch {}
+        }
+
+        // 2. Verify and obtain fresh cryptographic HMAC signature token from server
+        try {
+          let url = `/api/system/verify?machineId=${encodeURIComponent(machineId)}`;
+          if (subId) {
+            url += `&subscriberId=${encodeURIComponent(subId)}`;
+          }
+          if (offlineToken) {
+            url += `&offlineToken=${encodeURIComponent(offlineToken)}`;
+          }
+
+          const res = await fetch(url, { cache: "no-store" });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.status === "active" && data.token) {
+              set({ signatureToken: data.token, lastOnlineCheck: Date.now() });
+            } else if (data.status && data.status !== "active") {
+              // Server revoked or expired token
+              set({ signatureToken: null });
+            }
           }
         } catch {}
       },
