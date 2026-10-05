@@ -79,16 +79,15 @@ jobs:
         run: npm install --no-audit
 
       - name: Setup Environment Variables
-        shell: pwsh
+        shell: bash
         run: |
-          Set-Content -Path .env -Value @"
-DATABASE_URL=postgresql://postgres:3060630@db.qspaigplwyvpqbmszpgc.supabase.co:5432/postgres
-NEXT_PUBLIC_SUPABASE_URL=https://qspaigplwyvpqbmszpgc.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-PENRX_SECRET_KEY=d1132b51b81d261f94fc6fa2edb1292b534a75bdc8ce10ec8d0e3c00efe843b4
-NEXT_TELEMETRY_DISABLED=1
-"@ -Encoding UTF8
+          printf "%s\n" \
+            "DATABASE_URL=postgresql://postgres:3060630@db.qspaigplwyvpqbmszpgc.supabase.co:5432/postgres" \
+            "NEXT_PUBLIC_SUPABASE_URL=https://qspaigplwyvpqbmszpgc.supabase.co" \
+            "NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc" \
+            "NEXT_PUBLIC_APP_URL=http://localhost:3000" \
+            "PENRX_SECRET_KEY=d1132b51b81d261f94fc6fa2edb1292b534a75bdc8ce10ec8d0e3c00efe843b4" \
+            "NEXT_TELEMETRY_DISABLED=1" > .env
 
       - name: Generate Prisma Client
         run: npx prisma generate
