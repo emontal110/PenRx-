@@ -1,10 +1,10 @@
 {
-  "version": "1.0.0",
-  "versionCode": 1,
-  "releaseDate": "2026-09-28",
+  "version": "1.3.1",
+  "versionCode": 2,
+  "releaseDate": "2026-10-05",
   "appName": "PenRX+",
   "githubRepo": "emontal110/PenRx-",
-  "releaseNotes": "الإصدار الأولي الشامل لمنظومة PenRX+ الطبية بمحرك البحث الفائق وتعدد الأجهزة",
-  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe",
-  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
+  "releaseNotes": "تحديث وإصدار تلقائي لمنظومة PenRX+ الطبية",
+  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.3.1/PenRX+-Setup.exe",
+  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.3.1/PenRX+.apk"
 }

@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
-title PenRX+ - Release and Build Manager
+set "PYTHONIOENCODING=utf-8"
+title PenRX+ - Automated Master Release & Build Manager
 color 0B
 
 if exist "%~dp0package.json" (
@@ -15,11 +16,14 @@ if exist "%~dp0package.json" (
 
 cd /d "%PROJECT_ROOT%"
 
-echo ========================================================
-echo       PenRX+ - Automated Master Release and Build
-echo ========================================================
-echo [i] Project Directory: %CD%
-echo [i] Starting automated build and release immediately...
+cls
+echo.
+echo  ==============================================================
+echo   🌟 منظومة PenRX+ الطبية - معالج البناء والإصدار التلقائي الشامل
+echo  ==============================================================
+echo   [i] مسار المنظومة: %CD%
+echo   [i] جاري بدء كافة مراحل البناء والإصدار والدفع السحابي فوراً...
+echo  ==============================================================
 echo.
 
 set "TARGET_VER=%~1"
@@ -32,23 +36,22 @@ if "%NOTES%"=="" (
     set "NOTES=تحديث وإصدار تلقائي لمنظومة PenRX+ الطبية"
 )
 
-echo [i] Target Version Mode: %TARGET_VER%
-echo [i] Release Notes: %NOTES%
-echo.
-
 node scripts/release-builder.js %TARGET_VER% "%NOTES%"
 
 if %errorlevel% neq 0 (
     echo.
-    echo [ERROR] Process failed with error code %errorlevel%
+    echo  ==============================================================
+    echo   ❌ حدث خطأ أو توقف أثناء البناء. كود الخطأ: %errorlevel%
+    echo  ==============================================================
+    echo.
     pause
     exit /b %errorlevel%
 )
 
 echo.
-echo ========================================================
-echo [SUCCESS] Release and Build completed successfully!
-echo ========================================================
+echo  ==============================================================
+echo   ✅ اكتملت كافة مراحل البناء والتغليف والرفع على GitHub بنجاح!
+echo  ==============================================================
 echo.
 
 if exist "releases" (
