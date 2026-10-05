@@ -159,15 +159,17 @@ jobs:
               break
             fi
           done
-          echo "Files prepared for release:"
+          RELEASE_TAG=$(node -p "require('./src/config/version.json').version")
+          echo "CURRENT_TAG=v$RELEASE_TAG" >> $GITHUB_ENV
+          echo "Files prepared for release (Tag: v$RELEASE_TAG):"
           ls -la release-files/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: release-files/*
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v1.3.2' }}
-          name: PenRX+ Official Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || env.CURRENT_TAG }}
+          name: PenRX+ Official Release ${{ github.ref_type == 'tag' && github.ref_name || env.CURRENT_TAG }}
           draft: false
           prerelease: false
           generate_release_notes: true
