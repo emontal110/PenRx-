@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" class="scroll-smooth">
+<html lang="ar" dir="rtl" class="scroll-smooth overflow-x-hidden">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -82,7 +82,7 @@
     }
   </style>
 </head>
-<body class="min-h-screen relative selection:bg-emerald-500 selection:text-slate-950">
+<body class="min-h-screen relative selection:bg-emerald-500 selection:text-slate-950 overflow-x-hidden w-full">
 
   <!-- Ambient Light Orbs -->
   <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -95,46 +95,38 @@
     
     <!-- Navigation Bar -->
     <header class="sticky top-0 z-50 glass-card border-b border-slate-800/80">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
+      <div class="max-w-6xl mx-auto px-3.5 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-2">
         
         <!-- Brand Logo & Name -->
-        <div class="flex items-center gap-3.5">
-          <div class="relative w-12 h-12 rounded-2xl p-0.5 shadow-xl shadow-emerald-950/60 border border-emerald-500/40 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0">
+        <div class="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+          <div class="relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl p-0.5 shadow-xl shadow-emerald-950/60 border border-emerald-500/40 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0">
             <img
               src="logo-penrx.jpg"
               onerror="if(!this.dataset.retry){this.dataset.retry=1;this.src='docs/logo-penrx.jpg';}else if(this.dataset.retry=='1'){this.dataset.retry=2;this.src='public/logo-penrx.jpg';}else if(this.dataset.retry=='2'){this.dataset.retry=3;this.src='./logo-penrx.jpg';}"
               alt="PenRX+ Official Logo"
-              class="w-full h-full object-cover rounded-[14px]"
+              class="w-full h-full object-cover rounded-[10px] sm:rounded-[14px]"
             />
           </div>
-          <div>
-            <div class="flex items-center gap-2" dir="ltr">
-              <span class="font-black text-xl sm:text-2xl text-white tracking-tight font-outfit inline-flex items-center select-none" dir="ltr">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 sm:gap-2" dir="ltr">
+              <span class="font-black text-lg sm:text-2xl text-white tracking-tight font-outfit inline-flex items-center select-none" dir="ltr">
                 PenRX<span class="text-emerald-400 font-extrabold leading-none">+</span>
               </span>
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-outfit">v1.3</span>
+              <span class="app-pkg-version text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-outfit">v1.3</span>
             </div>
-            <p class="text-[11px] text-slate-400 font-semibold hidden sm:block">منظومة الروشتة الطبية الذكية وإدارة العيادات</p>
+            <p class="text-[10px] sm:text-[11px] text-slate-400 font-semibold hidden md:block truncate">منظومة الروشتة الطبية الذكية وإدارة العيادات</p>
           </div>
         </div>
 
-        <!-- Quick Action Nav -->
-        <div class="flex items-center gap-2.5">
-          <a
-            href="portal.html"
-            class="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-emerald-300 border border-slate-700/80 text-xs sm:text-sm font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-            title="بورتال الإدارة والتحكم السري بالمشتركين"
-          >
-            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
-            <span>بورتال المشتركين</span>
-          </a>
-
+        <!-- Quick Action Nav (Single sleek responsive button) -->
+        <div class="flex items-center gap-2 shrink-0">
           <a
             href="#download-section"
-            class="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs sm:text-sm hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-emerald-950/50 flex items-center gap-2 cursor-pointer"
+            class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs sm:text-sm font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+            title="الانتقال إلى خيارات التنزيل"
           >
-            <i data-lucide="download" class="w-4 h-4 stroke-[2.5]"></i>
-            <span>تنزيل البرنامج</span>
+            <i data-lucide="download-cloud" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0"></i>
+            <span>صفحة التنزيلات</span>
           </a>
         </div>
 
@@ -143,23 +135,23 @@
 
     <!-- Hero Section -->
     <main class="flex-1">
-      <section class="max-w-5xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-12 text-center">
+      <section class="max-w-5xl mx-auto px-4 sm:px-6 pt-8 sm:pt-14 pb-8 sm:pb-12 text-center">
         
-        <!-- Live Status Pill -->
-        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold mb-6 animate-pulse">
-          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span>الإصدار الرسمي v1.3 متاح الآن للتحميل المباشر</span>
+        <!-- Live Status Pill (Linked to package.json version) -->
+        <div class="inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] sm:text-xs font-bold mb-5 sm:mb-6 max-w-full">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-ping"></span>
+          <span class="truncate">الإصدار الرسمي <span class="app-pkg-version font-mono font-bold">v1.3</span> متاح الآن للتحميل المباشر</span>
         </div>
 
         <!-- Main Title -->
-        <h1 class="text-3xl sm:text-5xl md:text-6xl font-black text-white leading-tight sm:leading-tight mb-6">
+        <h1 class="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-snug sm:leading-tight mb-4 sm:mb-6">
           العيادة الذكية بين يديك<br />
           <span class="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
             أسرع روشتة طبية إلكترونية
           </span>
         </h1>
 
-        <p class="text-sm sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed mb-10 font-medium">
+        <p class="text-xs sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed mb-8 sm:mb-10 font-medium px-2">
           صُممت خصيصاً لتوفير وقت الطبيب؛ كتابة وطباعة الروشتة في ثوانٍ معدودة، تنبيهات التداخلات الدوائية بالذكاء الاصطناعي، وتعمل بكفاءة تامة دون الحاجة لإنترنت.
         </p>
 
@@ -577,13 +569,23 @@
 
     <!-- Footer -->
     <footer class="glass-card border-t border-slate-800/80 py-8 text-center text-xs text-slate-400">
-      <div class="max-w-5xl mx-auto px-4 space-y-2">
+      <div class="max-w-5xl mx-auto px-4 space-y-2.5">
         <p class="font-bold text-slate-300">
           منظومة <span dir="ltr" class="inline-block text-white font-black font-outfit">PenRX+</span> الطبية المتكاملة • جميع الحقوق محفوظة © 2026
         </p>
         <p class="text-[11px] text-slate-500">
           تطوير وإشراف هندسي طبي مخصص لدعم الأطباء والمراكز التخصصية
         </p>
+        <div class="pt-2">
+          <a
+            href="portal.html"
+            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/60 hover:bg-slate-800 text-[11px] text-slate-500 hover:text-emerald-400 border border-slate-800 transition-colors"
+            title="بورتال الإدارة والتحكم السري بالمشتركين"
+          >
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+            <span>بورتال إدارة وتراخيص الأطباء 🔒</span>
+          </a>
+        </div>
       </div>
     </footer>
 
@@ -759,6 +761,24 @@
         }
       }
     })();
+
+    // Dynamically sync and display version with package.json
+    async function syncVersionWithPackage() {
+      try {
+        const res = await fetch('package.json', { cache: 'no-store' });
+        if (res.ok) {
+          const pkg = await res.json();
+          if (pkg && pkg.version) {
+            const vStr = pkg.version.startsWith('v') ? pkg.version : 'v' + pkg.version;
+            document.querySelectorAll('.app-pkg-version').forEach(el => el.textContent = vStr);
+            document.querySelectorAll('.app-pkg-version-num').forEach(el => el.textContent = pkg.version);
+          }
+        }
+      } catch (err) {
+        // Fallback silently to static version
+      }
+    }
+    syncVersionWithPackage();
   </script>
 </body>
 </html>

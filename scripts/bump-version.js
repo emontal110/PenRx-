@@ -57,4 +57,19 @@ if (fs.existsSync(androidGradlePath)) {
   console.log(`✓ Updated android/app/build.gradle (versionCode: ${newVersionCode}, versionName: "${newVersion}")`);
 }
 
+// 4. Update index.html and docs/index.html version labels
+const indexFiles = [
+  path.join(rootDir, "index.html"),
+  path.join(rootDir, "docs", "index.html")
+];
+for (const file of indexFiles) {
+  if (fs.existsSync(file)) {
+    let content = fs.readFileSync(file, "utf8");
+    content = content.replace(/(class="[^"]*app-pkg-version[^"]*">)v[^<]+(<\/span>)/g, `$1v${newVersion}$2`);
+    content = content.replace(/(الإصدار الرسمي\s+)v[0-9.]+(\s+متاح الآن)/g, `$1v${newVersion}$2`);
+    fs.writeFileSync(file, content, "utf8");
+    console.log(`✓ Updated version in ${path.relative(rootDir, file)} to v${newVersion}`);
+  }
+}
+
 console.log(`\n✅ Version successfully bumped to v${newVersion}!\n`);
