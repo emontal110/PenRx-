@@ -134,17 +134,24 @@ if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
 }
 const outIndex = path.join(outDir, "index.html");
-if (!fs.existsSync(outIndex)) {
+const portalSource = path.join(rootDir, "portal.html");
+if (fs.existsSync(portalSource)) {
+  fs.copyFileSync(portalSource, outIndex);
+  console.log("✅ تم ضبط بورتال الاشتراكات portal.html ليكون واجهة تطبيق الهاتف الرسمية (out/index.html).");
+} else {
   const docsIndex = path.join(rootDir, "docs", "index.html");
   if (fs.existsSync(docsIndex)) {
     fs.copyFileSync(docsIndex, outIndex);
-  } else {
-    fs.writeFileSync(
-      outIndex,
-      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>PenRX+</title></head><body>Loading PenRX+...</body></html>",
-      "utf8"
-    );
   }
+}
+// Copy supporting assets for portal
+const assetsToCopy = ["logo-penrx.jpg", "favicon.ico", "icon-512.png"];
+for (const a of assetsToCopy) {
+  const srcDoc = path.join(rootDir, "docs", a);
+  const srcPub = path.join(rootDir, "public", a);
+  const dst = path.join(outDir, a);
+  if (fs.existsSync(srcDoc)) fs.copyFileSync(srcDoc, dst);
+  else if (fs.existsSync(srcPub)) fs.copyFileSync(srcPub, dst);
 }
 run("npx cap sync android");
 console.log("✅ تمت مزامنة ملفات تطبيق الأندرويد مع مجلد android/ بنجاح.");

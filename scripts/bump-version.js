@@ -10,15 +10,22 @@ const androidGradlePath = path.join(rootDir, "android", "app", "build.gradle");
 const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
 const currentVersion = pkg.version || "1.0.0";
 
-// Determine new version
+// Determine new version (Strictly 2-digit format: X.Y, e.g. 1.3 -> 1.4 -> 1.5)
 let newVersion = process.argv[2];
-const releaseNotes = process.argv[3] || `تحديث تلقائي للإصدار الجديد v${newVersion || "1.0.1"}`;
 
-if (!newVersion || newVersion === "patch") {
+if (!newVersion || newVersion === "patch" || newVersion === "minor") {
   const parts = currentVersion.split(".").map(Number);
-  parts[2] = (parts[2] || 0) + 1;
-  newVersion = parts.join(".");
+  const major = isNaN(parts[0]) ? 1 : parts[0];
+  const minor = isNaN(parts[1]) ? 3 : parts[1] + 1;
+  newVersion = `${major}.${minor}`;
+} else if (newVersion.includes(".")) {
+  const parts = newVersion.split(".");
+  newVersion = `${parts[0]}.${parts[1]}`;
+} else {
+  newVersion = `1.${newVersion}`;
 }
+
+const releaseNotes = process.argv[3] || `تحديث تلقائي للإصدار الجديد v${newVersion}`;
 
 console.log(`\n======================================================`);
 console.log(`🚀 Bumping PenRX+ Version: ${currentVersion} -> ${newVersion}`);
