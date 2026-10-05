@@ -67,7 +67,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "PenRX+"
+      "shortcutName": "PenRX+",
+      "artifactName": "PenRX+-Setup.${ext}"
     }
   }
 }

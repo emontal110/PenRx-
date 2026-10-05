@@ -92,6 +92,12 @@ jobs:
 
       - name: Build Web Application
         run: npm run build
+        env:
+          DATABASE_URL: "postgresql://postgres:3060630@db.qspaigplwyvpqbmszpgc.supabase.co:5432/postgres"
+          NEXT_PUBLIC_SUPABASE_URL: "https://qspaigplwyvpqbmszpgc.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc"
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+          NEXT_TELEMETRY_DISABLED: "1"
 
       - name: Build Native Windows Installer (.exe)
         run: npx electron-builder --win --x64
@@ -146,6 +152,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release-files/*
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v1.3.2' }}
           name: PenRX+ Official Release ${{ github.ref_name }}
           draft: false
           prerelease: false
