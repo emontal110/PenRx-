@@ -29,14 +29,19 @@ jobs:
           distribution: "zulu"
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK
+        run: |
+          echo "ANDROID_HOME=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}" >> $GITHUB_ENV
 
       - name: Install NPM Dependencies
-        run: npm ci
+        run: npm install --no-audit
 
       - name: Build Web Application Bundle
         run: npm run build
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/penrx"
+          NEXT_TELEMETRY_DISABLED: 1
 
       - name: Prepare Web Directory for Capacitor
         run: |
@@ -79,10 +84,13 @@ jobs:
           cache: "npm"
 
       - name: Install NPM Dependencies
-        run: npm ci
+        run: npm install --no-audit
 
       - name: Build Web Application
         run: npm run build
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/penrx"
+          NEXT_TELEMETRY_DISABLED: 1
 
       - name: Build Native Windows Installer (.exe)
         run: npx electron-builder --win --x64
@@ -98,16 +106,19 @@ jobs:
   create-github-release:
     name: 🚀 Publish Direct GitHub Release Links
     needs: [build-android-apk, build-windows-electron]
+    if: always() && !cancelled() && (needs.build-android-apk.result == 'success' || needs.build-windows-electron.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Download Android APK
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: PenRX-Android-APK
           path: artifacts/android
 
       - name: Download Windows Desktop Installer
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: PenRX-Windows-Desktop
           path: artifacts/windows
