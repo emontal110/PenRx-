@@ -38,6 +38,15 @@ jobs:
       - name: Build Web Application Bundle
         run: npm run build
 
+      - name: Prepare Web Directory for Capacitor
+        run: |
+          mkdir -p out
+          if [ -f "docs/index.html" ]; then
+            cp docs/index.html out/index.html
+          else
+            echo "<!DOCTYPE html><html><body>PenRX+</body></html>" > out/index.html
+          fi
+
       - name: Add Android Native Platform
         run: npx cap add android || true
 
@@ -106,8 +115,20 @@ jobs:
       - name: Prepare Files for Release
         run: |
           mkdir -p release-files
-          cp artifacts/android/app-debug.apk release-files/PenRX+.apk
-          cp artifacts/windows/*.exe release-files/ 2>/dev/null || true
+          # Android APK
+          if [ -f "artifacts/android/app-debug.apk" ]; then
+            cp artifacts/android/app-debug.apk release-files/PenRX+.apk
+          fi
+          # Windows Desktop Installer
+          for f in artifacts/windows/*.exe; do
+            if [ -f "$f" ]; then
+              cp "$f" release-files/PenRX+-Setup.exe
+              cp "$f" release-files/
+              break
+            fi
+          done
+          echo "Files prepared for release:"
+          ls -la release-files/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
