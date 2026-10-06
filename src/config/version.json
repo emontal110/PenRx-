@@ -1,10 +1,10 @@
 {
-  "version": "1.12",
-  "versionCode": 13,
+  "version": "1.13",
+  "versionCode": 14,
   "releaseDate": "2026-10-06",
   "appName": "PenRX+",
   "githubRepo": "emontal110/PenRx-",
-  "releaseNotes": "Fix desktop black screen and mobile subscriptions flow",
-  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.12/PenRX+-Setup.exe",
-  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.12/PenRX+.apk"
+  "releaseNotes": "تحديث شعار تطبيق الأندرويد وضبط الهوامش والمحاذاة بالمنتصف",
+  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.13/PenRX+-Setup.exe",
+  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.13/PenRX+.apk"
 }

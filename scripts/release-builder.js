@@ -191,6 +191,14 @@ for (const a of assetsToCopy) {
   if (fs.existsSync(srcDoc)) fs.copyFileSync(srcDoc, dst);
   else if (fs.existsSync(srcPub)) fs.copyFileSync(srcPub, dst);
 }
+const iconScript = path.join(rootDir, "scripts", "generate-android-icons.ps1");
+if (fs.existsSync(iconScript) && process.platform === "win32") {
+  try {
+    run("powershell -ExecutionPolicy Bypass -File scripts/generate-android-icons.ps1");
+  } catch (e) {
+    console.warn("Notice: Android launcher icon update skipped:", e.message);
+  }
+}
 run("npx cap sync android");
 console.log("✓ Native Android files synchronized with android/ folder.");
 completeStep(3, "Mobile Platform Assets Synced");

@@ -1,6 +1,6 @@
 {
   "name": "penrx-plus",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "private": true,
   "description": "PenRX+ - The Ultimate Next-Gen Medical Prescription & Clinic Management Suite",
   "main": "electron/main.js",
