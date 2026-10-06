@@ -57,17 +57,20 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ],
-      "icon": "public/icon.ico"
+      "icon": "public/icon.ico",
+      "publisherName": "PenRX+ Medical Systems",
+      "legalTrademarks": "PenRX+ Medical Systems"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
+      "runAfterFinish": true,
       "shortcutName": "PenRX+",
       "artifactName": "PenRX+-Setup.${ext}",
       "installerIcon": "public/icon.ico",

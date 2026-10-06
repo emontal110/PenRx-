@@ -171,8 +171,17 @@ let apkFound = false;
 if (fs.existsSync(androidDir)) {
   const gradlewBat = path.join(androidDir, "gradlew.bat");
   if (fs.existsSync(gradlewBat) && process.env.JAVA_HOME) {
-    console.log("⚡ بيئة جافا متوفرة محلياً؛ جارٍ بناء الـ APK عبر Gradle...");
-    const gradleSuccess = run("gradlew.bat assembleDebug", androidDir);
+    console.log("⚡ بيئة جافا متوفرة محلياً؛ جارٍ بناء الـ APK الرسمي عبر Gradle...");
+    const gradleSuccess = run("gradlew.bat assembleRelease", androidDir);
+    const releaseApk = path.join(
+      androidDir,
+      "app",
+      "build",
+      "outputs",
+      "apk",
+      "release",
+      "app-release.apk"
+    );
     const debugApk = path.join(
       androidDir,
       "app",
@@ -182,10 +191,11 @@ if (fs.existsSync(androidDir)) {
       "debug",
       "app-debug.apk"
     );
-    if (fs.existsSync(debugApk)) {
-      fs.copyFileSync(debugApk, path.join(releasesDir, "PenRX+.apk"));
-      fs.copyFileSync(debugApk, path.join(versionDir, `PenRX+-v${activeVersion}.apk`));
-      fs.copyFileSync(debugApk, path.join(publicDownloadsDir, "PenRX+.apk"));
+    const apkSource = fs.existsSync(releaseApk) ? releaseApk : (fs.existsSync(debugApk) ? debugApk : null);
+    if (apkSource) {
+      fs.copyFileSync(apkSource, path.join(releasesDir, "PenRX+.apk"));
+      fs.copyFileSync(apkSource, path.join(versionDir, `PenRX+-v${activeVersion}.apk`));
+      fs.copyFileSync(apkSource, path.join(publicDownloadsDir, "PenRX+.apk"));
       console.log(`✅ تم نسخ وتحديث ملف الـ APK بنجاح إلى:`);
       console.log(`   - releases/PenRX+.apk`);
       console.log(`   - releases/v${activeVersion}/PenRX+-v${activeVersion}.apk`);

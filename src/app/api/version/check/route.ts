@@ -22,7 +22,7 @@ function compareSemver(current: string, latest: string): boolean {
 }
 
 export async function GET() {
-  const currentVersion = packageInfo.version || versionConfig.version || "1.0.0";
+  const currentVersion = versionConfig.version || (packageInfo.version ? packageInfo.version.replace(/\.0$/, "") : "1.5");
   const repo = versionConfig.githubRepo || "emontal110/PenRx-";
 
   try {

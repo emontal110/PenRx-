@@ -51,17 +51,17 @@ jobs:
       - name: Sync Android Native Assets
         run: npx cap sync android
 
-      - name: Build Android APK via Gradle
+      - name: Build Android Release APK via Gradle
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: PenRX-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
 
   build-windows-electron:
     name: 💻 Build Windows Desktop Electron App (.exe)
@@ -149,7 +149,9 @@ jobs:
         run: |
           mkdir -p release-files
           # Android APK
-          if [ -f "artifacts/android/app-debug.apk" ]; then
+          if [ -f "artifacts/android/app-release.apk" ]; then
+            cp artifacts/android/app-release.apk release-files/PenRX+.apk
+          elif [ -f "artifacts/android/app-debug.apk" ]; then
             cp artifacts/android/app-debug.apk release-files/PenRX+.apk
           fi
           # Windows Desktop Installer

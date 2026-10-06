@@ -35,6 +35,7 @@ android/.idea/
 *.apk
 *.aab
 *.keystore
+!android/app/penrx-release.keystore
 *.jks
 
 # 5. Environment Variables & Secret Keys
