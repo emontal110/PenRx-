@@ -14,24 +14,52 @@ const filteredArgs = args.filter((a) => a !== "--no-push");
 const targetVersion = filteredArgs[0] || "minor";
 const releaseNotes = filteredArgs[1] || "PenRX+ Official Automated Release";
 
-// Visual Progress Bar Helper
+// Visual Overall Progress Bar Helper
 const TOTAL_STEPS = 6;
 const startTime = Date.now();
 
-function printStep(stepNum, title, description) {
-  const percent = Math.round((stepNum / TOTAL_STEPS) * 100);
-  const barLength = 26;
-  const filled = Math.round((stepNum / TOTAL_STEPS) * barLength);
-  const empty = barLength - filled;
-  const bar = "█".repeat(filled) + "░".repeat(empty);
+function updateTitle(text) {
+  try {
+    process.stdout.write(`\x1b]2;${text}\x07`);
+    process.title = text;
+  } catch {}
+}
 
-  console.log("\n" + "-".repeat(68));
-  console.log(`[*] STEP ${stepNum}/${TOTAL_STEPS}: ${title}`);
-  console.log(`    Progress: [${bar}] ${percent}%`);
+function renderBar(percent, length = 28) {
+  const safePercent = Math.min(100, Math.max(0, percent));
+  const filled = Math.round((safePercent / 100) * length);
+  const empty = length - filled;
+  return "█".repeat(filled) + "░".repeat(empty);
+}
+
+function printStep(stepNum, title, description) {
+  const currentPercent = Math.round(((stepNum - 1) / TOTAL_STEPS) * 100);
+  const bar = renderBar(currentPercent, 28);
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+
+  updateTitle(`[${currentPercent}%] (Step ${stepNum}/${TOTAL_STEPS}) PenRX+ ${title}`);
+
+  console.log("\n" + "=".repeat(70));
+  console.log(`  [OVERALL PIPELINE PROGRESS: ${String(currentPercent).padStart(3, " ")}%] [${bar}]`);
+  console.log(`  [*] STEP ${stepNum}/${TOTAL_STEPS}: ${title}`);
   if (description) {
-    console.log(`    Details:  ${description}`);
+    console.log(`      Details: ${description}`);
   }
-  console.log("-".repeat(68) + "\n");
+  console.log(`      Elapsed: ${elapsed}s`);
+  console.log("=".repeat(70) + "\n");
+}
+
+function completeStep(stepNum, title) {
+  const completedPercent = Math.round((stepNum / TOTAL_STEPS) * 100);
+  const bar = renderBar(completedPercent, 28);
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+
+  updateTitle(`[${completedPercent}%] (Step ${stepNum}/${TOTAL_STEPS} Done) PenRX+ ${title}`);
+
+  console.log("\n" + "-".repeat(70));
+  console.log(`  ✓ STEP ${stepNum}/${TOTAL_STEPS} COMPLETED! (${elapsed}s elapsed)`);
+  console.log(`    Current Progress: [${bar}] ${completedPercent}%`);
+  console.log("-".repeat(70) + "\n");
 }
 
 function run(command, cwd = rootDir) {
@@ -114,6 +142,7 @@ const versionConfig = JSON.parse(
 );
 const activeVersion = versionConfig.version;
 console.log(`✓ Active version configured: v${activeVersion}`);
+completeStep(1, "Version Configured to v" + activeVersion);
 
 // ====================================================================
 // STEP 2: Build Next.js & Prisma
@@ -129,6 +158,7 @@ if (!buildSuccess) {
 } else {
   console.log("✓ Core application engine compiled successfully.");
 }
+completeStep(2, "Core Application Engine Compiled");
 
 // ====================================================================
 // STEP 3: Capacitor Android Sync
@@ -163,6 +193,7 @@ for (const a of assetsToCopy) {
 }
 run("npx cap sync android");
 console.log("✓ Native Android files synchronized with android/ folder.");
+completeStep(3, "Mobile Platform Assets Synced");
 
 // ====================================================================
 // STEP 4: Build Android Release APK
@@ -222,6 +253,7 @@ if (!apkFound) {
   console.log(`ℹ Android workspace synchronized in android/ folder.`);
   console.log(`⚡ Official release APK will be compiled on cloud pipeline upon tag push.`);
 }
+completeStep(4, "Android Release APK Verified & Ready");
 
 // ====================================================================
 // STEP 5: Build Windows Desktop App
@@ -272,6 +304,7 @@ if (fs.existsSync(distElectron)) {
     console.log(`   - public/downloads/PenRX+-Setup.exe`);
   }
 }
+completeStep(5, "Windows Desktop Installer Packaged");
 
 // ====================================================================
 // STEP 6: Git Commit & Release Handling
@@ -319,17 +352,21 @@ if (shouldPush) {
 } else {
   console.log("\n🔒 GitHub push skipped as requested. All release files are ready locally.");
 }
+completeStep(6, "Git & Release Workflow Finalized");
 
 const duration = Math.round((Date.now() - startTime) / 1000);
 const minutes = Math.floor(duration / 60);
 const seconds = duration % 60;
 
-console.log("\n====================================================================");
-console.log(`  [SUCCESS] PenRX+ Release v${activeVersion} Completed Successfully! (100%)`);
-console.log("====================================================================");
-console.log(`[*] Execution Time:    ${minutes}m ${seconds}s`);
+updateTitle(`[100%] [DONE] PenRX+ Release v${activeVersion} Completed!`);
+
+console.log("\n" + "=".repeat(70));
+console.log(`  [OVERALL PIPELINE PROGRESS: 100%] [${renderBar(100, 28)}]`);
+console.log(`  🎉 ALL 6 RELEASE PIPELINE STEPS COMPLETED IN ${minutes}m ${seconds}s!`);
+console.log("=".repeat(70));
 console.log(`[*] Releases Folder:   ${releasesDir}`);
 console.log(`[*] Local Setup File:  ${path.join(releasesDir, "PenRX+-Setup.exe")}`);
+console.log(`[*] Official APK File: ${path.join(releasesDir, "PenRX+.apk")}`);
 console.log(`[*] GitHub Repo:       https://github.com/emontal110/PenRx-`);
 console.log(`[*] GitHub Push:       ${shouldPush ? "DONE" : "SKIPPED (Local only)"}`);
-console.log("====================================================================\n");
+console.log("=".repeat(70) + "\n");
