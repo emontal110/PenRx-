@@ -21,31 +21,32 @@ function printStep(stepNum, title, description) {
   const empty = barLength - filled;
   const bar = "█".repeat(filled) + "░".repeat(empty);
 
-  console.log("\n" + "─".repeat(68));
-  console.log(`🔷 [الخطوة ${stepNum} من ${TOTAL_STEPS}]  ${title}`);
-  console.log(`📊 تقدم العملية: [${bar}] ${percent}%`);
+  console.log("\n" + "-".repeat(68));
+  console.log(`[*] STEP ${stepNum}/${TOTAL_STEPS}: ${title}`);
+  console.log(`    Progress: [${bar}] ${percent}%`);
   if (description) {
-    console.log(`📝 التفاصيل: ${description}`);
+    console.log(`    Details:  ${description}`);
   }
-  console.log("─".repeat(68) + "\n");
+  console.log("-".repeat(68) + "\n");
 }
 
 function run(command, cwd = rootDir) {
-  console.log(`⏳ جارٍ تنفيذ: ${command}`);
+  console.log(`>> Executing: ${command}`);
   try {
     execSync(command, { cwd, stdio: "inherit", env: process.env });
     return true;
   } catch (err) {
-    console.error(`⚠️ تنبيه أو فشل جزئي أثناء تنفيذ: ${command}`);
+    console.error(`[!] Warning or error executing: ${command}`);
     return false;
   }
 }
 
-console.log("\n╔══════════════════════════════════════════════════════════════════╗");
-console.log("║     🌟 منظومة PenRX+ الطبية - معالج البناء الشامل والإصدار الفوري    ║");
-console.log("╚══════════════════════════════════════════════════════════════════╝");
-console.log(`📁 مسار المشروع الرئيسي: ${rootDir}`);
-console.log(`⏱️ وقت البدء: ${new Date().toLocaleTimeString("ar-EG")}\n`);
+console.log("\n====================================================================");
+console.log("  [PenRX+] Automated Build & Release Pipeline");
+console.log("  منظومة PenRX+ الطبية - معالج البناء الشامل والإصدار الفوري");
+console.log("====================================================================");
+console.log(`[*] Project Path: ${rootDir}`);
+console.log(`[*] Start Time:   ${new Date().toLocaleTimeString("en-US")}\n`);
 
 // Ensure output directories exist
 if (!fs.existsSync(releasesDir)) {
@@ -290,12 +291,13 @@ const duration = Math.round((Date.now() - startTime) / 1000);
 const minutes = Math.floor(duration / 60);
 const seconds = duration % 60;
 
-console.log("\n╔══════════════════════════════════════════════════════════════════╗");
-console.log(`║   🎉 اكتمل بناء وإطلاق الإصدار v${activeVersion} بنجاح بنسبة 100%!   ║`);
-console.log("╚══════════════════════════════════════════════════════════════════╝");
-console.log(`⏱️ إجمالي الوقت المستغرق: ${minutes} دقيقة و ${seconds} ثانية`);
-console.log(`📁 مجلد المخرجات: ${releasesDir}`);
-console.log(`🌐 مستودع GitHub: https://github.com/emontal110/PenRx-`);
-console.log(`📥 صفحة التنزيلات السحابية: https://emontal110.github.io/PenRx-/`);
-console.log(`🔒 بورتال المشتركين: https://emontal110.github.io/PenRx-/portal.html`);
-console.log("════════════════════════════════════════════════════════════════════\n");
+console.log("\n====================================================================");
+console.log(`  [SUCCESS] PenRX+ Release v${activeVersion} Completed Successfully! (100%)`);
+console.log(`  اكتمل بناء وإطلاق الإصدار بنجاح تام!`);
+console.log("====================================================================");
+console.log(`[*] Execution Time:    ${minutes}m ${seconds}s`);
+console.log(`[*] Releases Folder:   ${releasesDir}`);
+console.log(`[*] GitHub Repository: https://github.com/emontal110/PenRx-`);
+console.log(`[*] Downloads Portal:  https://emontal110.github.io/PenRx-/`);
+console.log(`[*] Management Portal: https://emontal110.github.io/PenRx-/portal.html`);
+console.log("====================================================================\n");

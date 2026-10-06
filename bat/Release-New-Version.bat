@@ -1,7 +1,7 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 set "PYTHONIOENCODING=utf-8"
-title PenRX+ - Automated Master Release & Build Manager
+title "PenRX+ - Automated Master Release and Build Manager"
 color 0B
 
 if exist "%~dp0package.json" (
@@ -18,17 +18,18 @@ cd /d "%PROJECT_ROOT%"
 
 cls
 echo.
-echo  ==============================================================
-echo   🌟 منظومة PenRX+ الطبية - معالج البناء والإصدار التلقائي الشامل
-echo  ==============================================================
-echo   [i] مسار المنظومة: %CD%
-echo   [i] جاري بدء كافة مراحل البناء والإصدار والدفع السحابي فوراً...
-echo  ==============================================================
+echo  ==================================================================
+echo   [PenRX+] Automated Build, Packaging ^& GitHub Release Pipeline
+echo   منظومة PenRX+ الطبية - معالج البناء والإصدار السحابي التلقائي
+echo  ==================================================================
+echo   [*] Project Path: %CD%
+echo   [*] Status: Starting automated release steps now...
+echo  ==================================================================
 echo.
 
 set "TARGET_VER=%~1"
 if "%TARGET_VER%"=="" (
-    set "TARGET_VER=patch"
+    set "TARGET_VER=minor"
 )
 
 set "NOTES=%~2"
@@ -40,18 +41,20 @@ node scripts/release-builder.js %TARGET_VER% "%NOTES%"
 
 if %errorlevel% neq 0 (
     echo.
-    echo  ==============================================================
-    echo   ❌ حدث خطأ أو توقف أثناء البناء. كود الخطأ: %errorlevel%
-    echo  ==============================================================
+    echo  ==================================================================
+    echo   [!] Build stopped or failed with error code: %errorlevel%
+    echo   حدث خطأ أو توقف أثناء البناء. كود الخطأ: %errorlevel%
+    echo  ==================================================================
     echo.
     pause
     exit /b %errorlevel%
 )
 
 echo.
-echo  ==============================================================
-echo   ✅ اكتملت كافة مراحل البناء والتغليف والرفع على GitHub بنجاح!
-echo  ==============================================================
+echo  ==================================================================
+echo   [OK] Build, packaging, and GitHub sync completed successfully!
+echo   اكتملت كافة مراحل البناء والتغليف والرفع على GitHub بنجاح!
+echo  ==================================================================
 echo.
 
 if exist "releases" (
