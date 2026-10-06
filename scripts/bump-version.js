@@ -81,16 +81,29 @@ if (fs.existsSync(androidGradlePath)) {
   console.log(`✓ Updated android/app/build.gradle (versionCode: ${newVersionCode}, versionName: "${newVersion}")`);
 }
 
-// 4. Update index.html and docs/index.html version labels
-const indexFiles = [
+// 4. Update index.html, docs/index.html, portal.html, and docs/portal.html version labels
+const landingFiles = [
   path.join(rootDir, "index.html"),
   path.join(rootDir, "docs", "index.html")
 ];
-for (const file of indexFiles) {
+for (const file of landingFiles) {
   if (fs.existsSync(file)) {
     let content = fs.readFileSync(file, "utf8");
     content = content.replace(/(class="[^"]*app-pkg-version[^"]*">)v[^<]+(<\/span>)/g, `$1v${newVersion}$2`);
     content = content.replace(/(الإصدار الرسمي\s+)v[0-9.]+(\s+متاح الآن)/g, `$1v${newVersion}$2`);
+    fs.writeFileSync(file, content, "utf8");
+    console.log(`✓ Updated version in ${path.relative(rootDir, file)} to v${newVersion}`);
+  }
+}
+
+const portalFiles = [
+  path.join(rootDir, "portal.html"),
+  path.join(rootDir, "docs", "portal.html")
+];
+for (const file of portalFiles) {
+  if (fs.existsSync(file)) {
+    let content = fs.readFileSync(file, "utf8");
+    content = content.replace(/(class="[^"]*portal-pkg-version[^"]*">)v[^<]+(<\/span>)/g, `$1v${newVersion}$2`);
     fs.writeFileSync(file, content, "utf8");
     console.log(`✓ Updated version in ${path.relative(rootDir, file)} to v${newVersion}`);
   }
