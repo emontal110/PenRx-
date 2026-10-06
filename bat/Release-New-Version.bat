@@ -1,7 +1,7 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 set "PYTHONIOENCODING=utf-8"
-title "PenRX+ - Automated Master Release and Build Manager"
+title PenRX+ - Automated Master Release and Build Manager
 color 0B
 
 if exist "%~dp0package.json" (
@@ -19,11 +19,9 @@ cd /d "%PROJECT_ROOT%"
 cls
 echo.
 echo  ==================================================================
-echo   [PenRX+] Automated Build, Packaging ^& GitHub Release Pipeline
-echo   منظومة PenRX+ الطبية - معالج البناء والإصدار السحابي التلقائي
+echo   [PenRX+] Automated Build, Packaging ^& Release Pipeline
 echo  ==================================================================
 echo   [*] Project Path: %CD%
-echo   [*] Status: Starting automated release steps now...
 echo  ==================================================================
 echo.
 
@@ -34,16 +32,32 @@ if "%TARGET_VER%"=="" (
 
 set "NOTES=%~2"
 if "%NOTES%"=="" (
-    set "NOTES=تحديث وإصدار تلقائي لمنظومة PenRX+ الطبية"
+    set "NOTES=PenRX+ Official Automated Release"
 )
 
-node scripts/release-builder.js %TARGET_VER% "%NOTES%"
+echo   Choose Release Mode:
+echo    [1] Build Locally AND Push to GitHub (main ^& gh-pages)
+echo    [2] Build Locally ONLY (Do NOT push to GitHub - Default)
+echo.
+set "PUSH_CHOICE=2"
+set /p PUSH_CHOICE="  Select option [1 or 2, default is 2]: "
+
+if "%PUSH_CHOICE%"=="1" (
+    echo.
+    echo   [*] Running build WITH GitHub push enabled...
+    echo.
+    node scripts/release-builder.js %TARGET_VER% "%NOTES%"
+) else (
+    echo.
+    echo   [*] Running LOCAL build ONLY (GitHub push disabled)...
+    echo.
+    node scripts/release-builder.js %TARGET_VER% "%NOTES%" --no-push
+)
 
 if %errorlevel% neq 0 (
     echo.
     echo  ==================================================================
     echo   [!] Build stopped or failed with error code: %errorlevel%
-    echo   حدث خطأ أو توقف أثناء البناء. كود الخطأ: %errorlevel%
     echo  ==================================================================
     echo.
     pause
@@ -52,8 +66,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo  ==================================================================
-echo   [OK] Build, packaging, and GitHub sync completed successfully!
-echo   اكتملت كافة مراحل البناء والتغليف والرفع على GitHub بنجاح!
+echo   [OK] Build and packaging completed successfully!
 echo  ==================================================================
 echo.
 

@@ -7,8 +7,12 @@ const releasesDir = path.join(rootDir, "releases");
 const publicDownloadsDir = path.join(rootDir, "public", "downloads");
 
 // 1. Read command-line arguments
-const targetVersion = process.argv[2] || "patch";
-const releaseNotes = process.argv[3] || "تحديث وإصدار تلقائي لمنظومة PenRX+ الطبية";
+const args = process.argv.slice(2);
+const shouldPush = !args.includes("--no-push");
+const filteredArgs = args.filter((a) => a !== "--no-push");
+
+const targetVersion = filteredArgs[0] || "minor";
+const releaseNotes = filteredArgs[1] || "PenRX+ Official Automated Release";
 
 // Visual Progress Bar Helper
 const TOTAL_STEPS = 6;
@@ -43,10 +47,10 @@ function run(command, cwd = rootDir) {
 
 console.log("\n====================================================================");
 console.log("  [PenRX+] Automated Build & Release Pipeline");
-console.log("  منظومة PenRX+ الطبية - معالج البناء الشامل والإصدار الفوري");
 console.log("====================================================================");
 console.log(`[*] Project Path: ${rootDir}`);
-console.log(`[*] Start Time:   ${new Date().toLocaleTimeString("en-US")}\n`);
+console.log(`[*] Start Time:   ${new Date().toLocaleTimeString("en-US")}`);
+console.log(`[*] Push to Git:  ${shouldPush ? "ENABLED" : "DISABLED (Local build only)"}\n`);
 
 // Ensure output directories exist
 if (!fs.existsSync(releasesDir)) {
@@ -75,7 +79,7 @@ if (!process.env.JAVA_HOME) {
     if (fs.existsSync(jPath)) {
       process.env.JAVA_HOME = jPath;
       process.env.PATH = `${path.join(jPath, "bin")};${process.env.PATH}`;
-      console.log(`[Java] تم التعرف على بيئة جافا تلقائياً: ${jPath}`);
+      console.log(`[Java] Detected Java environment: ${jPath}`);
       break;
     }
   }
@@ -91,8 +95,8 @@ if (!process.env.ANDROID_HOME && fs.existsSync(androidSdkCandidate)) {
 // ====================================================================
 printStep(
   1,
-  "تحديث وتعديل رقم الإصدار في ملفات التكوين والواجهات",
-  "مزامنة package.json, version.json, build.gradle, index.html"
+  "Version Synchronization & Bump",
+  "Updating package.json, version.json, build.gradle, and landing pages"
 );
 run(`node scripts/bump-version.js ${targetVersion} "${releaseNotes}"`);
 
@@ -105,21 +109,21 @@ const versionDir = path.join(releasesDir, `v${activeVersion}`);
 if (!fs.existsSync(versionDir)) {
   fs.mkdirSync(versionDir, { recursive: true });
 }
-console.log(`✅ رقم الإصدار النشط المعتمد: v${activeVersion}`);
+console.log(`✓ Active version configured: v${activeVersion}`);
 
 // ====================================================================
 // STEP 2: Build Next.js & Prisma
 // ====================================================================
 printStep(
   2,
-  "بناء وتجهيز واجهات ونواة النظام (Next.js & Prisma Engine)",
-  "توليد عميل قاعدة البيانات وبناء صفحات ومسارات API"
+  "Build Core Application Engine (Next.js & Prisma)",
+  "Generating database client and building production pages & API routes"
 );
 const buildSuccess = run("npm run build");
 if (!buildSuccess) {
-  console.warn("⚠️ حدث تحذير أثناء بناء Next.js، جارٍ المتابعة...");
+  console.warn("[!] Warning encountered during Next.js build, proceeding...");
 } else {
-  console.log("✅ اكتمل بناء واجهات ونواة النظام بنجاح.");
+  console.log("✓ Core application engine compiled successfully.");
 }
 
 // ====================================================================
@@ -127,8 +131,8 @@ if (!buildSuccess) {
 // ====================================================================
 printStep(
   3,
-  "مزامنة وتجهيز كود تطبيق الهاتف المحمول (Capacitor Android)",
-  "نسخ مخرجات الواجهة وضبط إعدادات الأندرويد"
+  "Sync Mobile Platform Assets (Capacitor Android)",
+  "Preparing web output assets and syncing native Android workspace"
 );
 const outDir = path.join(rootDir, "out");
 if (!fs.existsSync(outDir)) {
@@ -138,7 +142,6 @@ const outIndex = path.join(outDir, "index.html");
 const portalSource = path.join(rootDir, "portal.html");
 if (fs.existsSync(portalSource)) {
   fs.copyFileSync(portalSource, outIndex);
-  console.log("✅ تم ضبط بورتال الاشتراكات portal.html ليكون واجهة تطبيق الهاتف الرسمية (out/index.html).");
 } else {
   const docsIndex = path.join(rootDir, "docs", "index.html");
   if (fs.existsSync(docsIndex)) {
@@ -155,15 +158,15 @@ for (const a of assetsToCopy) {
   else if (fs.existsSync(srcPub)) fs.copyFileSync(srcPub, dst);
 }
 run("npx cap sync android");
-console.log("✅ تمت مزامنة ملفات تطبيق الأندرويد مع مجلد android/ بنجاح.");
+console.log("✓ Native Android files synchronized with android/ folder.");
 
 // ====================================================================
-// STEP 4: Build Android APK
+// STEP 4: Build Android Release APK
 // ====================================================================
 printStep(
   4,
-  "فحص وتوليد تطبيق الهاتف (Android APK Installer)",
-  "محاولة البناء المحلي عبر Gradle أو تهيئة سيرفر GitHub Actions"
+  "Build & Verify Android Release APK Installer",
+  "Compiling release signed APK via Gradle with permanent release keystore"
 );
 const androidDir = path.join(rootDir, "android");
 let apkFound = false;
@@ -171,8 +174,8 @@ let apkFound = false;
 if (fs.existsSync(androidDir)) {
   const gradlewBat = path.join(androidDir, "gradlew.bat");
   if (fs.existsSync(gradlewBat) && process.env.JAVA_HOME) {
-    console.log("⚡ بيئة جافا متوفرة محلياً؛ جارٍ بناء الـ APK الرسمي عبر Gradle...");
-    const gradleSuccess = run("gradlew.bat assembleRelease", androidDir);
+    console.log("⚡ Java environment available. Building official release APK via Gradle...");
+    run("gradlew.bat assembleRelease", androidDir);
     const releaseApk = path.join(
       androidDir,
       "app",
@@ -196,7 +199,7 @@ if (fs.existsSync(androidDir)) {
       fs.copyFileSync(apkSource, path.join(releasesDir, "PenRX+.apk"));
       fs.copyFileSync(apkSource, path.join(versionDir, `PenRX+-v${activeVersion}.apk`));
       fs.copyFileSync(apkSource, path.join(publicDownloadsDir, "PenRX+.apk"));
-      console.log(`✅ تم نسخ وتحديث ملف الـ APK بنجاح إلى:`);
+      console.log(`✓ Copied official release APK to:`);
       console.log(`   - releases/PenRX+.apk`);
       console.log(`   - releases/v${activeVersion}/PenRX+-v${activeVersion}.apk`);
       console.log(`   - public/downloads/PenRX+.apk`);
@@ -209,13 +212,13 @@ if (!apkFound) {
   const apkInfoFile = path.join(releasesDir, "PenRX+-APK-Build-Info.txt");
   fs.writeFileSync(
     apkInfoFile,
-    `تطبيق PenRX+ للأندرويد - الإصدار v${activeVersion}\n` +
-      `مشروع الأندرويد تم تحديثه ومزامنته بالكامل في مجلد android/\n` +
-      `سيقوم سيرفر GitHub Actions السحابي ببناء الـ APK تلقائياً بمجرد رفع الـ Tag v${activeVersion}.\n`,
+    `PenRX+ Android Release Info v${activeVersion}\n` +
+      `Android assets synchronized in android/ folder.\n` +
+      `Cloud pipeline will build the signed release APK when tag is pushed.\n`,
     "utf8"
   );
-  console.log(`ℹ️ تم مزامنة كود الأندرويد في مجلد android/ بنجاح.`);
-  console.log(`⚡ سيقوم سيرفر GitHub Actions ببناء حزمة الـ APK تلقائياً على السحابة ونشرها فور الدفع.`);
+  console.log(`ℹ Android workspace synchronized in android/ folder.`);
+  console.log(`⚡ Official release APK will be compiled on cloud pipeline upon tag push.`);
 }
 
 // ====================================================================
@@ -223,8 +226,8 @@ if (!apkFound) {
 // ====================================================================
 printStep(
   5,
-  "بناء وتغليف برنامج سطح المكتب (Windows Desktop Installer)",
-  "توليد مثبت الويندوز PenRX+-Setup.exe عبر electron-builder"
+  "Package Windows Desktop Installer (electron-builder NSIS)",
+  "Creating single-click / next-next PenRX+-Setup.exe installer"
 );
 run("npx electron-builder --win");
 
@@ -237,7 +240,7 @@ if (fs.existsSync(distElectron)) {
     if (fs.existsSync(mainExe)) {
       fs.copyFileSync(mainExe, path.join(releasesDir, "PenRX+.exe"));
       fs.copyFileSync(mainExe, path.join(versionDir, `PenRX+-v${activeVersion}.exe`));
-      console.log(`✅ تم نسخ برنامج الكمبيوتر المباشر: releases/PenRX+.exe`);
+      console.log(`✓ Copied portable desktop app to: releases/PenRX+.exe`);
     }
   }
 
@@ -249,7 +252,7 @@ if (fs.existsSync(distElectron)) {
     fs.copyFileSync(installerSource, path.join(releasesDir, "PenRX+-Setup.exe"));
     fs.copyFileSync(installerSource, path.join(versionDir, `PenRX+-Setup-v${activeVersion}.exe`));
     fs.copyFileSync(installerSource, path.join(publicDownloadsDir, "PenRX+-Setup.exe"));
-    console.log(`✅ تم نسخ مثبت الويندوز النهائي بنجاح إلى:`);
+    console.log(`✓ Copied official Windows Setup installer to:`);
     console.log(`   - releases/PenRX+-Setup.exe`);
     console.log(`   - releases/v${activeVersion}/PenRX+-Setup-v${activeVersion}.exe`);
     console.log(`   - public/downloads/PenRX+-Setup.exe`);
@@ -257,12 +260,14 @@ if (fs.existsSync(distElectron)) {
 }
 
 // ====================================================================
-// STEP 6: Git Commit, Tag, and Push to Both Branches
+// STEP 6: Git Commit & Release Handling
 // ====================================================================
 printStep(
   6,
-  "الرفع والمزامنة السحابية مع GitHub على كلا الفرعين",
-  "الدفع إلى main و gh-pages مع الـ Tags السحابية لتشغيل GitHub Actions"
+  "Git Commit & Release Finalization",
+  shouldPush
+    ? "Staging, committing, and pushing to GitHub (main & gh-pages)"
+    : "Staging and committing locally (GitHub Push skipped by user request)"
 );
 
 // 1. Stage all changes
@@ -272,30 +277,34 @@ run("git add -A");
 try {
   run(`git commit -m "Release v${activeVersion}: ${releaseNotes}"`);
 } catch (e) {
-  console.log("ℹ️ لا توجد تغييرات إضافية للالتزام بها.");
+  console.log("ℹ No new changes to commit.");
 }
 
 // 3. Tag
 try {
   run(`git tag -a v${activeVersion} -m "Release v${activeVersion}"`);
 } catch (e) {
-  console.log(`ℹ️ Tag v${activeVersion} موجود مسبقاً أو تم إنشاؤه.`);
+  console.log(`ℹ Tag v${activeVersion} already exists or was created.`);
 }
 
-// 4. Push to main branch with tags
-console.log("\n🚀 جارٍ الدفع إلى GitHub (الفرع main مع الـ Tags)...");
-run("git push origin main --tags");
+if (shouldPush) {
+  // Push to main branch with tags
+  console.log("\n🚀 Pushing to GitHub (main branch with tags)...");
+  run("git push origin main --tags");
 
-// 5. Push to gh-pages branch
-console.log("🚀 جارٍ مزامنة وتحديث فرع الاستضافة السحابية (gh-pages)...");
-run("git push origin main:gh-pages");
+  // Push to gh-pages branch
+  console.log("🚀 Syncing GitHub Pages hosting branch (gh-pages)...");
+  run("git push origin main:gh-pages");
 
-// 6. Fast-forward local gh-pages if possible
-try {
-  run("git checkout gh-pages");
-  run("git merge main");
-  run("git checkout main");
-} catch (e) {}
+  // Fast-forward local gh-pages if possible
+  try {
+    run("git checkout gh-pages");
+    run("git merge main");
+    run("git checkout main");
+  } catch (e) {}
+} else {
+  console.log("\n🔒 GitHub push skipped as requested. All release files are ready locally.");
+}
 
 const duration = Math.round((Date.now() - startTime) / 1000);
 const minutes = Math.floor(duration / 60);
@@ -303,11 +312,10 @@ const seconds = duration % 60;
 
 console.log("\n====================================================================");
 console.log(`  [SUCCESS] PenRX+ Release v${activeVersion} Completed Successfully! (100%)`);
-console.log(`  اكتمل بناء وإطلاق الإصدار بنجاح تام!`);
 console.log("====================================================================");
 console.log(`[*] Execution Time:    ${minutes}m ${seconds}s`);
 console.log(`[*] Releases Folder:   ${releasesDir}`);
-console.log(`[*] GitHub Repository: https://github.com/emontal110/PenRx-`);
-console.log(`[*] Downloads Portal:  https://emontal110.github.io/PenRx-/`);
-console.log(`[*] Management Portal: https://emontal110.github.io/PenRx-/portal.html`);
+console.log(`[*] Local Setup File:  ${path.join(releasesDir, "PenRX+-Setup.exe")}`);
+console.log(`[*] GitHub Repo:       https://github.com/emontal110/PenRx-`);
+console.log(`[*] GitHub Push:       ${shouldPush ? "DONE" : "SKIPPED (Local only)"}`);
 console.log("====================================================================\n");
