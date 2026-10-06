@@ -36,6 +36,11 @@ if "%NOTES%"=="" (
     set "NOTES=PenRX+ Official Automated Release"
 )
 
+if exist "dist-electron" (
+    echo   [*] Purging temporary build cache (dist-electron)...
+    rd /s /q "dist-electron" 2>nul
+)
+
 echo   [*] Starting automated build and direct GitHub release now...
 echo.
 node scripts/release-builder.js %TARGET_VER% "%NOTES%"
