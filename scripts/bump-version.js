@@ -3,6 +3,7 @@ const path = require("path");
 
 const rootDir = path.resolve(__dirname, "..");
 const packageJsonPath = path.join(rootDir, "package.json");
+const packageLockPath = path.join(rootDir, "package-lock.json");
 const versionJsonPath = path.join(rootDir, "src", "config", "version.json");
 const androidGradlePath = path.join(rootDir, "android", "app", "build.gradle");
 
@@ -36,6 +37,21 @@ const semverVersion = newVersion.split(".").length === 2 ? `${newVersion}.0` : n
 pkg.version = semverVersion;
 fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 console.log(`✓ Updated package.json version to: ${semverVersion} (SemVer compliant for Electron)`);
+
+// 1.b Update package-lock.json to keep npm locks fully in sync
+if (fs.existsSync(packageLockPath)) {
+  try {
+    const lockPkg = JSON.parse(fs.readFileSync(packageLockPath, "utf8"));
+    lockPkg.version = semverVersion;
+    if (lockPkg.packages && lockPkg.packages[""]) {
+      lockPkg.packages[""].version = semverVersion;
+    }
+    fs.writeFileSync(packageLockPath, JSON.stringify(lockPkg, null, 2) + "\n", "utf8");
+    console.log(`✓ Updated package-lock.json version to: ${semverVersion}`);
+  } catch (err) {
+    console.warn(`[!] Note: could not update package-lock.json: ${err.message}`);
+  }
+}
 
 // 2. Update src/config/version.json
 let versionConfig = {};
