@@ -1,6 +1,6 @@
 {
   "name": "penrx-plus",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "PenRX+ - The Ultimate Next-Gen Medical Prescription & Clinic Management Suite",
   "main": "electron/main.js",
@@ -52,6 +52,18 @@
   "build": {
     "appId": "com.penrxplus.app",
     "productName": "PenRX+",
+    "compression": "normal",
+    "files": [
+      "**/*",
+      "!**/.next/cache/**",
+      "!android/**",
+      "!releases/**",
+      "!docs/**",
+      "!scratch/**",
+      "!bat/**",
+      "!dist-electron/**",
+      "!**/*.map"
+    ],
     "directories": {
       "output": "dist-electron"
     },

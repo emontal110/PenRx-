@@ -231,7 +231,14 @@ printStep(
   "Package Windows Desktop Installer (electron-builder NSIS)",
   "Creating single-click / next-next PenRX+-Setup.exe installer"
 );
-// Clean dist-electron before build to prevent old version duplicates and save disk space
+// Clean temp caches (.next/cache and dist-electron) to accelerate compression
+const nextCache = path.join(rootDir, ".next", "cache");
+if (fs.existsSync(nextCache)) {
+  try {
+    fs.rmSync(nextCache, { recursive: true, force: true });
+  } catch {}
+}
+
 const distElectron = path.join(rootDir, "dist-electron");
 if (fs.existsSync(distElectron)) {
   try {
@@ -239,6 +246,7 @@ if (fs.existsSync(distElectron)) {
   } catch {}
 }
 
+console.log("⚡ Compressing and packaging Windows Setup installer (optimized fast build)...");
 run("npx electron-builder --win");
 
 if (fs.existsSync(distElectron)) {
