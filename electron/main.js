@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
 const { exec } = require("child_process");
@@ -99,7 +100,9 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية",
-    icon: path.join(__dirname, "../public/icon-512.png"),
+    icon: fs.existsSync(path.join(__dirname, "../public/icon.ico"))
+      ? path.join(__dirname, "../public/icon.ico")
+      : path.join(__dirname, "../public/icon-512.png"),
     backgroundColor: "#020617",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -120,14 +123,24 @@ function createWindow() {
     return { action: "allow" };
   });
 
-  const startUrl = process.env.ELECTRON_START_URL || "http://localhost:3000";
-  mainWindow.loadURL(startUrl);
+  // Load Subscriptions Portal (portal.html) by default
+  const localPortal = path.join(__dirname, "../portal.html");
+  if (process.env.ELECTRON_START_URL) {
+    mainWindow.loadURL(process.env.ELECTRON_START_URL);
+  } else if (fs.existsSync(localPortal)) {
+    mainWindow.loadFile(localPortal);
+  } else {
+    mainWindow.loadURL("https://emontal110.github.io/PenRx-/portal.html");
+  }
 
-  // If server isn't up yet, retry
+  // Fallback to cloud portal if loading fails
   mainWindow.webContents.on("did-fail-load", () => {
-    setTimeout(() => {
-      mainWindow.loadURL(startUrl);
-    }, 1500);
+    const localPortalFallback = path.join(__dirname, "../portal.html");
+    if (fs.existsSync(localPortalFallback)) {
+      mainWindow.loadFile(localPortalFallback);
+    } else {
+      mainWindow.loadURL("https://emontal110.github.io/PenRx-/portal.html");
+    }
   });
 
   mainWindow.on("closed", () => {

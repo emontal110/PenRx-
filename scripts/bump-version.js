@@ -31,10 +31,11 @@ console.log(`\n======================================================`);
 console.log(`🚀 Bumping PenRX+ Version: ${currentVersion} -> ${newVersion}`);
 console.log(`======================================================\n`);
 
-// 1. Update package.json
-pkg.version = newVersion;
+// 1. Update package.json (Requires valid 3-part SemVer: X.Y.0 for electron-builder and npm)
+const semverVersion = newVersion.split(".").length === 2 ? `${newVersion}.0` : newVersion;
+pkg.version = semverVersion;
 fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
-console.log(`✓ Updated package.json version to: ${newVersion}`);
+console.log(`✓ Updated package.json version to: ${semverVersion} (SemVer compliant for Electron)`);
 
 // 2. Update src/config/version.json
 let versionConfig = {};

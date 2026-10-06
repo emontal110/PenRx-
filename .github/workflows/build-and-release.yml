@@ -2,8 +2,6 @@ name: Build & Release PenRX+ (Android APK & Windows Desktop)
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
   workflow_dispatch:
