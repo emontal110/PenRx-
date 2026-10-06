@@ -52,9 +52,17 @@ console.log(`[*] Project Path: ${rootDir}`);
 console.log(`[*] Start Time:   ${new Date().toLocaleTimeString("en-US")}`);
 console.log(`[*] Push to Git:  ${shouldPush ? "ENABLED" : "DISABLED (Local build only)"}\n`);
 
-// Ensure output directories exist
+// Ensure releasesDir exists and clean any old subfolders
 if (!fs.existsSync(releasesDir)) {
   fs.mkdirSync(releasesDir, { recursive: true });
+} else {
+  // Automatically remove old subdirectories so releases/ only contains the latest files
+  const items = fs.readdirSync(releasesDir, { withFileTypes: true });
+  for (const item of items) {
+    if (item.isDirectory()) {
+      fs.rmSync(path.join(releasesDir, item.name), { recursive: true, force: true });
+    }
+  }
 }
 if (!fs.existsSync(publicDownloadsDir)) {
   fs.mkdirSync(publicDownloadsDir, { recursive: true });
@@ -105,10 +113,6 @@ const versionConfig = JSON.parse(
   fs.readFileSync(path.join(rootDir, "src", "config", "version.json"), "utf8")
 );
 const activeVersion = versionConfig.version;
-const versionDir = path.join(releasesDir, `v${activeVersion}`);
-if (!fs.existsSync(versionDir)) {
-  fs.mkdirSync(versionDir, { recursive: true });
-}
 console.log(`✓ Active version configured: v${activeVersion}`);
 
 // ====================================================================
@@ -197,11 +201,9 @@ if (fs.existsSync(androidDir)) {
     const apkSource = fs.existsSync(releaseApk) ? releaseApk : (fs.existsSync(debugApk) ? debugApk : null);
     if (apkSource) {
       fs.copyFileSync(apkSource, path.join(releasesDir, "PenRX+.apk"));
-      fs.copyFileSync(apkSource, path.join(versionDir, `PenRX+-v${activeVersion}.apk`));
       fs.copyFileSync(apkSource, path.join(publicDownloadsDir, "PenRX+.apk"));
-      console.log(`✓ Copied official release APK to:`);
+      console.log(`✓ Updated official release APK:`);
       console.log(`   - releases/PenRX+.apk`);
-      console.log(`   - releases/v${activeVersion}/PenRX+-v${activeVersion}.apk`);
       console.log(`   - public/downloads/PenRX+.apk`);
       apkFound = true;
     }
@@ -239,8 +241,7 @@ if (fs.existsSync(distElectron)) {
     const mainExe = path.join(winUnpacked, "PenRX+.exe");
     if (fs.existsSync(mainExe)) {
       fs.copyFileSync(mainExe, path.join(releasesDir, "PenRX+.exe"));
-      fs.copyFileSync(mainExe, path.join(versionDir, `PenRX+-v${activeVersion}.exe`));
-      console.log(`✓ Copied portable desktop app to: releases/PenRX+.exe`);
+      console.log(`✓ Updated portable desktop app: releases/PenRX+.exe`);
     }
   }
 
@@ -250,11 +251,9 @@ if (fs.existsSync(distElectron)) {
   if (exeInstaller) {
     const installerSource = path.join(distElectron, exeInstaller);
     fs.copyFileSync(installerSource, path.join(releasesDir, "PenRX+-Setup.exe"));
-    fs.copyFileSync(installerSource, path.join(versionDir, `PenRX+-Setup-v${activeVersion}.exe`));
     fs.copyFileSync(installerSource, path.join(publicDownloadsDir, "PenRX+-Setup.exe"));
-    console.log(`✓ Copied official Windows Setup installer to:`);
+    console.log(`✓ Updated official Windows Setup installer:`);
     console.log(`   - releases/PenRX+-Setup.exe`);
-    console.log(`   - releases/v${activeVersion}/PenRX+-Setup-v${activeVersion}.exe`);
     console.log(`   - public/downloads/PenRX+-Setup.exe`);
   }
 }
