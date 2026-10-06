@@ -277,16 +277,50 @@ const SPLASH_HTML = `data:text/html;charset=utf-8,<!DOCTYPE html>
 </body>
 </html>`;
 
-function createWindow() {
+let splashWindow = null;
+
+function createSplashWindow() {
+  const iconPath = fs.existsSync(path.join(__dirname, "../public/icon.ico"))
+    ? path.join(__dirname, "../public/icon.ico")
+    : path.join(__dirname, "../public/icon-512.png");
+
+  splashWindow = new BrowserWindow({
+    width: 440,
+    height: 480,
+    frame: false,
+    transparent: false,
+    backgroundColor: "#020617",
+    resizable: false,
+    center: true,
+    alwaysOnTop: true,
+    show: false,
+    icon: iconPath,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  splashWindow.loadURL(SPLASH_HTML);
+  splashWindow.once("ready-to-show", () => {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.show();
+    }
+  });
+}
+
+function createMainWindow(baseUrl) {
+  const iconPath = fs.existsSync(path.join(__dirname, "../public/icon.ico"))
+    ? path.join(__dirname, "../public/icon.ico")
+    : path.join(__dirname, "../public/icon-512.png");
+
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 850,
     minWidth: 1024,
     minHeight: 700,
     title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية",
-    icon: fs.existsSync(path.join(__dirname, "../public/icon.ico"))
-      ? path.join(__dirname, "../public/icon.ico")
-      : path.join(__dirname, "../public/icon-512.png"),
+    icon: iconPath,
     backgroundColor: "#020617",
     show: false,
     webPreferences: {
@@ -296,16 +330,8 @@ function createWindow() {
     },
   });
 
-  // Remove default menu bar
   Menu.setApplicationMenu(null);
 
-  // Show window immediately with splash screen
-  mainWindow.loadURL(SPLASH_HTML);
-  mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
-  });
-
-  // Open external links (such as WhatsApp) in the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http:") || url.startsWith("https:") || url.startsWith("whatsapp:")) {
       shell.openExternal(url);
@@ -314,23 +340,36 @@ function createWindow() {
     return { action: "allow" };
   });
 
-  // Ensure server is running and load /subscriptions
-  ensureServerRunning().then((baseUrl) => {
-    const targetUrl = `${baseUrl}/subscriptions`;
-    console.log(`[PenRX+ Electron] Navigating to target: ${targetUrl}`);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.loadURL(targetUrl);
-    }
-  });
+  const targetUrl = `${baseUrl}/`;
+  console.log(`[PenRX+ Electron] Navigating to: ${targetUrl}`);
+  mainWindow.loadURL(targetUrl);
 
-  // If server needs a second to respond, retry smoothly
+  let hasTransitioned = false;
+  const transitionToMain = () => {
+    if (hasTransitioned) return;
+    hasTransitioned = true;
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.destroy();
+        splashWindow = null;
+      }
+    }, 400);
+  };
+
+  mainWindow.webContents.once("did-finish-load", transitionToMain);
+  setTimeout(transitionToMain, 7000);
+
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
     if (validatedURL && validatedURL.includes("localhost")) {
       setTimeout(() => {
         if (mainWindow && !mainWindow.isDestroyed() && activeServerUrl) {
-          mainWindow.loadURL(`${activeServerUrl}/subscriptions`);
+          mainWindow.loadURL(`${activeServerUrl}/`);
         }
-      }, 1200);
+      }, 1000);
     }
   });
 
@@ -340,10 +379,20 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  createWindow();
+  createSplashWindow();
+
+  ensureServerRunning().then((baseUrl) => {
+    createMainWindow(baseUrl);
+  });
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      if (activeServerUrl) {
+        createMainWindow(activeServerUrl);
+      } else {
+        ensureServerRunning().then((baseUrl) => createMainWindow(baseUrl));
+      }
+    }
   });
 });
 

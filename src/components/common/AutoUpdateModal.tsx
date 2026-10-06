@@ -156,7 +156,7 @@ export function AutoUpdateModal() {
         targetType === "mobile"
           ? "application/vnd.android.package-archive"
           : "application/octet-stream";
-      const blob = new Blob(chunks, { type: mimeType });
+      const blob = new Blob(chunks as any[], { type: mimeType });
       const blobUrl = window.URL.createObjectURL(blob);
 
       const fileName = targetType === "mobile" ? "PenRX+.apk" : "PenRX+-Setup.exe";

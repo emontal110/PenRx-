@@ -1,6 +1,6 @@
 {
   "name": "penrx-plus",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "private": true,
   "description": "PenRX+ - The Ultimate Next-Gen Medical Prescription & Clinic Management Suite",
   "main": "electron/main.js",
@@ -17,11 +17,6 @@
     "cap:open:android": "cap open android"
   },
   "dependencies": {
-    "@capacitor/android": "^6.1.2",
-    "@capacitor/cli": "^6.1.2",
-    "@capacitor/core": "^6.1.2",
-    "@capacitor/device": "^6.0.2",
-    "@capacitor/share": "^6.0.2",
     "@prisma/client": "^5.19.1",
     "@tanstack/react-query": "^5.56.2",
     "clsx": "^2.1.1",
@@ -36,6 +31,11 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/device": "^6.0.2",
+    "@capacitor/share": "^6.0.2",
     "@types/node": "^20.16.5",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
@@ -52,18 +52,18 @@
   "build": {
     "appId": "com.penrxplus.app",
     "productName": "PenRX+",
-    "compression": "normal",
+    "compression": "maximum",
     "asar": false,
     "files": [
-      "**/*",
+      ".next/**/*",
       "!**/.next/cache/**",
-      "!android/**",
-      "!releases/**",
-      "!docs/**",
-      "!scratch/**",
-      "!bat/**",
-      "!dist-electron/**",
-      "!**/*.map"
+      "electron/**/*",
+      "public/**/*",
+      "!public/downloads/**",
+      "prisma/**/*",
+      "src/config/version.json",
+      "next.config.mjs",
+      "package.json"
     ],
     "directories": {
       "output": "dist-electron"

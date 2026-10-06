@@ -67,6 +67,7 @@ export default function SubscriptionsPage() {
     submitSubscriptionRequest,
     cancelPendingRequest,
     syncWithServer,
+    initHardwareId,
   } = useSubscriptionStore();
   const { clinic } = useClinicStore();
 
@@ -114,10 +115,11 @@ export default function SubscriptionsPage() {
   // Fast polling sync (every 2.5 seconds) for instant unlock upon portal action
   useEffect(() => {
     setMounted(true);
+    initHardwareId().catch(() => {});
     syncWithServer();
     const interval = setInterval(syncWithServer, 2500);
     return () => clearInterval(interval);
-  }, [syncWithServer]);
+  }, [syncWithServer, initHardwareId]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -137,7 +139,7 @@ export default function SubscriptionsPage() {
   // Auto-redirect active subscribers away from subscriptions page
   useEffect(() => {
     if (!mounted) return;
-    if (subDetails.isActive) {
+    if (subDetails.isActive && !showWelcomeModal) {
       const isProfileComplete = Boolean(
         clinic.isProfileSaved &&
         clinic.doctorName?.trim() &&
@@ -146,9 +148,11 @@ export default function SubscriptionsPage() {
       );
       if (!isProfileComplete) {
         router.replace("/settings");
+      } else {
+        router.replace("/");
       }
     }
-  }, [mounted, subDetails.isActive, clinic, router]);
+  }, [mounted, subDetails.isActive, showWelcomeModal, clinic, router]);
 
   // Monitor activation transition (PENDING -> ACTIVE) to show welcome modal without page reload
   useEffect(() => {
@@ -165,7 +169,13 @@ export default function SubscriptionsPage() {
     if (!showWelcomeModal) return;
 
     if (redirectCountdown <= 0) {
-      router.push("/settings");
+      const isProfileComplete = Boolean(
+        clinic.isProfileSaved &&
+        clinic.doctorName?.trim() &&
+        (clinic.name?.trim() || clinic.nameAr?.trim()) &&
+        clinic.phone?.trim()
+      );
+      router.push(isProfileComplete ? "/" : "/settings");
       return;
     }
 
@@ -174,7 +184,7 @@ export default function SubscriptionsPage() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [showWelcomeModal, redirectCountdown, router]);
+  }, [showWelcomeModal, redirectCountdown, clinic, router]);
 
   // ==========================================
   // PLAN CONFIGURATIONS

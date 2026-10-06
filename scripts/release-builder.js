@@ -306,10 +306,8 @@ if (fs.existsSync(distElectron)) {
   if (exeInstaller) {
     const installerSource = path.join(distElectron, exeInstaller);
     fs.copyFileSync(installerSource, path.join(releasesDir, "PenRX+-Setup.exe"));
-    fs.copyFileSync(installerSource, path.join(publicDownloadsDir, "PenRX+-Setup.exe"));
     console.log(`✓ Updated official Windows Setup installer:`);
     console.log(`   - releases/PenRX+-Setup.exe`);
-    console.log(`   - public/downloads/PenRX+-Setup.exe`);
   }
 }
 completeStep(5, "Windows Desktop Installer Packaged");

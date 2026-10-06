@@ -3,9 +3,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { getOrCreateMachineId, initializeHardwareMachineId } from "@/lib/deviceSecurity";
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-// NEXT_PUBLIC_ variables are intentionally public (Supabase anonymous key).
-// We do NOT provide a hardcoded fallback to avoid exposing it in source code.
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
 
 export interface SubscriptionRecord {
   id: string;
@@ -452,8 +452,9 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         const machineId = get().machineId || getOrCreateMachineId();
         const subId = get().subscriberId;
         const offlineToken = get().signatureToken;
+        let foundActive = false;
 
-        // 1. Fetch own subscription from local Next.js API (fast, strictly isolated to this machine)
+        // 1. Fetch own subscription from local Next.js API (fast, isolated)
         try {
           let query = `machineId=${encodeURIComponent(machineId)}`;
           if (subId && subId !== "SUB-0000") {
@@ -476,14 +477,29 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                 signatureToken: fresh.signatureToken || state.signatureToken,
                 lastSyncedAt: Date.now(),
               }));
+              if (fresh.status === "ACTIVE") {
+                foundActive = true;
+              }
             }
           }
         } catch {
-          // Offline fallback: Direct single-row query for this machine only from Supabase
+          // Local server fetch skipped/error
+        }
+
+        // 2. Direct Cloud Query (Supabase Cloud Sync):
+        // If not active yet or local server didn't find active status,
+        // query Supabase Cloud directly (same DB the Admin Portal updates)
+        if (!foundActive) {
           try {
             const encodedId = encodeURIComponent(machineId);
+            let filter = `or=(machineId.eq.${encodedId},allowedMachineIds.cs.{${encodedId}})`;
+            if (subId && subId !== "SUB-0000") {
+              const encodedSubId = encodeURIComponent(subId);
+              filter = `or=(machineId.eq.${encodedId},allowedMachineIds.cs.{${encodedId}},subscriberId.eq.${encodedSubId})`;
+            }
+
             const cloudRes = await fetch(
-              `${SUPABASE_REST_URL}?or=(machineId.eq.${encodedId},allowedMachineIds.cs.{${encodedId}})&select=*&limit=1`,
+              `${SUPABASE_REST_URL}?${filter}&select=*&order=createdAt.desc&limit=1`,
               {
                 headers: {
                   apikey: SUPABASE_ANON_KEY,
@@ -499,6 +515,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                 set((state) => ({
                   subscriptions: [mySub, ...state.subscriptions.filter((s) => s.id !== mySub.id)],
                   currentSubscription: mySub,
+                  subscriberId: mySub.subscriberId || state.subscriberId,
                   lastSyncedAt: Date.now(),
                 }));
               }
