@@ -19,9 +19,10 @@ cd /d "%PROJECT_ROOT%"
 cls
 echo.
 echo  ==================================================================
-echo   [PenRX+] Automated Build, Packaging ^& Release Pipeline
+echo   [PenRX+] Automated Build, Packaging ^& GitHub Release Pipeline
 echo  ==================================================================
 echo   [*] Project Path: %CD%
+echo   [*] Mode: Full Automated Build ^& Direct GitHub Push (No Prompts)
 echo  ==================================================================
 echo.
 
@@ -35,24 +36,9 @@ if "%NOTES%"=="" (
     set "NOTES=PenRX+ Official Automated Release"
 )
 
-echo   Choose Release Mode:
-echo    [1] Build Locally AND Push to GitHub (main ^& gh-pages)
-echo    [2] Build Locally ONLY (Do NOT push to GitHub - Default)
+echo   [*] Starting automated build and direct GitHub release now...
 echo.
-set "PUSH_CHOICE=2"
-set /p PUSH_CHOICE="  Select option [1 or 2, default is 2]: "
-
-if "%PUSH_CHOICE%"=="1" (
-    echo.
-    echo   [*] Running build WITH GitHub push enabled...
-    echo.
-    node scripts/release-builder.js %TARGET_VER% "%NOTES%"
-) else (
-    echo.
-    echo   [*] Running LOCAL build ONLY (GitHub push disabled)...
-    echo.
-    node scripts/release-builder.js %TARGET_VER% "%NOTES%" --no-push
-)
+node scripts/release-builder.js %TARGET_VER% "%NOTES%"
 
 if %errorlevel% neq 0 (
     echo.
@@ -66,7 +52,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo  ==================================================================
-echo   [OK] Build and packaging completed successfully!
+echo   [OK] Build, packaging, and GitHub release completed successfully!
 echo  ==================================================================
 echo.
 
