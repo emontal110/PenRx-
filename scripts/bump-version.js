@@ -10,7 +10,7 @@ const androidGradlePath = path.join(rootDir, "android", "app", "build.gradle");
 const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
 const currentVersion = pkg.version || "1.0.0";
 
-// Determine new version (Strictly 2-digit format for display: X.Y, e.g. 1.4, 1.5)
+// Determine new version (Strictly 2-digit format: X.Y, e.g. 1.3 -> 1.4 -> 1.5)
 let newVersion = process.argv[2];
 
 if (!newVersion || newVersion === "patch" || newVersion === "minor") {
@@ -25,18 +25,16 @@ if (!newVersion || newVersion === "patch" || newVersion === "minor") {
   newVersion = `1.${newVersion}`;
 }
 
-const semverVersion = newVersion.split(".").length === 2 ? `${newVersion}.0` : newVersion;
 const releaseNotes = process.argv[3] || `تحديث تلقائي للإصدار الجديد v${newVersion}`;
 
 console.log(`\n======================================================`);
-console.log(`🚀 Bumping PenRX+ Version: ${currentVersion} -> ${newVersion} (SemVer: ${semverVersion})`);
+console.log(`🚀 Bumping PenRX+ Version: ${currentVersion} -> ${newVersion}`);
 console.log(`======================================================\n`);
 
-// 1. Update package.json (semver required by electron-builder)
-pkg.version = semverVersion;
-pkg.displayVersion = newVersion;
+// 1. Update package.json
+pkg.version = newVersion;
 fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
-console.log(`✓ Updated package.json version to: ${semverVersion} (Display: v${newVersion})`);
+console.log(`✓ Updated package.json version to: ${newVersion}`);
 
 // 2. Update src/config/version.json
 let versionConfig = {};
