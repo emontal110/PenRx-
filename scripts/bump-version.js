@@ -98,12 +98,14 @@ for (const file of landingFiles) {
 
 const portalFiles = [
   path.join(rootDir, "portal.html"),
-  path.join(rootDir, "docs", "portal.html")
+  path.join(rootDir, "docs", "portal.html"),
+  path.join(rootDir, "mobile.html")
 ];
 for (const file of portalFiles) {
   if (fs.existsSync(file)) {
     let content = fs.readFileSync(file, "utf8");
     content = content.replace(/(class="[^"]*portal-pkg-version[^"]*">\s*)v[^<\s]+(\s*<\/span>)/g, `$1v${newVersion}$2`);
+    content = content.replace(/(Mobile\s+v)[0-9.]+/g, `$1${newVersion}`);
     fs.writeFileSync(file, content, "utf8");
     console.log(`✓ Updated version in ${path.relative(rootDir, file)} to v${newVersion}`);
   }
