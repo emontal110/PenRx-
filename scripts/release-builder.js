@@ -230,6 +230,7 @@ printStep(
   5,
   "Package Windows Desktop Installer (electron-builder NSIS)",
   "Creating single-click / next-next PenRX+-Setup.exe installer"
+);
 // Clean dist-electron before build to prevent old version duplicates and save disk space
 const distElectron = path.join(rootDir, "dist-electron");
 if (fs.existsSync(distElectron)) {
