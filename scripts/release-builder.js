@@ -173,13 +173,13 @@ if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
 }
 const outIndex = path.join(outDir, "index.html");
-const portalSource = path.join(rootDir, "portal.html");
-if (fs.existsSync(portalSource)) {
-  fs.copyFileSync(portalSource, outIndex);
+const mobileSource = path.join(rootDir, "mobile.html");
+if (fs.existsSync(mobileSource)) {
+  fs.copyFileSync(mobileSource, outIndex);
 } else {
-  const docsIndex = path.join(rootDir, "docs", "index.html");
-  if (fs.existsSync(docsIndex)) {
-    fs.copyFileSync(docsIndex, outIndex);
+  const portalSource = path.join(rootDir, "portal.html");
+  if (fs.existsSync(portalSource)) {
+    fs.copyFileSync(portalSource, outIndex);
   }
 }
 // Copy supporting assets for portal

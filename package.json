@@ -53,6 +53,7 @@
     "appId": "com.penrxplus.app",
     "productName": "PenRX+",
     "compression": "normal",
+    "asar": false,
     "files": [
       "**/*",
       "!**/.next/cache/**",

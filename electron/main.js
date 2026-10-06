@@ -3,10 +3,18 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
-const { exec } = require("child_process");
+const http = require("http");
+const { exec, fork } = require("child_process");
 
-let mainWindow;
+let mainWindow = null;
+let serverProcess = null;
 let CACHED_HARDWARE_ID = null;
+let activeServerUrl = null;
+
+// Determine app root directory
+const appDir = app.isPackaged
+  ? path.join(process.resourcesPath, "app")
+  : path.resolve(__dirname, "..");
 
 // --- HARDWARE FINGERPRINTING ENGINE (mirrors Classico's getMid()) ---
 function getMotherboardSerial() {
@@ -76,7 +84,7 @@ async function getHardwareMachineId() {
   if (!idSource) idSource = getNetworkMac();
   if (!idSource) idSource = os.hostname();
 
-  // SHA-256 instead of MD5 (MD5 is cryptographically broken)
+  // SHA-256 for deterministic, unique 12-char ID
   const hash = crypto
     .createHash("sha256")
     .update(idSource)
@@ -93,6 +101,182 @@ ipcMain.handle("get-hardware-machine-id", async () => {
   return await getHardwareMachineId();
 });
 
+// Check if a URL responds to HTTP requests
+function pingUrl(url) {
+  return new Promise((resolve) => {
+    const req = http.get(url, (res) => {
+      resolve(true);
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(1200, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+// Start Next.js server in the background
+async function ensureServerRunning() {
+  if (process.env.ELECTRON_START_URL) {
+    activeServerUrl = process.env.ELECTRON_START_URL;
+    return activeServerUrl;
+  }
+
+  // 1. Check if localhost:3000 is already active
+  const is3000Up = await pingUrl("http://localhost:3000");
+  if (is3000Up) {
+    activeServerUrl = "http://localhost:3000";
+    return activeServerUrl;
+  }
+
+  // 2. Spawn the embedded server
+  return new Promise((resolve) => {
+    const serverScript = path.join(__dirname, "start-server.js");
+    const targetPort = 3000;
+
+    console.log(`[PenRX+ Electron] Spawning background Next.js server via ${serverScript}...`);
+
+    serverProcess = fork(serverScript, [], {
+      cwd: appDir,
+      env: {
+        ...process.env,
+        PORT: String(targetPort),
+        NODE_ENV: "production",
+        ELECTRON_RUN_AS_NODE: "1",
+      },
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    });
+
+    serverProcess.stdout.on("data", (d) => {
+      console.log(`[Next.js Server stdout]: ${d.toString().trim()}`);
+    });
+    serverProcess.stderr.on("data", (d) => {
+      console.error(`[Next.js Server stderr]: ${d.toString().trim()}`);
+    });
+
+    serverProcess.on("message", (msg) => {
+      if (msg && msg.status === "ready") {
+        activeServerUrl = `http://localhost:${msg.port || targetPort}`;
+        resolve(activeServerUrl);
+      }
+    });
+
+    // Poll until ready as a reliable fallback
+    const pollInterval = setInterval(async () => {
+      const isUp = await pingUrl(`http://localhost:${targetPort}`);
+      if (isUp) {
+        clearInterval(pollInterval);
+        activeServerUrl = `http://localhost:${targetPort}`;
+        resolve(activeServerUrl);
+      }
+    }, 400);
+
+    // Timeout safety
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      if (!activeServerUrl) {
+        activeServerUrl = `http://localhost:${targetPort}`;
+        resolve(activeServerUrl);
+      }
+    }, 15000);
+  });
+}
+
+// HTML Splash Screen to eliminate any black screen
+const SPLASH_HTML = `data:text/html;charset=utf-8,<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>PenRX+ Medical Suite</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background-color: #020617;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .logo-box {
+      width: 72px;
+      height: 72px;
+      background: #0f172a;
+      border: 2px solid rgba(16, 185, 129, 0.5);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 20px 40px -10px rgba(16, 185, 129, 0.35);
+    }
+    .logo-box span {
+      font-size: 26px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: -1px;
+    }
+    .logo-box span b {
+      color: #10b981;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 900;
+      color: #f1f5f9;
+      margin: 0 0 6px 0;
+      letter-spacing: -0.5px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #94a3b8;
+      margin: 0 0 32px 0;
+      font-weight: 600;
+    }
+    .loader-track {
+      width: 260px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .loader-bar {
+      height: 100%;
+      width: 45%;
+      background: linear-gradient(90deg, #10b981, #06b6d4);
+      border-radius: 999px;
+      position: absolute;
+      animation: sweep 1.5s ease-in-out infinite;
+    }
+    @keyframes sweep {
+      0% { left: -45%; width: 45%; }
+      50% { left: 35%; width: 65%; }
+      100% { left: 100%; width: 45%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="logo-box">
+    <span>PenRX<b>+</b></span>
+  </div>
+  <h1 class="title">منظومة PenRX+ الطبية</h1>
+  <p class="subtitle">جاري تشغيل محرك النظام وإعداد قاعدة البيانات...</p>
+  <div class="loader-track">
+    <div class="loader-bar"></div>
+  </div>
+</body>
+</html>`;
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1366,
@@ -104,6 +288,7 @@ function createWindow() {
       ? path.join(__dirname, "../public/icon.ico")
       : path.join(__dirname, "../public/icon-512.png"),
     backgroundColor: "#020617",
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -111,10 +296,16 @@ function createWindow() {
     },
   });
 
-  // Remove default menu bar for clean modern appearance
+  // Remove default menu bar
   Menu.setApplicationMenu(null);
 
-  // Open external links (such as WhatsApp web/desktop) directly in the default system browser or WhatsApp app
+  // Show window immediately with splash screen
+  mainWindow.loadURL(SPLASH_HTML);
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show();
+  });
+
+  // Open external links (such as WhatsApp) in the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http:") || url.startsWith("https:") || url.startsWith("whatsapp:")) {
       shell.openExternal(url);
@@ -123,14 +314,24 @@ function createWindow() {
     return { action: "allow" };
   });
 
-  const startUrl = process.env.ELECTRON_START_URL || "http://localhost:3000";
-  mainWindow.loadURL(startUrl);
+  // Ensure server is running and load /subscriptions
+  ensureServerRunning().then((baseUrl) => {
+    const targetUrl = `${baseUrl}/subscriptions`;
+    console.log(`[PenRX+ Electron] Navigating to target: ${targetUrl}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.loadURL(targetUrl);
+    }
+  });
 
-  // If server isn't up yet, retry
-  mainWindow.webContents.on("did-fail-load", () => {
-    setTimeout(() => {
-      mainWindow.loadURL(startUrl);
-    }, 1500);
+  // If server needs a second to respond, retry smoothly
+  mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
+    if (validatedURL && validatedURL.includes("localhost")) {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed() && activeServerUrl) {
+          mainWindow.loadURL(`${activeServerUrl}/subscriptions`);
+        }
+      }, 1200);
+    }
   });
 
   mainWindow.on("closed", () => {
@@ -144,6 +345,15 @@ app.whenReady().then(() => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on("before-quit", () => {
+  if (serverProcess) {
+    try {
+      serverProcess.kill();
+    } catch {}
+    serverProcess = null;
+  }
 });
 
 app.on("window-all-closed", () => {
