@@ -38,13 +38,14 @@ android/.idea/
 !android/app/penrx-release.keystore
 *.jks
 
-# 5. Environment Variables & Secret Keys
+# 5. Environment Variables, Secret Keys & Text Files
 .env
 .env*.local
 .env.development
 .env.test
 .env.production
 !.env.example
+*.txt
 
 # 6. Local Scratch & Temporary Test Scripts
 scratch/
