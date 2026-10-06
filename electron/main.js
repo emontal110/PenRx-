@@ -123,24 +123,14 @@ function createWindow() {
     return { action: "allow" };
   });
 
-  // Load Subscriptions Portal (portal.html) by default
-  const localPortal = path.join(__dirname, "../portal.html");
-  if (process.env.ELECTRON_START_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_START_URL);
-  } else if (fs.existsSync(localPortal)) {
-    mainWindow.loadFile(localPortal);
-  } else {
-    mainWindow.loadURL("https://emontal110.github.io/PenRx-/portal.html");
-  }
+  const startUrl = process.env.ELECTRON_START_URL || "http://localhost:3000";
+  mainWindow.loadURL(startUrl);
 
-  // Fallback to cloud portal if loading fails
+  // If server isn't up yet, retry
   mainWindow.webContents.on("did-fail-load", () => {
-    const localPortalFallback = path.join(__dirname, "../portal.html");
-    if (fs.existsSync(localPortalFallback)) {
-      mainWindow.loadFile(localPortalFallback);
-    } else {
-      mainWindow.loadURL("https://emontal110.github.io/PenRx-/portal.html");
-    }
+    setTimeout(() => {
+      mainWindow.loadURL(startUrl);
+    }, 1500);
   });
 
   mainWindow.on("closed", () => {

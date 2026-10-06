@@ -56,6 +56,15 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
     }
   }, [mounted, isHydrated, subDetails.isActive, isProfileComplete, pathname, router]);
 
+  // Auto-redirect new unactivated users directly to /subscriptions (Protective Wall)
+  useEffect(() => {
+    if (mounted && isHydrated && !subDetails.isActive) {
+      if (!pathname?.startsWith("/subscriptions") && !pathname?.startsWith("/api")) {
+        router.replace("/subscriptions");
+      }
+    }
+  }, [mounted, isHydrated, subDetails.isActive, pathname, router]);
+
   // --- ANTI-TAMPER: Detect and flag excessive offline usage (Classico-style 7-day limit) ---
   useEffect(() => {
     if (!mounted) return;

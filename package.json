@@ -55,12 +55,6 @@
     "directories": {
       "output": "dist-electron"
     },
-    "files": [
-      "electron/**/*",
-      "public/**/*",
-      "portal.html",
-      "package.json"
-    ],
     "win": {
       "target": [
         "nsis",
