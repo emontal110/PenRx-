@@ -335,13 +335,17 @@ try {
 }
 
 if (shouldPush) {
-  // Push to main branch with tags
-  console.log("\n🚀 Pushing to GitHub (main branch with tags)...");
-  run("git push origin main --tags");
+  // Push to main branch first to reliably trigger GitHub Pages deployment
+  console.log("\n🚀 Pushing to GitHub main branch (triggers web & pages build)...");
+  run("git push origin main");
+
+  // Push release tags to trigger cloud release builders
+  console.log("🏷 Pushing release tags...");
+  run("git push origin --tags");
 
   // Push to gh-pages branch
   console.log("🚀 Syncing GitHub Pages hosting branch (gh-pages)...");
-  run("git push origin main:gh-pages");
+  run("git push origin main:gh-pages --force");
 
   // Fast-forward local gh-pages if possible
   try {
