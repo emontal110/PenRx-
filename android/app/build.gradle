@@ -25,7 +25,7 @@ android {
                 keyPassword "penrx123456"
                 v1SigningEnabled true
                 v2SigningEnabled true
-                v3SigningEnabled true
+                enableV3Signing = true
             }
         }
     }
