@@ -6,6 +6,9 @@ const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subs
 const SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+const SUPABASE_SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
 
 export interface SubscriptionRecord {
   id: string;
@@ -218,8 +221,8 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           await fetch(SUPABASE_REST_URL, {
             method: "POST",
             headers: {
-              apikey: SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + SUPABASE_ANON_KEY,
+              apikey: SUPABASE_SERVICE_KEY,
+              Authorization: "Bearer " + SUPABASE_SERVICE_KEY,
               "Content-Type": "application/json",
               Prefer: "return=representation",
             },
