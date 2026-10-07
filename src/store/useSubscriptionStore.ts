@@ -483,6 +483,16 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               if (fresh.status === "ACTIVE") {
                 foundActive = true;
               }
+            } else if (data.subscription === null) {
+              // Server explicitly says subscription is deleted! Purge local pending/active state
+              set((state) => ({
+                subscriptions: state.subscriptions.filter(
+                  (s) => s.machineId !== machineId && s.subscriberId !== subId
+                ),
+                currentSubscription: null,
+                signatureToken: null,
+                lastSyncedAt: Date.now(),
+              }));
             }
           }
         } catch {
@@ -505,8 +515,8 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               `${SUPABASE_REST_URL}?${filter}&select=*&order=createdAt.desc&limit=1`,
               {
                 headers: {
-                  apikey: SUPABASE_ANON_KEY,
-                  Authorization: "Bearer " + SUPABASE_ANON_KEY,
+                  apikey: SUPABASE_SERVICE_KEY,
+                  Authorization: "Bearer " + SUPABASE_SERVICE_KEY,
                 },
                 cache: "no-store",
               }
@@ -519,6 +529,17 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                   subscriptions: [mySub, ...state.subscriptions.filter((s) => s.id !== mySub.id)],
                   currentSubscription: mySub,
                   subscriberId: mySub.subscriberId || state.subscriberId,
+                  lastSyncedAt: Date.now(),
+                }));
+              } else if (Array.isArray(rows) && rows.length === 0) {
+                // Subscription was deleted by admin from cloud portal!
+                // Purge stale local record so user doesn't stay stuck on "pending"
+                set((state) => ({
+                  subscriptions: state.subscriptions.filter(
+                    (s) => s.machineId !== machineId && s.subscriberId !== subId
+                  ),
+                  currentSubscription: null,
+                  signatureToken: null,
                   lastSyncedAt: Date.now(),
                 }));
               }

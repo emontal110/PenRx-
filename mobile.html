@@ -279,6 +279,9 @@
           </div>
         </div>
 
+        <!-- Real-Time AI Drug Interaction Warning Alert -->
+        <div id="rx-interactions-alert" class="hidden p-3 rounded-2xl border text-xs space-y-1.5 transition-all"></div>
+
         <!-- Medications List Table -->
         <div id="rx-medications-list" class="space-y-2">
           <!-- Dynamic Items Injected Here -->
@@ -772,8 +775,90 @@
       }
     }
 
+    // Clinical Drug-to-Drug Interaction Rules (Built-in offline safety engine)
+    const CLINICAL_INTERACTIONS = [
+      {
+        id: "warfarin-nsaids",
+        keywords: ["warfarin", "marevan", "cataflam", "voltaren", "brufen", "ketofan", "aspirin", "aspocid", "feldene", "mobic", "antiflam", "diclofenac", "ibuprofen", "ketoprofen"],
+        severity: "CRITICAL",
+        titleAr: "خطر نزيف حاد وقرحة معدية خطيرة",
+        mechanismAr: "الجمع بين مضادات التجلط (وارفارين/ماريفان) ومسكنات NSAIDs يثبط الصفائح الدموية ويزيد احتمال النزيف الداخلي بشكل حاد.",
+        recommendationAr: "يُفضل تجنب الجمع واستبدال المسكن بالباراسيتامول (Panadol / Cetal) الأكثر أماناً."
+      },
+      {
+        id: "sildenafil-nitrates",
+        keywords: ["viagra", "erecta", "sildefil", "cialis", "nitromak", "effox", "isosorbide", "monoket", "angised", "nitroderm", "tadalafil", "sildenafil"],
+        severity: "CRITICAL",
+        titleAr: "هبوط حاد وقاتل في ضغط الدم (Severe Shock)",
+        mechanismAr: "الجمع بين منشطات الفوسفودايستراز ومركبات النترات يسبب توسعاً وعائياً مفرطاً وهبوطاً حاداً في ضغط الدم.",
+        recommendationAr: "ممنوع الجمع نهائياً ويجب الفصل بينهما بـ 24 إلى 48 ساعة على الأقل."
+      },
+      {
+        id: "beta-blocker-ccb",
+        keywords: ["concor", "bisoprolol", "tenormin", "atenolol", "betaloc", "metoprolol", "verapamil", "isoptin", "diltiazem", "altiazem"],
+        severity: "HIGH",
+        titleAr: "هبوط حاد في نبضات القلب (Bradycardia)",
+        mechanismAr: "الجمع بين حاصرات بيتا (Concor) ومثبطات قنوات الكالسيوم يثبط العقدة الأذينية ويسبب تباطؤاً مفرطاً في ضربات القلب.",
+        recommendationAr: "راقب نبض المريض وتجنب الجمع بالجرعات العالية."
+      },
+      {
+        id: "duplicate-nsaids",
+        keywords: ["cataflam", "voltaren", "brufen", "ketofan", "feldene", "mobic", "antiflam", "olfen"],
+        severity: "MODERATE",
+        titleAr: "تكرار مسكنات مضادة للالتهاب (NSAIDs Duplicate)",
+        mechanismAr: "وصف أكثر من مسكن من عائلة NSAIDs معاً يزيد سمية الكلى ومخاطر المعدة دون زيادة الفاعلية المسكنة.",
+        recommendationAr: "اكتفِ بمسكن واحد مناسب بالجرعة المقررة."
+      }
+    ];
+
+    function checkDrugInteractions() {
+      const alertBox = document.getElementById("rx-interactions-alert");
+      if (!alertBox) return;
+
+      if (currentRxMeds.length < 2) {
+        alertBox.classList.add("hidden");
+        return;
+      }
+
+      const allMedText = currentRxMeds.map((m) => (m.name + " " + (m.dose || "")).toLowerCase());
+      const detected = [];
+
+      CLINICAL_INTERACTIONS.forEach((rule) => {
+        // Count how many distinct medicines match keywords of this rule
+        let matchCount = 0;
+        allMedText.forEach((medStr) => {
+          if (rule.keywords.some((k) => medStr.includes(k))) {
+            matchCount++;
+          }
+        });
+
+        if (matchCount >= 2) {
+          detected.push(rule);
+        }
+      });
+
+      if (detected.length === 0) {
+        alertBox.classList.add("hidden");
+        return;
+      }
+
+      alertBox.className = "p-3 rounded-2xl border text-xs space-y-2 bg-rose-500/15 border-rose-500/40 text-rose-200 animate-pulse";
+      alertBox.innerHTML = detected.map((d) => `
+        <div class="space-y-1">
+          <div class="font-black text-rose-300 flex items-center gap-1.5 text-xs">
+            <span>🚨</span>
+            <span>تنبيه ذكي لتعارض دوائي: ${d.titleAr}</span>
+          </div>
+          <div class="text-[11px] text-slate-300 leading-relaxed">${d.mechanismAr}</div>
+          <div class="text-[11px] text-amber-300 font-bold">💡 التوصية الطبية: ${d.recommendationAr}</div>
+        </div>
+      `).join("<hr class='border-rose-500/30' />");
+
+      alertBox.classList.remove("hidden");
+    }
+
     // 5. Drug Search & Medications Engine
-    function handleDrugSearch(query) {
+    async function handleDrugSearch(query) {
       const box = document.getElementById("drug-suggestions-box");
       const q = query.trim().toLowerCase();
 
@@ -784,28 +869,62 @@
 
       const matches = POPULAR_DRUGS.filter((d) => d.name.toLowerCase().includes(q) || d.active.toLowerCase().includes(q));
 
-      if (matches.length === 0) {
-        box.innerHTML = `
-          <div class="p-2 text-center text-xs text-slate-400">
-            <span>لم يُعثر على الدواء في القائمة السريعة.</span>
-            <button type="button" onclick="addCustomDrugByName('${query.replace(/'/g, "\\'")}')" class="text-emerald-400 font-bold block mx-auto mt-1 hover:underline">إضافته كدواء مخصص الآن ➕</button>
+      if (matches.length > 0) {
+        box.innerHTML = matches.map((d) => `
+          <div onclick='selectDrug(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="p-2 rounded-lg hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
+            <div>
+              <div class="font-bold text-white text-xs">${d.name}</div>
+              <div class="text-[10px] text-slate-400">${d.active} • ${d.form}</div>
+            </div>
+            <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">إضافة +</span>
           </div>
-        `;
+        `).join("");
         box.classList.remove("hidden");
         return;
       }
 
-      box.innerHTML = matches.map((d) => `
-        <div onclick='selectDrug(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="p-2 rounded-lg hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
-          <div>
-            <div class="font-bold text-white text-xs">${d.name}</div>
-            <div class="text-[10px] text-slate-400">${d.active} • ${d.form}</div>
-          </div>
-          <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">إضافة +</span>
+      // Live search fallback via OpenFDA
+      box.innerHTML = `
+        <div class="p-2 text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
+          <span class="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
+          <span>جاري البحث في البنك الدوائي المفتوح...</span>
         </div>
-      `).join("");
-
+      `;
       box.classList.remove("hidden");
+
+      try {
+        const res = await fetch(`https://api.fda.gov/drug/ndc.json?search=brand_name:"${encodeURIComponent(q)}"&limit=5`, { signal: AbortSignal.timeout(2500) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            box.innerHTML = data.results.map((r) => {
+              const d = {
+                name: r.brand_name || r.generic_name || q,
+                active: r.active_ingredients?.map((a) => a.name).join(" + ") || r.generic_name || "Active Ingredient",
+                form: r.dosage_form || "علاج",
+                dose: "حسب الإرشاد الطبي"
+              };
+              return `
+                <div onclick='selectDrug(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="p-2 rounded-lg hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
+                  <div>
+                    <div class="font-bold text-white text-xs">${d.name}</div>
+                    <div class="text-[10px] text-cyan-400">🌐 ${d.active} • ${d.form}</div>
+                  </div>
+                  <span class="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">إضافة +</span>
+                </div>
+              `;
+            }).join("");
+            return;
+          }
+        }
+      } catch {}
+
+      box.innerHTML = `
+        <div class="p-2 text-center text-xs text-slate-400">
+          <span>لم يُعثر على الدواء في البحث المباشر.</span>
+          <button type="button" onclick="addCustomDrugByName('${query.replace(/'/g, "\\'")}')" class="text-emerald-400 font-bold block mx-auto mt-1 hover:underline">إضافته كدواء مخصص الآن ➕</button>
+        </div>
+      `;
     }
 
     function selectDrug(d) {
@@ -850,6 +969,8 @@
       const list = document.getElementById("rx-medications-list");
       const badge = document.getElementById("meds-count-badge");
       badge.textContent = `${currentRxMeds.length} أدوية`;
+
+      checkDrugInteractions();
 
       if (currentRxMeds.length === 0) {
         list.innerHTML = `<div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-[11px] text-slate-500">لم يتم إضافة أدوية بعد. ابحث بالأعلى أو أضف دواءً مخصصاً.</div>`;
@@ -1272,11 +1393,18 @@
             localStorage.setItem("penrx_last_sub", JSON.stringify(currentSubscription));
             updateUiForSubscription(currentSubscription);
             return;
+          } else if (Array.isArray(rows) && rows.length === 0) {
+            // Subscription was deleted or revoked by admin in portal!
+            // Clean up stale local record immediately so doctor does not stay stuck in "waiting for activation"
+            localStorage.removeItem("penrx_last_sub");
+            currentSubscription = null;
+            updateUiForSubscription(null);
+            return;
           }
         }
       } catch {}
 
-      // Fallback to local stored record
+      // Fallback to local stored record only if network completely failed
       const local = localStorage.getItem("penrx_last_sub");
       if (local) {
         try {
