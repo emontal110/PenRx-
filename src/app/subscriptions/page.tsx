@@ -136,31 +136,26 @@ export default function SubscriptionsPage() {
   const currentSub = subDetails.record || null;
   const trialClaimed = hasUsedFreeTrial(subscriptions, machineId);
 
-  // Auto-redirect active subscribers away from subscriptions page
-  useEffect(() => {
-    if (!mounted) return;
-    if (subDetails.isActive && !showWelcomeModal) {
-      const isProfileComplete = Boolean(
-        clinic.isProfileSaved &&
-        clinic.doctorName?.trim() &&
-        (clinic.name?.trim() || clinic.nameAr?.trim()) &&
-        clinic.phone?.trim()
-      );
-      if (!isProfileComplete) {
-        router.replace("/settings");
-      } else {
-        router.replace("/");
-      }
-    }
-  }, [mounted, subDetails.isActive, showWelcomeModal, clinic, router]);
-
-  // Monitor activation transition (PENDING -> ACTIVE) to show welcome modal without page reload
+  // Monitor activation transition (PENDING -> ACTIVE) to show welcome modal reliably
   useEffect(() => {
     if (subDetails.isPending) {
       wasPendingRef.current = true;
-    } else if (subDetails.isActive && wasPendingRef.current) {
-      wasPendingRef.current = false;
-      setShowWelcomeModal(true);
+      try {
+        localStorage.setItem("penrx_was_pending", "true");
+      } catch {}
+    } else if (subDetails.isActive) {
+      let isNewlyActivated = wasPendingRef.current;
+      try {
+        if (localStorage.getItem("penrx_was_pending") === "true") {
+          isNewlyActivated = true;
+          localStorage.removeItem("penrx_was_pending");
+        }
+      } catch {}
+
+      if (isNewlyActivated) {
+        wasPendingRef.current = false;
+        setShowWelcomeModal(true);
+      }
     }
   }, [subDetails.isPending, subDetails.isActive]);
 
@@ -195,8 +190,8 @@ export default function SubscriptionsPage() {
     durationDays: 30,
     durationLabel: "شهر كامل (30 يوماً مجاناً)",
     price: 0,
-    badge: "هدية الانضمام 🎁",
-    badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+    badge: "هدية الانضمام • مجاناً بالكامل 🎁",
+    badgeColor: "bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400 text-slate-950 font-black border-emerald-300 shadow-lg shadow-emerald-950/60",
     isTrial: true,
     features: [
       "تجربة مجانية بالكامل لمدة شهر (30 يوماً)",
@@ -216,7 +211,7 @@ export default function SubscriptionsPage() {
       durationLabel: "تجديد شهري مرن (30 يوماً)",
       price: 150,
       badge: "تجديد مرن",
-      badgeColor: "bg-slate-700 text-slate-200 border-slate-600",
+      badgeColor: "bg-slate-200 text-slate-950 font-black border-slate-300 shadow-md",
       features: [
         "تجديد شهري مرن بقيمة 150 جنيه شهرياً",
         "🧠 مساعد الذكاء الاصطناعي لكشف تعارض وتداخل الأدوية والجرعات اللحظي لحماية المريض",
@@ -233,8 +228,8 @@ export default function SubscriptionsPage() {
       price: 400,
       originalPrice: 450,
       discountText: "توفير 50 ج.م",
-      badge: "خصم 50 ج.م",
-      badgeColor: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+      badge: "وفر 50 ج.م ⚡",
+      badgeColor: "bg-amber-400 text-slate-950 font-black border-amber-300 shadow-md",
       features: [
         "اشتراك 3 شهور بقيمة 400 جنيه بدلاً من 450",
         "توفير فوري 50 جنيه مباشر",
@@ -251,8 +246,8 @@ export default function SubscriptionsPage() {
       price: 800,
       originalPrice: 900,
       discountText: "توفير 100 ج.م",
-      badge: "توفير 100 ج.م",
-      badgeColor: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
+      badge: "وفر 100 ج.م 🔥",
+      badgeColor: "bg-cyan-400 text-slate-950 font-black border-cyan-300 shadow-md",
       features: [
         "اشتراك 6 شهور بقيمة 800 جنيه بدلاً من 900",
         "توفير فوري 100 جنيه مباشر",
@@ -270,7 +265,7 @@ export default function SubscriptionsPage() {
       originalPrice: 1800,
       discountText: "توفير 300 ج.م 🔥 | شهران مجاناً",
       badge: "الأكثر طلباً وتوفيراً ⭐",
-      badgeColor: "bg-emerald-500 text-slate-950 font-black border-emerald-400 shadow-md",
+      badgeColor: "bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400 text-slate-950 font-black border-emerald-300 shadow-lg",
       popular: true,
       features: [
         "اشتراك سنوي شامل بقيمة 1,500 جنيه بدلاً من 1,800 (شهران مجاناً)",
@@ -350,8 +345,11 @@ export default function SubscriptionsPage() {
         isTrial: isTrialPlan,
       });
 
-      if (isTrialPlan && typeof window !== "undefined") {
-        localStorage.setItem("penrx_trial_claimed", "true");
+      if (typeof window !== "undefined") {
+        localStorage.setItem("penrx_was_pending", "true");
+        if (isTrialPlan) {
+          localStorage.setItem("penrx_trial_claimed", "true");
+        }
       }
 
       // Close checkout modal - page will cleanly show waiting screen
@@ -378,7 +376,7 @@ export default function SubscriptionsPage() {
   };
 
   return (
-    <div className="space-y-8 pb-16 max-w-6xl mx-auto">
+    <div className="space-y-6 sm:space-y-8 pb-20 max-w-6xl mx-auto px-3.5 sm:px-6">
       {/* ============================================================ */}
       {/* CASE 1: WAITING FOR ACTIVATION SCREEN (صفحة انتظار التفعيل) */}
       {/* ============================================================ */}
@@ -522,16 +520,16 @@ export default function SubscriptionsPage() {
       {/* CASE 2: ACTIVE SUBSCRIPTION HERO BANNER */}
       {/* ============================================================ */}
       {subDetails.isActive && (
-        <div className={`rounded-3xl bg-slate-900/90 border p-6 sm:p-8 shadow-xl space-y-5 transition-all ${
+        <div className={`rounded-3xl bg-slate-900/90 border p-5 sm:p-8 shadow-xl space-y-5 transition-all ${
           subDetails.daysRemaining <= 3
             ? "border-rose-500/50 shadow-rose-950/20"
             : subDetails.daysRemaining <= 7
             ? "border-amber-500/50 shadow-amber-950/20"
             : "border-emerald-500/30 shadow-emerald-950/20"
         }`}>
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
             <div className="flex items-center gap-3">
-              <div className={`p-3 rounded-2xl border transition-colors ${
+              <div className={`p-3 rounded-2xl border transition-colors shrink-0 ${
                 subDetails.daysRemaining <= 3
                   ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
                   : subDetails.daysRemaining <= 7
@@ -541,8 +539,8 @@ export default function SubscriptionsPage() {
                 <Crown className="w-6 h-6" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-black text-slate-100">اشتراكك مفعل وجاهز للعمل</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-black text-slate-100">اشتراكك مفعل وجاهز للعمل</h2>
                   {subDetails.daysRemaining <= 3 ? (
                     <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-black border border-rose-500/40 animate-pulse">
                       ينتهي خلال {subDetails.daysRemaining} {subDetails.daysRemaining === 1 ? "يوم" : "أيام"} ⚠️
@@ -557,15 +555,15 @@ export default function SubscriptionsPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 mt-0.5">
                   باقة: <strong className="text-slate-200">{subDetails.planName}</strong> • {clinic.doctorName || "طبيبنا العزيز"}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
               {/* Distinctive Days Remaining Card in same position */}
-              <div className={`px-4 py-2.5 rounded-2xl border backdrop-blur-md transition-all text-left ${
+              <div className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-2xl border backdrop-blur-md transition-all text-left ${
                 subDetails.daysRemaining <= 3
                   ? "bg-gradient-to-br from-rose-950/60 via-slate-900 to-rose-950/40 border-rose-500/60 shadow-lg shadow-rose-950/40 ring-1 ring-rose-500/20"
                   : subDetails.daysRemaining <= 7
@@ -599,19 +597,19 @@ export default function SubscriptionsPage() {
               {/* Direct Link to Prescriptions New without NewRxGuard interception */}
               <Link
                 href="/prescriptions/new"
-                className="px-5 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-950/50 hover:shadow-emerald-900/60 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                className="flex-1 sm:flex-initial justify-center px-5 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-950/50 hover:shadow-emerald-900/60 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
               >
-                <span>الدخول لكتابة الروشتات 🚀</span>
+                <span>الدخول للروشتات 🚀</span>
                 <ArrowRight className="w-4 h-4 rotate-180" />
               </Link>
             </div>
           </div>
 
           {/* Machine ID info for linking additional devices */}
-          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap sm:flex-nowrap items-center justify-between gap-4">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
               <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                <Laptop className="w-3.5 h-3.5 text-emerald-400" />
+                <Laptop className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>معرّف هذا الجهاز (Machine ID):</span>
               </span>
               <span className="font-mono font-black text-emerald-400 text-xs sm:text-sm tracking-wider block" dir="ltr">
@@ -619,11 +617,11 @@ export default function SubscriptionsPage() {
               </span>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => handleCopy(machineId, "active-machine")}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Copy className="w-3.5 h-3.5" />
                 <span>{copySuccess === "active-machine" ? "✓ تم النسخ" : "نسخ المعرّف"}</span>
@@ -636,10 +634,10 @@ export default function SubscriptionsPage() {
                 )}`}
                 target="_blank"
                 rel="noreferrer"
-                className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-bold border border-emerald-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-bold border border-emerald-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
-                <span>طلب ربط جهاز إضافي عبر الواتساب 📲</span>
+                <span>ربط جهاز إضافي 📲</span>
               </a>
             </div>
           </div>
@@ -650,20 +648,20 @@ export default function SubscriptionsPage() {
       {/* CASE 3: NO ACTIVE SUBSCRIPTION - MACHINE ID BANNER */}
       {/* ============================================================ */}
       {!subDetails.isActive && !subDetails.isPending && (
-        <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="p-4 sm:p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
-              <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
-                <Laptop className="w-4 h-4 text-emerald-400" />
+              <h3 className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-2">
+                <Laptop className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>معرّف هذا الجهاز (Hardware Machine ID):</span>
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-[11px] sm:text-xs text-slate-400">
                 إذا كان لديك اشتراك قائم على جهاز آخر وتريد ربط هذا الجهاز به، انسخ هذا المعرّف وأرسله للإدارة لربطه فوراً.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 font-mono font-black text-emerald-400 text-xs sm:text-sm tracking-wider" dir="ltr">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <span className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 font-mono font-black text-emerald-400 text-xs sm:text-sm tracking-wider flex-1 sm:flex-initial text-center truncate" dir="ltr">
                 {mounted ? machineId : "PRX-..."}
               </span>
               <button
@@ -717,29 +715,29 @@ export default function SubscriptionsPage() {
             {/* CARD 1: FREE TRIAL (30 DAYS FULL ACCESS - ONE-TIME ONLY) */}
             {/* ============================================================ */}
             <div
-              className={`relative rounded-3xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-200 border ${
+              className={`relative rounded-3xl p-5 sm:p-8 pt-7 sm:pt-8 flex flex-col justify-between transition-all duration-200 border ${
                 trialClaimed
                   ? "bg-slate-900/60 border-slate-800 opacity-90"
                   : "bg-slate-900/90 border-2 border-emerald-500/50 shadow-2xl shadow-emerald-950/40 hover:border-emerald-400"
               }`}
             >
               {/* Badge */}
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 shrink-0 whitespace-nowrap">
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 shrink-0 whitespace-nowrap z-10">
                 <span
-                  className={`px-4 py-1 rounded-full text-xs font-black tracking-wide border shadow-md flex items-center gap-1.5 ${
+                  className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wide border shadow-xl flex items-center gap-1.5 ${
                     trialClaimed
                       ? "bg-slate-800 text-slate-400 border-slate-700"
-                      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                      : TRIAL_PLAN.badgeColor
                   }`}
                 >
                   {trialClaimed ? (
                     <>
-                      <Lock className="w-3 h-3 text-slate-400" />
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
                       <span>تم الاستفادة من التجربة مسبقاً 🔒</span>
                     </>
                   ) : (
                     <>
-                      <Gift className="w-3.5 h-3.5 text-emerald-400" />
+                      <Gift className="w-4 h-4 text-slate-950 stroke-[2.5]" />
                       <span>{TRIAL_PLAN.badge}</span>
                     </>
                   )}
@@ -831,11 +829,11 @@ export default function SubscriptionsPage() {
             {/* ============================================================ */}
             {/* CARD 2: DYNAMIC PAID PLAN CARD (WITH INTEGRATED ELEGANT DROPDOWN) */}
             {/* ============================================================ */}
-            <div className="relative rounded-3xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-200 bg-slate-900 border-2 border-emerald-500 shadow-2xl shadow-emerald-950/60 ring-4 ring-emerald-500/20">
+            <div className="relative rounded-3xl p-5 sm:p-8 pt-7 sm:pt-8 flex flex-col justify-between transition-all duration-200 bg-slate-900 border-2 border-emerald-500 shadow-2xl shadow-emerald-950/60 ring-4 ring-emerald-500/20">
               {/* Dynamic Badge */}
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 shrink-0 whitespace-nowrap">
-                <span className={`px-4 py-1 rounded-full text-xs font-black tracking-wide border shadow-md flex items-center gap-1.5 ${selectedPaidPlan.badgeColor || "bg-emerald-500 text-slate-950"}`}>
-                  <Crown className="w-3.5 h-3.5" />
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 shrink-0 whitespace-nowrap z-10">
+                <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wide border shadow-xl flex items-center gap-1.5 ${selectedPaidPlan.badgeColor || "bg-emerald-400 text-slate-950 font-black border-emerald-300 shadow-lg"}`}>
+                  <Crown className="w-3.5 h-3.5 text-slate-950 stroke-[2.5]" />
                   <span>{selectedPaidPlan.badge || "الباقة المختارة"}</span>
                 </span>
               </div>
@@ -908,7 +906,7 @@ export default function SubscriptionsPage() {
 
                     {/* Dropdown Options Popup */}
                     {isDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-slate-950 border-2 border-emerald-500/40 rounded-2xl p-2 shadow-2xl space-y-1.5 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150">
+                      <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-slate-950 border-2 border-emerald-500/40 rounded-2xl p-2 shadow-2xl space-y-1.5 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150 max-h-72 sm:max-h-96 overflow-y-auto">
                         {PAID_PLANS.map((plan) => {
                           const isSelected = plan.id === selectedPaidPlanId;
 

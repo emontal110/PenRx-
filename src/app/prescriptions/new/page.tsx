@@ -29,7 +29,7 @@ import { PrintValidationModal } from "@/components/prescription/PrintValidationM
 import { WhatsAppShareModal } from "@/components/prescription/WhatsAppShareModal";
 import { NewPrescriptionPromptModal } from "@/components/prescription/NewPrescriptionPromptModal";
 import { showGlobalToast } from "@/components/common/GlobalToast";
-import { formatEgyptPhoneNumber } from "@/lib/utils";
+import { formatEgyptPhoneNumber, calculateBmiInfo } from "@/lib/utils";
 import {
   UnifiedPatientRecord,
   extractUnifiedPatients,
@@ -59,6 +59,7 @@ export default function NewPrescriptionPage() {
     savedPrescriptions,
     visibleFields,
     setVisibleFields,
+    toggleVisibleField,
   } = usePrescriptionStore();
 
   const { branches, clinic } = useClinicStore();
@@ -66,7 +67,19 @@ export default function NewPrescriptionPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
+    // Ensure visibleFields are synchronized from clinic settings if available
+    try {
+      const raw = localStorage.getItem("penrx_clinic_storage");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.state?.clinic?.visibleFields) {
+          setVisibleFields(parsed.state.clinic.visibleFields);
+        }
+      }
+    } catch {}
   }, []);
+
+  const bmiInfo = calculateBmiInfo(patient.height, patient.weight);
 
   const [toast, setToast] = useState<string | null>(null);
   const [patientSuggestions, setPatientSuggestions] = useState<UnifiedPatientRecord[]>([]);
@@ -247,17 +260,12 @@ export default function NewPrescriptionPage() {
     const branchObj = branches.find((b) => b.id === selectedBranchId);
     savePrescription(branchObj?.nameAr);
     
-    // Automatically reset prescription fields so the doctor can write a new one immediately
-    resetCurrentPrescription();
     setPatientSuggestions([]);
     setShowSuggestionsDropdown(false);
     
-    showGlobalToast("✅ تم حفظ الروشتة في سجل العيادة وتفريغ الصفحة لروشتة جديدة بنجاح!", "success");
-    setToast("✅ تم حفظ الروشتة وتفريغ الصفحة لروشتة جديدة بنجاح!");
+    showGlobalToast("✅ تم حفظ الروشتة في سجل العيادة بنجاح!", "success");
+    setToast("✅ تم حفظ الروشتة في سجل العيادة بنجاح! يمكنك مراجعتها أو الضغط على (روشتة جديدة +) للمريض التالي.");
     setTimeout(() => setToast(null), 4000);
-    
-    // Focus back to patient name input for lightning-fast next entry
-    patientNameInputRef.current?.focus();
   };
 
   const handleSaveAndPrint = () => {
@@ -269,17 +277,11 @@ export default function NewPrescriptionPage() {
     }
     const branchObj = branches.find((b) => b.id === selectedBranchId);
     savePrescription(branchObj?.nameAr);
-    showGlobalToast("✅ تم حفظ الروشتة وجاري الطباعة...");
+    showGlobalToast("✅ تم حفظ الروشتة بالسجل وجاري الطباعة...");
     window.print();
 
-    // After print window opens, clear the prescription ready for the next patient
-    setTimeout(() => {
-      resetCurrentPrescription();
-      setPatientSuggestions([]);
-      setShowSuggestionsDropdown(false);
-      showGlobalToast("✨ تم تفريغ الروشتة وتجهيز روشتة جديدة للمريض القادم بنجاح", "info");
-      patientNameInputRef.current?.focus();
-    }, 1200);
+    // Keep prescription data on screen so doctor can review, print again, or share via WhatsApp
+    showGlobalToast("🖨️ تمت الطباعة وحفظ الروشتة بالسجل بنجاح! يمكنك إرسالها بالواتساب أو النقر على (روشتة جديدة +) للمريض التالي.", "success");
   };
 
   const handleShareWhatsApp = () => {
@@ -445,6 +447,39 @@ export default function NewPrescriptionPage() {
                   <span>إعدادات المريض</span>
                 </Link>
               </div>
+            </div>
+
+            {/* Quick Field Visibility Toggle Bar */}
+            <div className="flex items-center gap-1.5 flex-wrap p-2.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-[11px]">
+              <span className="text-slate-400 font-bold ml-1 flex items-center gap-1 text-[10px] shrink-0">
+                <Settings2 className="w-3 h-3 text-emerald-400" />
+                <span>حقول الروشتة المفعّلة:</span>
+              </span>
+              {[
+                { key: "showAge", label: "السن", active: visibleFields.showAge },
+                { key: "showGender", label: "النوع", active: visibleFields.showGender },
+                { key: "showHeight", label: "الطول", active: visibleFields.showHeight },
+                { key: "showWeight", label: "الوزن", active: visibleFields.showWeight },
+                { key: "showBloodType", label: "الفصيلة", active: visibleFields.showBloodType },
+                { key: "showDiagnosis", label: "التشخيص", active: visibleFields.showDiagnosis },
+                { key: "showMedicalHistory", label: "الأمراض المزمنة", active: visibleFields.showMedicalHistory },
+                { key: "showAllergies", label: "حساسية الدواء", active: visibleFields.showAllergies },
+              ].map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => toggleVisibleField(f.key as any)}
+                  className={`px-2.5 py-1 rounded-xl font-bold transition-all flex items-center gap-1 cursor-pointer text-[10px] ${
+                    f.active
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs"
+                      : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700"
+                  }`}
+                  title={f.active ? `إخفاء حقل ${f.label} من الروشتة` : `إظهار حقل ${f.label} بالروشتة`}
+                >
+                  <span className="font-mono">{f.active ? "✓" : "+"}</span>
+                  <span>{f.label}</span>
+                </button>
+              ))}
             </div>
 
             {/* Patient Fields: Spacious, Elegant 2-Column Responsive Layout */}
@@ -678,11 +713,12 @@ export default function NewPrescriptionPage() {
                       <div className="space-y-1">
                         <label className="font-bold text-slate-300">السن (بالسنوات):</label>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={patient.age || ""}
-                          onChange={(e) => setPatient({ age: e.target.value })}
-                          placeholder="مثال: 35"
-                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                          onChange={(e) => setPatient({ age: e.target.value.replace(/[^0-9]/g, "") })}
+                          placeholder=""
+                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                     )}
@@ -705,11 +741,12 @@ export default function NewPrescriptionPage() {
                       <div className="space-y-1">
                         <label className="font-bold text-slate-300">الطول (سم):</label>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           value={patient.height || ""}
-                          onChange={(e) => setPatient({ height: e.target.value })}
-                          placeholder="170"
-                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                          onChange={(e) => setPatient({ height: e.target.value.replace(/[^0-9.]/g, "") })}
+                          placeholder=""
+                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                     )}
@@ -718,11 +755,12 @@ export default function NewPrescriptionPage() {
                       <div className="space-y-1">
                         <label className="font-bold text-slate-300">الوزن (كجم):</label>
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           value={patient.weight || ""}
-                          onChange={(e) => setPatient({ weight: e.target.value })}
-                          placeholder="75"
-                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                          onChange={(e) => setPatient({ weight: e.target.value.replace(/[^0-9.]/g, "") })}
+                          placeholder=""
+                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                     )}
@@ -745,6 +783,71 @@ export default function NewPrescriptionPage() {
                           <option value="O+">O+</option>
                           <option value="O-">O-</option>
                         </select>
+                      </div>
+                    )}
+
+                    {/* Smart Clinical BMI Gauge & Indicator with Distinctive Colors */}
+                    {bmiInfo && (
+                      <div className="col-span-2 sm:col-span-3 md:col-span-5 p-3.5 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 space-y-2.5 shadow-lg animate-in fade-in duration-200">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl shrink-0 p-1.5 rounded-xl bg-slate-900 border border-slate-800 shadow-inner">
+                              {bmiInfo.icon}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-black text-slate-100">
+                                  مؤشر كتلة الجسم (BMI):
+                                </span>
+                                <span
+                                  className="font-mono font-black text-sm px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-700/80"
+                                  style={{ color: bmiInfo.colorHex }}
+                                  dir="ltr"
+                                >
+                                  {bmiInfo.bmiFormatted} kg/m²
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                الوزن المثالي المقترح لهذا الطول:{" "}
+                                <strong className="text-emerald-400 font-mono">
+                                  {bmiInfo.idealWeightMin} – {bmiInfo.idealWeightMax} كجم
+                                </strong>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-3 py-1 rounded-xl text-xs font-black border tracking-wide transition-all ${bmiInfo.badgeClass}`}
+                            >
+                              {bmiInfo.label}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Distinctive Visual BMI Spectrum Gauge */}
+                        <div className="space-y-1 pt-1">
+                          <div className="relative h-2 w-full rounded-full overflow-hidden flex bg-slate-950 border border-slate-800 shadow-inner">
+                            {/* 1. Underweight (Sky) */}
+                            <div className="h-full w-[20%] bg-gradient-to-r from-sky-500 to-blue-500" title="نقص وزن (< 18.5)" />
+                            {/* 2. Normal (Emerald) */}
+                            <div className="h-full w-[26%] bg-gradient-to-r from-emerald-500 to-teal-400" title="وزن مثالي (18.5 - 24.9)" />
+                            {/* 3. Overweight (Amber) */}
+                            <div className="h-full w-[20%] bg-gradient-to-r from-amber-400 to-orange-400" title="وزن زائد (25 - 29.9)" />
+                            {/* 4. Obese 1 (Orange-Red) */}
+                            <div className="h-full w-[20%] bg-gradient-to-r from-orange-500 to-rose-500" title="سمنة درجة أولى (30 - 34.9)" />
+                            {/* 5. Severe (Rose-Crimson) */}
+                            <div className="h-full w-[14%] bg-gradient-to-r from-rose-600 to-purple-600" title="سمنة مفرطة (>= 35)" />
+                          </div>
+
+                          {/* Gauge Labels */}
+                          <div className="flex items-center justify-between text-[9px] font-bold text-slate-500 px-0.5">
+                            <span className="text-sky-400 font-mono">&lt; 18.5 نحافة</span>
+                            <span className="text-emerald-400 font-mono">18.5 - 25 مثالي</span>
+                            <span className="text-amber-400 font-mono">25 - 30 زائد</span>
+                            <span className="text-rose-400 font-mono">&gt; 30 سمنة</span>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>

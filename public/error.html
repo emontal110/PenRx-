@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>PenRX+ | تنبيه الاتصال</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #020617;
+      color: #f8fafc;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-between p-6">
+  <div class="w-full flex justify-center pt-8">
+    <div class="flex items-center gap-2" dir="ltr">
+      <span class="font-black text-2xl text-white tracking-tight">PenRX<span class="text-emerald-400 font-black">+</span></span>
+    </div>
+  </div>
+
+  <main class="max-w-sm w-full mx-auto text-center space-y-6">
+    <div class="w-20 h-20 mx-auto rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-xl shadow-rose-950/40">
+      <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L3 3m15.364 2.636A9 9 0 003.636 3.636m12.728 0a9 9 0 010 12.728M8.464 8.464a5 5 0 000 7.072m7.072-7.072a5 5 0 010 7.072M12 12h.01" />
+      </svg>
+    </div>
+
+    <div class="space-y-2">
+      <h1 class="text-xl font-black text-white">لا يوجد اتصال بالإنترنت</h1>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        يتطلب تطبيق PenRX+ الطبي اتصالاً نشطاً بالإنترنت للوصول إلى قاعدة بيانات العيادة، وبنك الأدوية الذكي، ومزامنة الروشتات السحابية.
+      </p>
+    </div>
+
+    <div class="pt-4 space-y-3">
+      <button onclick="retryConnection()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2">
+        <span>إعادة المحاولة الآن 🔄</span>
+      </button>
+
+      <p class="text-[11px] text-slate-500">
+        تأكد من تفعيل الواي فاي أو بيانات الهاتف المحمول ثم اضغط إعادة المحاولة
+      </p>
+    </div>
+  </main>
+
+  <footer class="w-full text-center pb-4 text-[11px] text-slate-600">
+    <span>PenRX+ Medical Cloud Systems</span>
+  </footer>
+
+  <script>
+    function retryConnection() {
+      if (window.navigator.onLine) {
+        window.history.back();
+      } else {
+        window.location.reload();
+      }
+    }
+
+    window.addEventListener('online', () => {
+      window.location.reload();
+    });
+  </script>
+</body>
+</html>

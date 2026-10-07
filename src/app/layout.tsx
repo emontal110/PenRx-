@@ -6,6 +6,7 @@ import { PaywallGuard } from "@/components/common/PaywallGuard";
 import { AutoUpdateModal } from "@/components/common/AutoUpdateModal";
 import { GlobalToastContainer } from "@/components/common/GlobalToast";
 import { AppHydrationSplash } from "@/components/common/AppHydrationSplash";
+import { CapacitorNativeBridge } from "@/components/common/CapacitorNativeBridge";
 
 export const metadata: Metadata = {
   title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية الذكية",
@@ -34,6 +35,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" className="dark">
       <body suppressHydrationWarning className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
         <AppHydrationSplash>
+          <CapacitorNativeBridge />
           <Navbar />
           <main className="max-w-7xl 2xl:max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 pb-24 md:pb-8">
             <SubscriptionExpiryBanner />

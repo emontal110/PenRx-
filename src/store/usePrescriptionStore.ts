@@ -149,20 +149,46 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
       setSelectedBranchId: (selectedBranchId) => set({ selectedBranchId }),
 
       toggleVisibleField: (field) =>
-        set((state) => ({
-          visibleFields: {
+        set((state) => {
+          const next = {
             ...state.visibleFields,
             [field]: !state.visibleFields[field],
-          },
-        })),
+          };
+          if (typeof window !== "undefined") {
+            try {
+              const clinicStorage = localStorage.getItem("penrx_clinic_storage");
+              if (clinicStorage) {
+                const parsed = JSON.parse(clinicStorage);
+                if (parsed?.state?.clinic) {
+                  parsed.state.clinic.visibleFields = next;
+                  localStorage.setItem("penrx_clinic_storage", JSON.stringify(parsed));
+                }
+              }
+            } catch {}
+          }
+          return { visibleFields: next };
+        }),
 
       setVisibleFields: (fields) =>
-        set((state) => ({
-          visibleFields: {
+        set((state) => {
+          const next = {
             ...state.visibleFields,
             ...fields,
-          },
-        })),
+          };
+          if (typeof window !== "undefined") {
+            try {
+              const clinicStorage = localStorage.getItem("penrx_clinic_storage");
+              if (clinicStorage) {
+                const parsed = JSON.parse(clinicStorage);
+                if (parsed?.state?.clinic) {
+                  parsed.state.clinic.visibleFields = next;
+                  localStorage.setItem("penrx_clinic_storage", JSON.stringify(parsed));
+                }
+              }
+            } catch {}
+          }
+          return { visibleFields: next };
+        }),
 
       addItem: (itemData) => {
         const newItem: PrescriptionItem = {
@@ -182,7 +208,19 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
 
       clearItems: () => set({ items: [] }),
 
-      resetCurrentPrescription: () =>
+      resetCurrentPrescription: () => {
+        let restoredFields = get().visibleFields;
+        if (typeof window !== "undefined") {
+          try {
+            const clinicStorage = localStorage.getItem("penrx_clinic_storage");
+            if (clinicStorage) {
+              const parsed = JSON.parse(clinicStorage);
+              if (parsed?.state?.clinic?.visibleFields) {
+                restoredFields = { ...DEFAULT_VISIBLE_FIELDS, ...parsed.state.clinic.visibleFields };
+              }
+            }
+          } catch {}
+        }
         set({
           prescriptionNo: generatePrescriptionNo(),
           patient: {
@@ -199,7 +237,9 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
           diagnosis: "",
           notes: "",
           items: [],
-        }),
+          visibleFields: restoredFields,
+        });
+      },
 
       savePrescription: (branchName) => {
         const state = get();
@@ -412,20 +452,23 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
       storage: createJSONStorage(() => localStorage),
       version: 2,
       migrate: (persistedState: any, version: number) => {
-        if (version < 2) {
-          return {
-            ...persistedState,
-            visibleFields: {
-              ...DEFAULT_VISIBLE_FIELDS,
-              ...(persistedState?.visibleFields || {}),
-              showAge: false,
-              showGender: false,
-              showAllergies: false,
-              showDiagnosis: true,
-            },
-          };
+        let clinicVisible = null;
+        if (typeof window !== "undefined") {
+          try {
+            const raw = localStorage.getItem("penrx_clinic_storage");
+            if (raw) {
+              clinicVisible = JSON.parse(raw)?.state?.clinic?.visibleFields;
+            }
+          } catch {}
         }
-        return persistedState;
+        return {
+          ...persistedState,
+          visibleFields: {
+            ...DEFAULT_VISIBLE_FIELDS,
+            ...(clinicVisible || {}),
+            ...(persistedState?.visibleFields || {}),
+          },
+        };
       },
     }
   )

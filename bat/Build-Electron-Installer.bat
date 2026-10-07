@@ -21,6 +21,7 @@ echo.
 echo [i] Project Directory: %CD%
 echo.
 
+if exist ".next" rmdir /s /q ".next" >nul 2>&1
 call npm run electron:build
 
 echo.

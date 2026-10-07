@@ -119,18 +119,13 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
               </p>
             </div>
 
-            {/* High-Tech Ultra-Fast Loading Indicator */}
-            <div className="w-48 sm:w-56 space-y-2 pt-2">
-              <div className="h-1 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-                <div className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 rounded-full w-2/3 animate-[shimmer_1.2s_infinite_linear]"
-                  style={{
-                    backgroundSize: "200% 100%",
-                    animation: "pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-                  }}
-                />
+            {/* High-Tech Ultra-Fast Loading Indicator with Bouncing Ping-Pong Beam */}
+            <div className="w-52 sm:w-64 space-y-2.5 pt-2">
+              <div className="h-1.5 w-full bg-slate-900/90 rounded-full overflow-hidden border border-slate-800 relative shadow-inner">
+                <div className="h-full bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 rounded-full w-2/5 absolute top-0 animate-splash-beam shadow-[0_0_14px_rgba(52,211,153,0.9)]" />
               </div>
-              <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-400/80 font-medium">
-                <ShieldCheck className="w-3.5 h-3.5" />
+              <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-400 font-semibold tracking-wide">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                 <span>جاري تحميل بيانات العيادة والترخيص...</span>
               </div>
             </div>

@@ -44,6 +44,7 @@ jobs:
           cp docs/logo-penrx.jpg out/logo-penrx.jpg 2>/dev/null || true
           cp docs/favicon.ico out/favicon.ico 2>/dev/null || true
           cp public/icon-512.png out/icon-512.png 2>/dev/null || true
+          cp public/error.html out/error.html 2>/dev/null || true
 
       - name: Add Android Native Platform
         run: npx cap add android || true

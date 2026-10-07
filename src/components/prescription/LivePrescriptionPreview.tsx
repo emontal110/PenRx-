@@ -27,6 +27,7 @@ import {
   PrescriptionTemplateDecorations,
   getTemplateContainerStyles,
 } from "./PrescriptionTemplateDecorations";
+import { calculateBmiInfo } from "@/lib/utils";
 
 interface LivePrescriptionPreviewProps {
   prescriptionNo: string;
@@ -52,6 +53,7 @@ export function LivePrescriptionPreview({
   const { clinic, branches, activeBranchId } = useClinicStore();
   const { visibleFields, updateItem } = usePrescriptionStore();
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const bmiInfo = calculateBmiInfo(patient.height, patient.weight);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<PrescriptionItem>>({});
@@ -365,23 +367,37 @@ export function LivePrescriptionPreview({
               </div>
             )}
 
-            {/* Height & Weight */}
+            {/* Height & Weight with Smart Clinical BMI Badge */}
             {(visibleFields.showHeight || visibleFields.showWeight) && (
-              <div className="flex items-center gap-1 text-slate-700 font-semibold">
+              <div className="flex items-center gap-1.5 text-slate-700 font-semibold flex-wrap">
                 <span className="text-slate-400 text-[9.5px] font-normal">القياسات:</span>
                 <span>
-                  {visibleFields.showHeight && patient.height ? `${patient.height} سم` : ""}
-                  {visibleFields.showHeight && visibleFields.showWeight && patient.height && patient.weight ? " • " : ""}
-                  {visibleFields.showWeight && patient.weight ? `${patient.weight} كجم` : ""}
+                  {visibleFields.showHeight && (
+                    <span>{patient.height ? `${patient.height} سم` : "— سم"}</span>
+                  )}
+                  {visibleFields.showHeight && visibleFields.showWeight && " • "}
+                  {visibleFields.showWeight && (
+                    <span>{patient.weight ? `${patient.weight} كجم` : "— كجم"}</span>
+                  )}
                 </span>
+                {bmiInfo && (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9.5px] font-black border transition-all ${bmiInfo.badgeClass} print:${bmiInfo.printBadgeClass} print:shadow-none`}
+                    title={`مؤشر كتلة الجسم (BMI): ${bmiInfo.bmiFormatted} kg/m² • الوزن المثالي: ${bmiInfo.idealWeightMin} - ${bmiInfo.idealWeightMax} كجم`}
+                  >
+                    <span>{bmiInfo.icon}</span>
+                    <span>{bmiInfo.label}</span>
+                    <span className="font-mono text-[8.5px] font-bold" dir="ltr">({bmiInfo.bmiFormatted})</span>
+                  </span>
+                )}
               </div>
             )}
 
             {/* Blood Type */}
-            {visibleFields.showBloodType && patient.bloodType && (
+            {visibleFields.showBloodType && (
               <div className="flex items-center gap-1 font-bold">
                 <span className="text-slate-400 text-[9.5px] font-normal">الفصيلة:</span>
-                <span className="text-rose-600 font-black">{patient.bloodType}</span>
+                <span className="text-rose-600 font-black">{patient.bloodType || "—"}</span>
               </div>
             )}
 
@@ -395,34 +411,43 @@ export function LivePrescriptionPreview({
           </div>
         </div>
 
-        {/* Diagnosis Note if enabled and present */}
-        {visibleFields.showDiagnosis && diagnosis && (
+        {/* Diagnosis Note if enabled */}
+        {visibleFields.showDiagnosis && (
           <div
-            className="mb-3 text-xs font-bold p-2.5 rounded-xl border"
+            className="mb-2.5 text-xs font-bold p-2.5 rounded-xl border flex items-center justify-between gap-2"
             style={{
-              backgroundColor: `${primaryColor}10`,
-              borderColor: `${primaryColor}30`,
+              backgroundColor: `${primaryColor}0c`,
+              borderColor: `${primaryColor}25`,
               color: primaryColor,
             }}
           >
-            <span className="font-black">التشخيص الطبي (Diagnosis): </span>
-            <span className="text-slate-800">{diagnosis}</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-black shrink-0">التشخيص الطبي (Diagnosis): </span>
+              <span className="text-slate-800 font-bold truncate">
+                {diagnosis || "—"}
+              </span>
+            </div>
+            {!diagnosis && (
+              <span className="text-slate-300 font-mono tracking-widest hidden print:inline-block">
+                ............................................................
+              </span>
+            )}
           </div>
         )}
 
         {/* Chronic History & Drug Allergies if enabled */}
         {(visibleFields.showMedicalHistory || visibleFields.showAllergies) && (
-          <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            {visibleFields.showMedicalHistory && patient.medicalHistory && (
-              <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900">
-                <span className="font-black">الأمراض المزمنة والتاريخ الطبي: </span>
-                <span>{patient.medicalHistory}</span>
+          <div className="mb-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {visibleFields.showMedicalHistory && (
+              <div className="p-2.5 rounded-xl bg-blue-50/80 border border-blue-200/80 text-blue-900 text-[11px]">
+                <span className="font-black block sm:inline text-blue-800">الأمراض المزمنة والتاريخ الطبي: </span>
+                <span className="font-bold text-slate-800">{patient.medicalHistory || "—"}</span>
               </div>
             )}
-            {visibleFields.showAllergies && patient.allergyNotes && (
-              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900">
-                <span className="font-black">⚠️ حساسية الأدوية: </span>
-                <span>{patient.allergyNotes}</span>
+            {visibleFields.showAllergies && (
+              <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-amber-900 text-[11px]">
+                <span className="font-black block sm:inline text-amber-800">⚠️ حساسية الأدوية: </span>
+                <span className="font-bold text-slate-800">{patient.allergyNotes || "لا توجد حساسية مسجلة"}</span>
               </div>
             )}
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import Image from "next/image";
 import {
   Building2,
@@ -280,13 +281,20 @@ function SettingsPrescriptionPreview({
           )}
 
           {(visibleFields.showHeight || visibleFields.showWeight) && (
-            <div className="text-slate-700 font-bold">
+            <div className="text-slate-700 font-bold flex items-center gap-1 flex-wrap">
               <span className="text-slate-400 font-medium">القياسات: </span>
               <span>
                 {visibleFields.showHeight && "178 سم"}
                 {visibleFields.showHeight && visibleFields.showWeight && " • "}
                 {visibleFields.showWeight && "82 كجم"}
               </span>
+              {visibleFields.showHeight && visibleFields.showWeight && (
+                <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-800 dark:text-amber-300 border border-amber-400/60 inline-flex items-center gap-1 shadow-xs">
+                  <span>⚠️</span>
+                  <span>وزن زائد (Overweight)</span>
+                  <span className="font-mono text-[8.5px] opacity-90" dir="ltr">(25.9)</span>
+                </span>
+              )}
             </div>
           )}
 
@@ -443,7 +451,7 @@ export default function SettingsPage() {
     setActiveBranchId,
     setDefaultBranch,
   } = useClinicStore();
-  const { visibleFields, toggleVisibleField, savedPrescriptions, archivePrescriptionsForYear } = usePrescriptionStore();
+  const { visibleFields, toggleVisibleField, setVisibleFields, savedPrescriptions, archivePrescriptionsForYear } = usePrescriptionStore();
   const { machineId, subscriberId } = useSubscriptionStore();
   const [activeTab, setActiveTab] = useState<"profile" | "patientFields" | "backup">("profile");
 
@@ -647,6 +655,73 @@ export default function SettingsPage() {
     setTimeout(() => setBiometricFeedback(null), 6000);
   };
 
+  const handleTogglePatientField = (field: keyof typeof visibleFields) => {
+    toggleVisibleField(field);
+    const fieldNames: Record<string, string> = {
+      showAge: "السن (العمر)",
+      showGender: "الجنس (النوع)",
+      showHeight: "الطول",
+      showWeight: "الوزن",
+      showBloodType: "فصيلة الدم",
+      showDiagnosis: "التشخيص الطبي",
+      showMedicalHistory: "الأمراض المزمنة والتاريخ الطبي",
+      showAllergies: "تنبيه حساسية الدواء",
+    };
+    const newState = !visibleFields[field];
+    showGlobalToast(
+      newState
+        ? `✅ تم تفعيل حقل "${fieldNames[field]}" وتطبيقه على الروشتة فوراً!`
+        : `ℹ️ تم إخفاء حقل "${fieldNames[field]}" من الروشتة!`,
+      "success"
+    );
+  };
+
+  const handleApplyPreset = (preset: "standard" | "full" | "pediatric") => {
+    if (preset === "standard") {
+      const next = {
+        showAge: false,
+        showGender: false,
+        showHeight: false,
+        showWeight: false,
+        showBloodType: false,
+        showDiagnosis: true,
+        showMedicalHistory: false,
+        showAllergies: false,
+      };
+      setVisibleFields(next);
+      updateClinic({ visibleFields: next });
+      showGlobalToast("✅ تم تطبيق الوضع القياسي (التشخيص الطبي فقط) بنجاح!", "success");
+    } else if (preset === "full") {
+      const next = {
+        showAge: true,
+        showGender: true,
+        showHeight: true,
+        showWeight: true,
+        showBloodType: true,
+        showDiagnosis: true,
+        showMedicalHistory: true,
+        showAllergies: true,
+      };
+      setVisibleFields(next);
+      updateClinic({ visibleFields: next });
+      showGlobalToast("✅ تم تفعيل كافة حقول المريض (الوضع الشامل) وتطبيقها فوراً!", "success");
+    } else if (preset === "pediatric") {
+      const next = {
+        showAge: true,
+        showGender: true,
+        showHeight: true,
+        showWeight: true,
+        showBloodType: false,
+        showDiagnosis: true,
+        showMedicalHistory: true,
+        showAllergies: true,
+      };
+      setVisibleFields(next);
+      updateClinic({ visibleFields: next });
+      showGlobalToast("✅ تم تطبيق وضع الأطفال والباطنة (السن والوزن والتاريخ والحساسية)!", "success");
+    }
+  };
+
   const handleSaveClinicSettings = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -687,6 +762,7 @@ export default function SettingsPage() {
       showFooter,
       biometricsEnabled,
       isProfileSaved: true,
+      visibleFields,
     };
 
     if (isAddingNew) {
@@ -1821,6 +1897,37 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* Quick Presets Bar */}
+              <div className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800/90 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>تنسيقات سريعة جاهزة:</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset("standard")}
+                    className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-300 border border-slate-700/80 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                  >
+                    الوضع القياسي (تشخيص فقط)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset("pediatric")}
+                    className="px-3 py-1.5 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-300 border border-cyan-700/50 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                  >
+                    أطفال وباطنة (قياسات وحساسية)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset("full")}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 text-xs font-black transition-all cursor-pointer active:scale-95"
+                  >
+                    الوضع الشامل (جميع الحقول) 🌟
+                  </button>
+                </div>
+              </div>
+
               {/* Category 1: Demographics & Physical Vitals */}
               <div className="space-y-3 pt-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 border-b border-slate-800/80 pb-2">
@@ -1837,7 +1944,7 @@ export default function SettingsPage() {
                     <input
                       type="checkbox"
                       checked={visibleFields.showAge}
-                      onChange={() => toggleVisibleField("showAge")}
+                      onChange={() => handleTogglePatientField("showAge")}
                       className="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
                     />
                   </label>
@@ -1851,7 +1958,7 @@ export default function SettingsPage() {
                     <input
                       type="checkbox"
                       checked={visibleFields.showGender}
-                      onChange={() => toggleVisibleField("showGender")}
+                      onChange={() => handleTogglePatientField("showGender")}
                       className="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
                     />
                   </label>
@@ -1865,7 +1972,7 @@ export default function SettingsPage() {
                     <input
                       type="checkbox"
                       checked={visibleFields.showHeight}
-                      onChange={() => toggleVisibleField("showHeight")}
+                      onChange={() => handleTogglePatientField("showHeight")}
                       className="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
                     />
                   </label>
@@ -1879,7 +1986,7 @@ export default function SettingsPage() {
                     <input
                       type="checkbox"
                       checked={visibleFields.showWeight}
-                      onChange={() => toggleVisibleField("showWeight")}
+                      onChange={() => handleTogglePatientField("showWeight")}
                       className="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
                     />
                   </label>
@@ -1893,7 +2000,7 @@ export default function SettingsPage() {
                     <input
                       type="checkbox"
                       checked={visibleFields.showBloodType}
-                      onChange={() => toggleVisibleField("showBloodType")}
+                      onChange={() => handleTogglePatientField("showBloodType")}
                       className="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
                     />
                   </label>
@@ -1916,7 +2023,7 @@ export default function SettingsPage() {
                     <input
                       type="checkbox"
                       checked={visibleFields.showDiagnosis}
-                      onChange={() => toggleVisibleField("showDiagnosis")}
+                      onChange={() => handleTogglePatientField("showDiagnosis")}
                       className="w-5 h-5 accent-cyan-500 rounded cursor-pointer"
                     />
                   </label>
@@ -1930,7 +2037,7 @@ export default function SettingsPage() {
                     <input
                       type="checkbox"
                       checked={visibleFields.showMedicalHistory}
-                      onChange={() => toggleVisibleField("showMedicalHistory")}
+                      onChange={() => handleTogglePatientField("showMedicalHistory")}
                       className="w-5 h-5 accent-cyan-500 rounded cursor-pointer"
                     />
                   </label>
@@ -1944,10 +2051,40 @@ export default function SettingsPage() {
                     <input
                       type="checkbox"
                       checked={visibleFields.showAllergies}
-                      onChange={() => toggleVisibleField("showAllergies")}
+                      onChange={() => handleTogglePatientField("showAllergies")}
                       className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
                     />
                   </label>
+                </div>
+              </div>
+
+              {/* Bottom Actions & Confirmation Banner */}
+              <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[11px] text-emerald-400 font-bold">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>تُحفظ وتُطبَّق هذه الإعدادات تلقائياً وفورياً على صفحة تحرير الروشتة والطباعة.</span>
+                </div>
+
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateClinic({ visibleFields });
+                      showGlobalToast("✅ تم حفظ وتأكيد تفضيلات حقول الروشتة في ملف العيادة بنجاح!", "success");
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-emerald-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>حفظ التفضيلات 💾</span>
+                  </button>
+
+                  <Link
+                    href="/prescriptions/new"
+                    className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs transition-all shadow-md hover:brightness-110 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>تحرير روشتة الآن 🩺</span>
+                  </Link>
                 </div>
               </div>
             </div>

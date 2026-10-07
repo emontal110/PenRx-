@@ -126,3 +126,31 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   border-radius: 4px;
 }
 
+/* Splash Ping-Pong Beam Animation (Right & Left) */
+@keyframes splash-beam-pingpong {
+  0% {
+    transform: translateX(-110%);
+  }
+  50% {
+    transform: translateX(110%);
+  }
+  100% {
+    transform: translateX(-110%);
+  }
+}
+
+.animate-splash-beam {
+  animation: splash-beam-pingpong 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Remove number input spin buttons / up-down steppers across all browsers */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+

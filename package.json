@@ -1,6 +1,6 @@
 {
   "name": "penrx-plus",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "private": true,
   "description": "PenRX+ - The Ultimate Next-Gen Medical Prescription & Clinic Management Suite",
   "main": "electron/main.js",
@@ -17,6 +17,7 @@
     "cap:open:android": "cap open android"
   },
   "dependencies": {
+    "@capacitor/app": "^6.0.3",
     "@prisma/client": "^5.19.1",
     "@tanstack/react-query": "^5.56.2",
     "clsx": "^2.1.1",

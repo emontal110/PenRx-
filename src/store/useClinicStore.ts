@@ -46,6 +46,16 @@ export interface ClinicSettings {
   showFooter: boolean;
   biometricsEnabled: boolean;
   isProfileSaved?: boolean;
+  visibleFields?: {
+    showAge: boolean;
+    showGender: boolean;
+    showHeight: boolean;
+    showWeight: boolean;
+    showBloodType: boolean;
+    showDiagnosis: boolean;
+    showMedicalHistory: boolean;
+    showAllergies: boolean;
+  };
 }
 
 interface ClinicStoreState {
@@ -85,6 +95,16 @@ const DEFAULT_CLINIC: ClinicSettings = {
   showFooter: true,
   biometricsEnabled: false,
   isProfileSaved: false,
+  visibleFields: {
+    showAge: false,
+    showGender: false,
+    showHeight: false,
+    showWeight: false,
+    showBloodType: false,
+    showDiagnosis: true,
+    showMedicalHistory: false,
+    showAllergies: false,
+  },
 };
 
 // No mock or demo branches initially - created automatically on first clinic profile save

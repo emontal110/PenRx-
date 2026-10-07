@@ -80,5 +80,19 @@ desktop.ini
 .gemini/
 .agents/
 
-# 10. Cloud Deployment Platforms (if any)
-.vercel
+# 10. Cloud Deployment Platforms & Cache
+.vercel/
+.turbo/
+.cache/
+
+# 11. Public Download Binaries (Generated locally)
+public/downloads/*.apk
+public/downloads/*.exe
+public/downloads/*.zip
+!public/downloads/.gitkeep
+
+# 12. Security & Certificates
+*.pem
+*.cert
+*.crt
+*.key

@@ -13,6 +13,7 @@ import {
   Home,
   Plus,
   Sparkles,
+  RotateCw,
 } from "lucide-react";
 import { useSubscriptionStore, getSubscriptionDetails } from "@/store/useSubscriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
@@ -24,11 +25,22 @@ export function Navbar() {
   const { subscriptions, machineId, syncWithServer } = useSubscriptionStore();
   const { clinic } = useClinicStore();
   const [mounted, setMounted] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     syncWithServer();
   }, [syncWithServer]);
+
+  const handlePageReload = () => {
+    setIsReloading(true);
+    try {
+      syncWithServer();
+    } catch {}
+    setTimeout(() => {
+      window.location.reload();
+    }, 200);
+  };
 
   const subDetails = getSubscriptionDetails(subscriptions, machineId);
   const isTrialAccount = Boolean(
@@ -64,8 +76,9 @@ export function Navbar() {
     }
   }, [mounted, subDetails.isActive, subDetails.daysRemaining]);
 
-  // Desktop navigation items (clean, no "لوحة التحكم", focused on doctor workflow)
+  // Desktop navigation items (الصفحة الرئيسية بجانب زر روشتة)
   const DESKTOP_LINKS = [
+    { href: "/", label: "الصفحة الرئيسية", icon: Home },
     { href: "/prescriptions/new", label: "روشتة", icon: Plus, highlight: true },
     { href: "/history", label: "سجل الروشتات", icon: Clock },
     { href: "/settings", label: "الإعدادات", icon: Settings },
@@ -86,9 +99,9 @@ export function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-18">
             {/* Right: Brand & Clinic */}
-            <Link href="/" className="flex items-center gap-3 group shrink-0">
+            <div className="flex items-center gap-3 shrink-0">
               {/* 1. الشعار على اليمين */}
-              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-md shadow-emerald-950/40 group-hover:border-emerald-400 group-hover:scale-105 transition-all">
+              <Link href="/" className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-md shadow-emerald-950/40 hover:border-emerald-400 hover:scale-105 transition-all shrink-0">
                 <Image
                   src="/logo-penrx.jpg"
                   alt="PenRX+"
@@ -97,30 +110,24 @@ export function Navbar() {
                   sizes="40px"
                   className="object-cover"
                 />
-              </div>
+              </Link>
 
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5">
-                  {/* 2. يليه مباشرة شارة PRO 👑 أو TRIAL 🎁 (اضغط عليها للدخول للاشتراك) */}
+                  {/* 2. يليه مباشرة شارة PRO 👑 أو TRIAL 🎁 (رابط مباشر لصفحة الاشتراكات) */}
                   {mounted && subDetails.isActive && (
                     isTrialAccount ? (
-                      <span
-                        onClick={(e) => {
-                          e.preventDefault();
-                          window.location.href = "/subscriptions";
-                        }}
-                        className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-black border border-cyan-500/35 shadow-sm shadow-cyan-950/30 shrink-0 cursor-pointer transition-all"
-                        title="باقة تجريبية - اضغط للاشتراك والدفع"
+                      <Link
+                        href="/subscriptions"
+                        className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-black border border-cyan-500/35 shadow-sm shadow-cyan-950/30 shrink-0 cursor-pointer transition-all hover:scale-105"
+                        title="باقة تجريبية - اضغط لإدارة الاشتراك والباقات"
                       >
                         TRIAL 🎁
-                      </span>
+                      </Link>
                     ) : (
-                      <span
-                        onClick={(e) => {
-                          e.preventDefault();
-                          window.location.href = "/subscriptions";
-                        }}
-                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-black border shadow-sm shrink-0 cursor-pointer transition-all ${
+                      <Link
+                        href="/subscriptions"
+                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-black border shadow-sm shrink-0 cursor-pointer transition-all hover:scale-105 ${
                           subDetails.daysRemaining <= 3
                             ? "bg-rose-500/25 hover:bg-rose-500/35 text-rose-300 border-rose-500/50 shadow-rose-950/30 animate-pulse"
                             : subDetails.daysRemaining <= 7
@@ -138,25 +145,27 @@ export function Navbar() {
                           : subDetails.daysRemaining <= 7
                           ? `PRO ⏳ (${subDetails.daysRemaining}ي)`
                           : "PRO 👑"}
-                      </span>
+                      </Link>
                     )
                   )}
 
                   {/* 3. اسم التطبيق PenRX مع + بعد حرف X */}
-                  <span dir="ltr" className="text-lg sm:text-xl font-black bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent tracking-tight inline-flex items-center">
-                    PenRX<span className="text-emerald-400 font-black">+</span>
-                  </span>
+                  <Link href="/" className="group inline-flex items-center">
+                    <span dir="ltr" className="text-lg sm:text-xl font-black bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent tracking-tight inline-flex items-center">
+                      PenRX<span className="text-emerald-400 font-black">+</span>
+                    </span>
+                  </Link>
 
                   {/* 4. الفيرجن مرتبط بملف الباكدج */}
                   <span dir="ltr" className="hidden sm:inline-block px-1.5 py-0.5 rounded-md bg-slate-900 text-slate-400 text-[10px] font-mono font-bold border border-slate-800 shrink-0">
                     v{packageInfo.version}
                   </span>
                 </div>
-                <span className="text-[11px] font-bold text-slate-400 -mt-0.5 truncate max-w-[140px] sm:max-w-[220px]">
+                <Link href="/" className="text-[11px] font-bold text-slate-400 -mt-0.5 truncate max-w-[140px] sm:max-w-[220px] hover:text-slate-200 transition-colors">
                   {mounted ? (clinic.nameAr || clinic.name || "العيادة") : ""}
-                </span>
+                </Link>
               </div>
-            </Link>
+            </div>
 
             {/* Center: Desktop Navigation Pills (Clean & Elegant) */}
             <nav className="hidden md:flex items-center gap-1.5 bg-slate-900/60 p-1.5 rounded-2xl border border-slate-800/80 shadow-inner">
@@ -194,12 +203,12 @@ export function Navbar() {
               })}
             </nav>
 
-            {/* Left: Subscription Status Pill (Distinctive Premium Orange Theme) */}
-            <div className="flex items-center gap-2.5">
+            {/* Left: Subscription Status Pill & Ultra-Modern Quick Reload Button */}
+            <div className="flex items-center gap-2">
               <Link
                 href="/subscriptions"
                 suppressHydrationWarning
-                className="px-3.5 py-1.5 rounded-xl border text-xs font-black flex items-center gap-2 transition-all hover:scale-105 shadow-md shadow-orange-950/50 bg-gradient-to-r from-orange-500/20 via-amber-500/20 to-orange-500/15 border-orange-500/50 hover:border-orange-400 text-orange-300 hover:text-orange-100 cursor-pointer"
+                className="px-3 sm:px-3.5 py-1.5 rounded-xl border text-xs font-black flex items-center gap-2 transition-all hover:scale-105 shadow-md shadow-orange-950/50 bg-gradient-to-r from-orange-500/20 via-amber-500/20 to-orange-500/15 border-orange-500/50 hover:border-orange-400 text-orange-300 hover:text-orange-100 cursor-pointer"
                 title="إدارة الباقة والاشتراك والدفع"
               >
                 <Crown className="w-3.5 h-3.5 shrink-0 text-orange-400" />
@@ -215,6 +224,17 @@ export function Navbar() {
                   )}
                 </span>
               </Link>
+
+              {/* Ultra-Modern Quick Reload Button */}
+              <button
+                type="button"
+                onClick={handlePageReload}
+                disabled={isReloading}
+                className="p-2 sm:p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 border border-slate-800 hover:border-emerald-500/40 transition-all shadow-md active:scale-90 cursor-pointer flex items-center justify-center shrink-0 group"
+                title="تحديث وإعادة تحميل الصفحة والبيانات"
+              >
+                <RotateCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:rotate-180 transition-transform duration-300 ${isReloading ? "animate-spin text-emerald-400" : ""}`} />
+              </button>
             </div>
           </div>
         </div>

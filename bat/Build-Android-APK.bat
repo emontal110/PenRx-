@@ -42,13 +42,17 @@ if not "%JAVA_HOME%"=="" (
 
 echo.
 echo 1. Building Web App Production Bundle...
+if exist ".next" rmdir /s /q ".next" >nul 2>&1
 call npm run build
 
 echo.
 echo 2. Syncing Capacitor Android Assets...
 if not exist "out" mkdir "out"
+if exist "public\error.html" copy /Y "public\error.html" "out\error.html" >nul 2>&1
 if not exist "out\index.html" (
-    if exist "docs\index.html" (
+    if exist "mobile.html" (
+        copy /Y "mobile.html" "out\index.html" >nul 2>&1
+    ) else if exist "docs\index.html" (
         copy /Y "docs\index.html" "out\index.html" >nul 2>&1
     ) else (
         echo ^<!DOCTYPE html^>^<html^>^<head^>^<meta charset="utf-8"^>^<title^>PenRX+^</title^>^</head^>^<body^>PenRX+ Mobile^</body^>^</html^> > "out\index.html"
@@ -57,32 +61,39 @@ if not exist "out\index.html" (
 call npx cap sync android
 
 echo.
-echo 3. Compiling Real Android APK via Gradle...
+echo 3. Compiling Signed Release Android APK via Gradle...
 cd android
 if exist "gradlew.bat" (
-    call gradlew.bat assembleDebug
+    call gradlew.bat assembleRelease
 ) else (
-    call gradlew assembleDebug
+    call gradlew assembleRelease
 )
 cd /d "%PROJECT_ROOT%"
 
 echo.
-echo 4. Deploying APK file to public downloads folder...
+echo 4. Deploying Signed Release APK to public downloads folder...
 if not exist "public\downloads" mkdir "public\downloads"
-if exist "android\app\build\outputs\apk\debug\app-debug.apk" (
+if exist "android\app\build\outputs\apk\release\app-release.apk" (
+    copy /Y "android\app\build\outputs\apk\release\app-release.apk" "public\downloads\PenRX+.apk"
+    echo.
+    echo =========================================================
+    echo [SUCCESS] Official Signed Production APK deployed to:
+    echo    - %CD%\public\downloads\PenRX+.apk
+    echo    - %CD%\android\app\build\outputs\apk\release\app-release.apk
+    echo =========================================================
+    start "" explorer "%CD%\public\downloads"
+) else if exist "android\app\build\outputs\apk\debug\app-debug.apk" (
     copy /Y "android\app\build\outputs\apk\debug\app-debug.apk" "public\downloads\PenRX+.apk"
     echo.
     echo =========================================================
-    echo [SUCCESS] Real Android APK compiled and deployed to:
+    echo [NOTICE] Debug fallback APK deployed to:
     echo    - %CD%\public\downloads\PenRX+.apk
-    echo    - %CD%\android\app\build\outputs\apk\debug\app-debug.apk
     echo =========================================================
-    start "" explorer "%CD%\public\downloads"
 ) else (
     echo.
     echo [NOTE] To build APK via Android Studio GUI:
     echo    run Open-Android-Studio.bat or execute npx cap open android
-    echo    then click Build - Build Bundle - Build APK.
+    echo    then click Build - Build Bundle(s) / APK(s) - Build APK(s).
 )
 
 echo.

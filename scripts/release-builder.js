@@ -183,7 +183,7 @@ if (fs.existsSync(mobileSource)) {
   }
 }
 // Copy supporting assets for portal
-const assetsToCopy = ["logo-penrx.jpg", "favicon.ico", "icon-512.png"];
+const assetsToCopy = ["logo-penrx.jpg", "favicon.ico", "icon-512.png", "error.html"];
 for (const a of assetsToCopy) {
   const srcDoc = path.join(rootDir, "docs", a);
   const srcPub = path.join(rootDir, "public", a);
