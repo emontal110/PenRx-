@@ -1,10 +1,10 @@
 {
-  "version": "1.19",
-  "versionCode": 20,
+  "version": "1.20",
+  "versionCode": 21,
   "releaseDate": "2026-10-11",
   "appName": "PenRX+",
   "githubRepo": "emontal110/PenRx-",
-  "releaseNotes": "ربط تطبيق الأندرويد بالكامل بسيرفر Vercel السحابي وحل مشكلة تحديث نسخة الكمبيوتر",
-  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.19/PenRX+-Setup.exe",
-  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.19/PenRX+.apk"
+  "releaseNotes": "PenRX+ Official Automated Release",
+  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.20/PenRX+-Setup.exe",
+  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.20/PenRX+.apk"
 }
