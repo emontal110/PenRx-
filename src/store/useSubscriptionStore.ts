@@ -483,17 +483,10 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               if (fresh.status === "ACTIVE") {
                 foundActive = true;
               }
-            } else if (data.subscription === null) {
-              // Server explicitly says subscription is deleted! Purge local pending/active state
-              set((state) => ({
-                subscriptions: state.subscriptions.filter(
-                  (s) => s.machineId !== machineId && s.subscriberId !== subId
-                ),
-                currentSubscription: null,
-                signatureToken: null,
-                lastSyncedAt: Date.now(),
-              }));
             }
+            // Note: If data.subscription is null, do NOT purge local state.
+            // In serverless/Vercel environments, SQLite/memory cache is local to the instance
+            // and does not mirror Supabase Cloud. Purging on null caused rapid oscillatory flashing.
           }
         } catch {
           // Local server fetch skipped/error
@@ -531,18 +524,9 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                   subscriberId: mySub.subscriberId || state.subscriberId,
                   lastSyncedAt: Date.now(),
                 }));
-              } else if (Array.isArray(rows) && rows.length === 0) {
-                // Subscription was deleted by admin from cloud portal!
-                // Purge stale local record so user doesn't stay stuck on "pending"
-                set((state) => ({
-                  subscriptions: state.subscriptions.filter(
-                    (s) => s.machineId !== machineId && s.subscriberId !== subId
-                  ),
-                  currentSubscription: null,
-                  signatureToken: null,
-                  lastSyncedAt: Date.now(),
-                }));
               }
+              // If rows.length === 0, preserve active/pending local records to prevent UI thrashing.
+              // Users can explicitly cancel their pending request via cancelPendingRequest().
             }
           } catch {}
         }

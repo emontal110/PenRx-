@@ -1393,18 +1393,12 @@
             localStorage.setItem("penrx_last_sub", JSON.stringify(currentSubscription));
             updateUiForSubscription(currentSubscription);
             return;
-          } else if (Array.isArray(rows) && rows.length === 0) {
-            // Subscription was deleted or revoked by admin in portal!
-            // Clean up stale local record immediately so doctor does not stay stuck in "waiting for activation"
-            localStorage.removeItem("penrx_last_sub");
-            currentSubscription = null;
-            updateUiForSubscription(null);
-            return;
           }
+          // Note: If rows.length === 0, preserve local storage to prevent wiping newly submitted requests
         }
       } catch {}
 
-      // Fallback to local stored record only if network completely failed
+      // Fallback to local stored record
       const local = localStorage.getItem("penrx_last_sub");
       if (local) {
         try {
@@ -1538,7 +1532,7 @@
       renderHomeStats();
 
       checkSubscriptionStatus();
-      setInterval(checkSubscriptionStatus, 4000); // Live poll cloud portal
+      setInterval(checkSubscriptionStatus, 8000); // Live poll cloud portal smoothly
 
       lucide.createIcons();
     });

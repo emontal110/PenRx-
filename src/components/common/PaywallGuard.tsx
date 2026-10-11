@@ -32,9 +32,14 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
       runDailySilentBackupAndAutoArchival().catch(() => {});
     } catch {}
 
-    const interval = setInterval(syncWithServer, 2500); // 2.5s fast polling for instant unlock
+    // Adaptive background sync:
+    // If pending approval: poll every 5 seconds to catch instant activation
+    // If already active: poll every 60 seconds for quiet background verification
+    // Otherwise: poll every 30 seconds
+    const intervalMs = subDetails.isPending ? 5000 : subDetails.isActive ? 60000 : 30000;
+    const interval = setInterval(syncWithServer, intervalMs);
     return () => clearInterval(interval);
-  }, [syncWithServer, initHardwareId]);
+  }, [syncWithServer, initHardwareId, subDetails.isPending, subDetails.isActive]);
 
   // Check if mandatory clinic profile is saved (Doctor name, clinic name, phone)
   const isProfileComplete = Boolean(

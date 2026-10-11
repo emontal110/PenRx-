@@ -170,6 +170,7 @@ export default function SubscriptionsPage() {
         (clinic.name?.trim() || clinic.nameAr?.trim()) &&
         clinic.phone?.trim()
       );
+      setShowWelcomeModal(false);
       router.push(isProfileComplete ? "/" : "/settings");
       return;
     }
