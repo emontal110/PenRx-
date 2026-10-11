@@ -11,6 +11,21 @@ let serverProcess = null;
 let CACHED_HARDWARE_ID = null;
 let activeServerUrl = null;
 
+// --- SINGLE INSTANCE LOCK ---
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  console.log("[PenRX+ Electron] Another instance is already running. Quitting duplicate instance.");
+  app.quit();
+  process.exit(0);
+}
+
+app.on("second-instance", () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
 // Determine app root directory
 const appDir = app.isPackaged
   ? path.join(process.resourcesPath, "app")
@@ -99,6 +114,152 @@ async function getHardwareMachineId() {
 // IPC handler: renderer requests hardware machine ID
 ipcMain.handle("get-hardware-machine-id", async () => {
   return await getHardwareMachineId();
+});
+
+// IPC handler: return current packaged electron app version
+ipcMain.handle("get-app-version", () => {
+  return app.getVersion();
+});
+
+// IPC handler: open external URL safely in default system browser
+ipcMain.handle("open-external", async (event, url) => {
+  if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+    await shell.openExternal(url);
+    return true;
+  }
+  return false;
+});
+
+// Stream file download with 301/302/307 redirect support
+function downloadFileWithRedirects(url, destPath, onProgress, maxRedirects = 6) {
+  return new Promise((resolve, reject) => {
+    if (maxRedirects <= 0) {
+      return reject(new Error("تم تجاوز الحد الأقصى لإعادة التوجيه (Too many redirects)"));
+    }
+
+    const isHttps = url.startsWith("https://");
+    const client = isHttps ? require("https") : require("http");
+
+    const request = client.get(
+      url,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PenRX-Desktop-Updater",
+          Accept: "*/*",
+        },
+      },
+      (res) => {
+        // Handle 3xx Redirects
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume(); // consume response data to free up memory
+          return downloadFileWithRedirects(res.headers.location, destPath, onProgress, maxRedirects - 1)
+            .then(resolve)
+            .catch(reject);
+        }
+
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`فشل تحميل الملف من السيرفر (كود الحالة: ${res.statusCode})`));
+        }
+
+        const totalBytes = parseInt(res.headers["content-length"] || "0", 10);
+        let downloadedBytes = 0;
+        const fileStream = fs.createWriteStream(destPath);
+
+        res.on("data", (chunk) => {
+          downloadedBytes += chunk.length;
+          if (onProgress) {
+            const percent = totalBytes > 0 ? Math.min(Math.round((downloadedBytes / totalBytes) * 100), 99) : 0;
+            const downloadedMB = parseFloat((downloadedBytes / (1024 * 1024)).toFixed(1));
+            const totalMB = totalBytes > 0 ? parseFloat((totalBytes / (1024 * 1024)).toFixed(1)) : 0;
+            onProgress({ percent, downloadedMB, totalMB, downloadedBytes, totalBytes });
+          }
+        });
+
+        res.pipe(fileStream);
+
+        fileStream.on("finish", () => {
+          fileStream.close(() => {
+            if (onProgress) {
+              const finalMB = parseFloat((downloadedBytes / (1024 * 1024)).toFixed(1));
+              onProgress({ percent: 100, downloadedMB: finalMB, totalMB: finalMB, completed: true });
+            }
+            resolve(destPath);
+          });
+        });
+
+        fileStream.on("error", (err) => {
+          fs.unlink(destPath, () => {});
+          reject(err);
+        });
+      }
+    );
+
+    request.on("error", (err) => {
+      fs.unlink(destPath, () => {});
+      reject(err);
+    });
+
+    request.setTimeout(120000, () => {
+      request.destroy();
+      fs.unlink(destPath, () => {});
+      reject(new Error("انتهت مهلة الاتصال أثناء تحميل التحديث"));
+    });
+  });
+}
+
+// IPC handler: download new setup .exe, spawn installer, and quit current app cleanly
+ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
+  const targetUrl =
+    downloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
+  const tempPath = path.join(app.getPath("temp"), "PenRX+-Setup-Latest.exe");
+
+  try {
+    console.log(`[PenRX+ AutoUpdate] Starting native download from: ${targetUrl}`);
+    if (fs.existsSync(tempPath)) {
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {}
+    }
+
+    await downloadFileWithRedirects(targetUrl, tempPath, (progressData) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("update-download-progress", progressData);
+      }
+    });
+
+    console.log(`[PenRX+ AutoUpdate] Download completed to ${tempPath}. Spawning installer...`);
+
+    // Launch installer detached so it continues after app exits
+    const { spawn } = require("child_process");
+    const installer = spawn(tempPath, [], {
+      detached: true,
+      stdio: "ignore",
+    });
+    installer.unref();
+
+    // Kill background next server process immediately so port 3000 and all file locks are released
+    if (serverProcess && serverProcess.pid) {
+      try {
+        if (process.platform === "win32") {
+          exec(`taskkill /pid ${serverProcess.pid} /T /F`);
+        } else {
+          serverProcess.kill("SIGKILL");
+        }
+      } catch {}
+      serverProcess = null;
+    }
+
+    // Give installer 1 second to start, then quit electron
+    setTimeout(() => {
+      app.quit();
+    }, 1200);
+
+    return { success: true };
+  } catch (err) {
+    console.error("[PenRX+ AutoUpdate Error]:", err);
+    return { success: false, error: err.message || "حدث خطأ أثناء تحميل وتثبيت التحديث" };
+  }
 });
 
 // Check if a URL responds to HTTP requests
@@ -397,9 +558,13 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
-  if (serverProcess) {
+  if (serverProcess && serverProcess.pid) {
     try {
-      serverProcess.kill();
+      if (process.platform === "win32") {
+        exec(`taskkill /pid ${serverProcess.pid} /T /F`);
+      } else {
+        serverProcess.kill("SIGKILL");
+      }
     } catch {}
     serverProcess = null;
   }

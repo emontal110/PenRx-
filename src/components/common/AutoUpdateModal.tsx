@@ -26,6 +26,23 @@ interface UpdateInfo {
   androidDownloadUrl?: string;
 }
 
+function compareSemver(current: string, latest: string): boolean {
+  try {
+    const c = current.replace(/^v/, "").split(".").map(Number);
+    const l = latest.replace(/^v/, "").split(".").map(Number);
+
+    for (let i = 0; i < 3; i++) {
+      const cPart = c[i] || 0;
+      const lPart = l[i] || 0;
+      if (lPart > cPart) return true;
+      if (lPart < cPart) return false;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export function AutoUpdateModal() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -58,9 +75,26 @@ export function AutoUpdateModal() {
 
     async function checkForUpdates() {
       try {
-        const res = await fetch("/api/version/check", { cache: "no-store" });
+        let currentAppVer = "";
+        const w = typeof window !== "undefined" ? (window as any) : null;
+        if (w?.penrxDesktop?.getAppVersion) {
+          try {
+            currentAppVer = await w.penrxDesktop.getAppVersion();
+          } catch {}
+        }
+
+        const url = currentAppVer
+          ? `/api/version/check?currentVersion=${encodeURIComponent(currentAppVer)}`
+          : "/api/version/check";
+
+        const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) return;
         const data: UpdateInfo = await res.json();
+
+        // Extra safeguard: If running in Electron and app version >= latestVersion, do not show update modal
+        if (currentAppVer && !compareSemver(currentAppVer, data.latestVersion)) {
+          return;
+        }
 
         if (data.hasUpdate) {
           const dismissedVersion = localStorage.getItem("penrx_dismissed_update_version");
@@ -83,6 +117,9 @@ export function AutoUpdateModal() {
     return null;
   }
 
+  const isElectron =
+    typeof window !== "undefined" && Boolean((window as any).penrxDesktop?.isElectron);
+
   const handleDismiss = () => {
     if (isDownloading) {
       if (abortControllerRef.current) {
@@ -95,98 +132,90 @@ export function AutoUpdateModal() {
     setIsOpen(false);
   };
 
-  const startAutoUpdate = async (selectedType?: "desktop" | "mobile") => {
-    const targetType = selectedType || platform;
-    setIsDownloading(true);
-    setDownloadProgress(0);
-    setDownloadedMB(0);
-    setTotalMB(0);
-    setDownloadStatus("downloading");
-    setDownloadError(null);
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    try {
-      const response = await fetch(`/api/version/download?type=${targetType}`, {
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`تعذر بدء التحميل من السيرفر (${response.status})`);
-      }
-
-      const contentLength = response.headers.get("content-length");
-      const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-      if (totalBytes > 0) {
-        setTotalMB(parseFloat((totalBytes / (1024 * 1024)).toFixed(1)));
-      }
-
-      if (!response.body) {
-        throw new Error("استجابة السيرفر لا تحتوي على دفق بيانات");
-      }
-
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let receivedBytes = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        chunks.push(value);
-        receivedBytes += value.length;
-
-        if (totalBytes > 0) {
-          const percent = Math.min(Math.round((receivedBytes / totalBytes) * 100), 99);
-          setDownloadProgress(percent);
-          setDownloadedMB(parseFloat((receivedBytes / (1024 * 1024)).toFixed(1)));
-        } else {
-          // Fake smooth progress when total size header isn't passed by upstream
-          setDownloadedMB(parseFloat((receivedBytes / (1024 * 1024)).toFixed(1)));
-          setDownloadProgress((prev) => Math.min(prev + 5, 95));
-        }
-      }
-
-      // Finish download
-      setDownloadProgress(100);
-      setDownloadStatus("completed");
-
-      const mimeType =
-        targetType === "mobile"
-          ? "application/vnd.android.package-archive"
-          : "application/octet-stream";
-      const blob = new Blob(chunks as any[], { type: mimeType });
-      const blobUrl = window.URL.createObjectURL(blob);
-
-      const fileName = targetType === "mobile" ? "PenRX+.apk" : "PenRX+-Setup.exe";
-
-      // Trigger automatic file download / open in browser / OS
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      // Clean up blob URL after 60s
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
-    } catch (err: any) {
-      if (err.name === "AbortError") {
-        setDownloadStatus("idle");
-        setIsDownloading(false);
-        return;
-      }
-      console.error("Update download error:", err);
-      setDownloadStatus("error");
-      setDownloadError(err.message || "حدث خطأ أثناء تحميل التحديث");
-    }
-  };
-
   const directFallbackUrl =
     platform === "mobile"
       ? updateInfo.androidDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
       : updateInfo.desktopDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
+
+  const handleManualDownload = (customUrl?: string) => {
+    const targetUrl = customUrl || directFallbackUrl;
+    const w = typeof window !== "undefined" ? (window as any) : null;
+    if (w?.penrxDesktop?.openExternal) {
+      w.penrxDesktop.openExternal(targetUrl);
+    } else {
+      window.open(targetUrl, "_blank");
+    }
+  };
+
+  const startAutoUpdate = async (selectedType?: "desktop" | "mobile") => {
+    const targetType = selectedType || platform;
+    const w = typeof window !== "undefined" ? (window as any) : null;
+
+    // 1. ELECTRON NATIVE UPDATER (For Desktop PC installed version)
+    if (isElectron && targetType === "desktop") {
+      setIsDownloading(true);
+      setDownloadProgress(0);
+      setDownloadedMB(0);
+      setTotalMB(0);
+      setDownloadStatus("downloading");
+      setDownloadError(null);
+
+      const targetUrl =
+        updateInfo.desktopDownloadUrl ||
+        "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
+
+      // Subscribe to live IPC progress from Electron main process
+      let unsubscribe: (() => void) | undefined;
+      if (typeof w?.penrxDesktop?.onUpdateProgress === "function") {
+        unsubscribe = w.penrxDesktop.onUpdateProgress((progress: any) => {
+          if (typeof progress?.percent === "number") {
+            setDownloadProgress(progress.percent);
+          }
+          if (typeof progress?.downloadedMB === "number") {
+            setDownloadedMB(progress.downloadedMB);
+          }
+          if (typeof progress?.totalMB === "number") {
+            setTotalMB(progress.totalMB);
+          }
+          if (progress?.completed) {
+            setDownloadProgress(100);
+            setDownloadStatus("completed");
+          }
+        });
+      }
+
+      try {
+        const res = await w.penrxDesktop.downloadAndInstallUpdate(targetUrl);
+        if (!res || !res.success) {
+          unsubscribe?.();
+          setDownloadStatus("error");
+          setDownloadError(res?.error || "تعذر إكمال التحديث التلقائي");
+        }
+      } catch (err: any) {
+        unsubscribe?.();
+        setDownloadStatus("error");
+        setDownloadError(err?.message || "حدث خطأ غير متوقع أثناء التحديث");
+      }
+      return;
+    }
+
+    // 2. MOBILE (Android APK via Browser / System Downloader)
+    if (targetType === "mobile") {
+      const apkUrl =
+        updateInfo.androidDownloadUrl ||
+        "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk";
+      handleManualDownload(apkUrl);
+      setDownloadStatus("completed");
+      return;
+    }
+
+    // 3. WEB BROWSER FALLBACK
+    const exeUrl =
+      updateInfo.desktopDownloadUrl ||
+      "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
+    handleManualDownload(exeUrl);
+    setDownloadStatus("completed");
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
@@ -225,23 +254,27 @@ export function AutoUpdateModal() {
           <div className="space-y-1">
             <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider">
               {downloadStatus === "completed"
-                ? "UPDATE READY TO INSTALL 🎉"
+                ? "UPDATE READY 🎉"
                 : downloadStatus === "downloading"
                 ? "DOWNLOADING UPDATE ⏳"
                 : "NEW RELEASE AVAILABLE 🚀"}
             </span>
             <h2 className="text-xl sm:text-2xl font-black text-slate-100">
               {downloadStatus === "completed"
-                ? "تم تحميل التحديث بنجاح!"
+                ? isElectron
+                  ? "اكتمل التنزيل بنجاح!"
+                  : "تم بدء تنزيل التحديث!"
                 : downloadStatus === "downloading"
                 ? "جارٍ تحميل التحديث الجديد..."
                 : "تحديث جديد متوفر لمنظومة PenRX+"}
             </h2>
             <p className="text-xs text-slate-400">
               {downloadStatus === "completed"
-                ? "تم تنزيل الملف، قم بفتحه لاستكمال التثبيت بضغطة زر دون فقدان أي بيانات"
+                ? isElectron
+                  ? "جاري إغلاق التطبيق وبدء برنامج التثبيت تلقائياً لتطبيق التحديث..."
+                  : "تم فتح رابط التنزيل المباشر، قم بتشغيل الملف بمجرد اكتماله."
                 : downloadStatus === "downloading"
-                ? "يرجى الانتظار حتى اكتمال التنزيل التلقائي لملف التحديث"
+                ? "يرجى الانتظار حتى اكتمال تنزيل ملف التحديث الجديد"
                 : "تم إطلاق إصدار جديد يتضمن تحسينات ومميزات دوائية وتقنية متقدمة"}
             </p>
           </div>
@@ -289,7 +322,7 @@ export function AutoUpdateModal() {
                   ? `${downloadedMB} MB / ${totalMB} MB`
                   : downloadedMB > 0
                   ? `${downloadedMB} MB`
-                  : "جارٍ الاتصال..."}
+                  : "جارٍ الاتصال بالسيرفر..."}
               </span>
             </div>
 
@@ -306,7 +339,9 @@ export function AutoUpdateModal() {
 
             {downloadStatus === "completed" && (
               <p className="text-[11px] text-emerald-300 font-bold text-center pt-1 animate-in fade-in">
-                ✨ تم حفظ ملف التحديث ({platform === "mobile" ? "PenRX+.apk" : "PenRX+-Setup.exe"}) وسيبدأ التثبيت تلقائياً!
+                {isElectron
+                  ? "✨ تم حفظ التحديث وسيبدأ التثبيت التلقائي خلال لحظات..."
+                  : "✨ اكتمل التنزيل، قم بفتح الملف لاستكمال التثبيت!"}
               </p>
             )}
           </div>
@@ -320,17 +355,16 @@ export function AutoUpdateModal() {
               <span>{downloadError || "تعذر إكمال التنزيل التلقائي"}</span>
             </div>
             <p className="text-[11px] text-rose-300/80">
-              يمكنك التنزيل مباشرة عبر الرابط السحابي المباشر أدناه:
+              يمكنك التنزيل مباشرة عبر متصفح جهازك باستخدام الزر أدناه:
             </p>
-            <a
-              href={directFallbackUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500 text-slate-950 font-black text-[11px] hover:bg-rose-400 transition-colors"
+            <button
+              type="button"
+              onClick={() => handleManualDownload()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500 text-slate-950 font-black text-[11px] hover:bg-rose-400 transition-colors cursor-pointer"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>تنزيل التحديث المباشر من GitHub</span>
-            </a>
+              <span>تنزيل التحديث المباشر من GitHub في المتصفح</span>
+            </button>
           </div>
         )}
 
@@ -353,11 +387,11 @@ export function AutoUpdateModal() {
             <div className="space-y-2">
               <button
                 type="button"
-                onClick={() => startAutoUpdate()}
+                onClick={() => handleManualDownload()}
                 className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Download className="w-4 h-4 stroke-[2.5]" />
-                <span>إعادة تنزيل ملف التحديث إذا لم يبدأ تلقائياً</span>
+                <span>إعادة فتح ملف التحديث أو تنزيله يدوياً</span>
               </button>
               <button
                 type="button"
@@ -407,6 +441,16 @@ export function AutoUpdateModal() {
 
                 <button
                   type="button"
+                  onClick={() => handleManualDownload()}
+                  className="text-slate-400 hover:text-emerald-400 transition-colors flex items-center gap-1 font-bold cursor-pointer"
+                  title="فتح الرابط في المتصفح الخارجي"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>تنزيل يدوي</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleDismiss}
                   className="text-slate-400 hover:text-slate-200 transition-colors font-bold cursor-pointer"
                 >
@@ -415,14 +459,23 @@ export function AutoUpdateModal() {
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center">
+            <div className="space-y-2 text-center">
               <button
                 type="button"
-                onClick={handleDismiss}
-                className="text-xs text-rose-400 hover:text-rose-300 transition-colors py-1 font-bold cursor-pointer"
+                onClick={() => handleManualDownload()}
+                className="text-xs text-emerald-400 hover:text-emerald-300 underline font-bold cursor-pointer"
               >
-                إلغاء التحميل
+                هل يستغرق وقتاً طويلاً؟ اضغط هنا للتنزيل المباشر من المتصفح ↗
               </button>
+              <div>
+                <button
+                  type="button"
+                  onClick={handleDismiss}
+                  className="text-xs text-rose-400 hover:text-rose-300 transition-colors py-1 font-bold cursor-pointer"
+                >
+                  إلغاء التحميل
+                </button>
+              </div>
             </div>
           )}
         </div>

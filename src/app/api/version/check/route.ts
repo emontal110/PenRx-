@@ -21,13 +21,54 @@ function compareSemver(current: string, latest: string): boolean {
   }
 }
 
-export async function GET() {
-  const currentVersion = versionConfig.version || (packageInfo.version ? packageInfo.version.replace(/\.0$/, "") : "1.5");
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const clientVersion = searchParams.get("currentVersion");
+
+  const currentVersion = clientVersion
+    ? clientVersion.replace(/^v/, "").trim()
+    : versionConfig.version || (packageInfo.version ? packageInfo.version.replace(/\.0$/, "") : "1.5");
   const repo = versionConfig.githubRepo || "emontal110/PenRx-";
 
   try {
-    // 1. First check the raw version.json directly from GitHub main branch
-    // This provides instant detection as soon as git push completes!
+    // 1. Prioritize check: GitHub Releases API for published release with real assets
+    const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+      headers: {
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "PenRX-App",
+      },
+      next: { revalidate: 60 },
+    });
+
+    if (res.ok) {
+      const releaseData = await res.json();
+      const latestTag = releaseData.tag_name || releaseData.name || currentVersion;
+      const latestVersion = latestTag.replace(/^v/, "").trim();
+      const hasUpdate = compareSemver(currentVersion, latestVersion);
+
+      let desktopUrl = `https://github.com/${repo}/releases/latest/download/PenRX+-Setup.exe`;
+      let androidUrl = `https://github.com/${repo}/releases/latest/download/PenRX+.apk`;
+
+      if (Array.isArray(releaseData.assets)) {
+        const exeAsset = releaseData.assets.find((a: any) => a.name?.endsWith(".exe"));
+        if (exeAsset?.browser_download_url) desktopUrl = exeAsset.browser_download_url;
+
+        const apkAsset = releaseData.assets.find((a: any) => a.name?.endsWith(".apk"));
+        if (apkAsset?.browser_download_url) androidUrl = apkAsset.browser_download_url;
+      }
+
+      return NextResponse.json({
+        hasUpdate,
+        currentVersion,
+        latestVersion,
+        releaseDate: releaseData.published_at?.split("T")[0] || versionConfig.releaseDate,
+        releaseNotes: releaseData.body || versionConfig.releaseNotes,
+        desktopDownloadUrl: desktopUrl,
+        androidDownloadUrl: androidUrl,
+      });
+    }
+
+    // 2. Fallback check: raw version.json from GitHub
     const rawUrl = `https://raw.githubusercontent.com/${repo}/main/src/config/version.json?t=${Date.now()}`;
     const rawRes = await fetch(rawUrl, {
       headers: { "User-Agent": "PenRX-App" },
@@ -51,15 +92,6 @@ export async function GET() {
         });
       }
     }
-
-    // 2. Fallback check: GitHub Releases API
-    const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-      headers: {
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "PenRX-App",
-      },
-      next: { revalidate: 60 },
-    });
 
     if (res.ok) {
       const releaseData = await res.json();
