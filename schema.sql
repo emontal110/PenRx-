@@ -376,6 +376,11 @@ CREATE INDEX IF NOT EXISTS "CloudBackup_subscriberId_idx" ON "CloudBackup"("subs
 CREATE INDEX IF NOT EXISTS "CloudBackup_createdAt_idx" ON "CloudBackup"("createdAt");
 
 ALTER TABLE "CloudBackup" ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "service_role_cloud_backup" ON "CloudBackup";
+EXCEPTION WHEN undefined_object THEN null; END $$;
+
 CREATE POLICY "service_role_cloud_backup" ON "CloudBackup"
     FOR ALL
     TO service_role

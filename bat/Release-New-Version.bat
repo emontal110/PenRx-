@@ -38,6 +38,9 @@ if "%NOTES%"=="" (
 
 if exist "dist-electron" rd /s /q "dist-electron" 2>nul
 
+git checkout main >nul 2>&1
+git pull origin main >nul 2>&1
+
 echo   [*] Starting automated build and direct GitHub release now...
 echo.
 node scripts/release-builder.js %TARGET_VER% "%NOTES%"

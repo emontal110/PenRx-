@@ -228,15 +228,25 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
       }
     });
 
-    console.log(`[PenRX+ AutoUpdate] Download completed to ${tempPath}. Spawning installer...`);
+    console.log(`[PenRX+ AutoUpdate] Download completed to ${tempPath}. Preparing silent installation & auto-restart...`);
 
-    // Launch installer detached so it continues after app exits
-    const { spawn } = require("child_process");
-    const installer = spawn(tempPath, [], {
-      detached: true,
-      stdio: "ignore",
-    });
-    installer.unref();
+    const currentExe = process.execPath;
+    const runnerPath = path.join(app.getPath("temp"), "penrx-update-runner.bat");
+
+    // Batch runner that waits for file locks to clear, installs silently via /S, and relaunches the app
+    const runnerScript = `@echo off
+chcp 65001 >nul
+timeout /t 2 /nobreak >nul
+start /wait "" "${tempPath}" /S
+timeout /t 1 /nobreak >nul
+if exist "${currentExe}" (
+    start "" "${currentExe}"
+)
+del "${tempPath}" 2>nul
+(goto) 2>nul & del "%~f0"
+`;
+
+    fs.writeFileSync(runnerPath, runnerScript, "utf8");
 
     // Kill background next server process immediately so port 3000 and all file locks are released
     if (serverProcess && serverProcess.pid) {
@@ -250,10 +260,19 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
       serverProcess = null;
     }
 
-    // Give installer 1 second to start, then quit electron
+    // Launch runner detached in background
+    const { spawn } = require("child_process");
+    const runner = spawn("cmd.exe", ["/c", runnerPath], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    runner.unref();
+
+    // Exit Electron cleanly to release all files for the installer
     setTimeout(() => {
-      app.quit();
-    }, 1200);
+      app.exit(0);
+    }, 400);
 
     return { success: true };
   } catch (err) {

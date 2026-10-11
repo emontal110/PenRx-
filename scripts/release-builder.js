@@ -126,6 +126,21 @@ if (!process.env.ANDROID_HOME && fs.existsSync(androidSdkCandidate)) {
   process.env.ANDROID_HOME = androidSdkCandidate;
 }
 
+// ── Pre-Release Git Sync: Ensure clean main branch & no divergence ──
+if (shouldPush) {
+  try {
+    const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: rootDir }).toString().trim();
+    if (currentBranch !== "main") {
+      console.log(`[Git] Switching from branch '${currentBranch}' to 'main' for official release...`);
+      execSync("git checkout main", { cwd: rootDir, stdio: "inherit" });
+    }
+    console.log("[Git] Pulling latest upstream commits from origin/main to prevent conflicts...");
+    execSync("git pull origin main", { cwd: rootDir, stdio: "inherit" });
+  } catch (err) {
+    console.warn("[Git] Notice during pre-release sync:", err.message);
+  }
+}
+
 // ====================================================================
 // STEP 1: Version Bumping
 // ====================================================================
@@ -353,11 +368,9 @@ if (shouldPush) {
   console.log("🚀 Syncing GitHub Pages hosting branch (gh-pages)...");
   run("git push origin main:gh-pages --force");
 
-  // Fast-forward local gh-pages if possible
+  // Align local gh-pages branch pointer directly with main so divergence never occurs
   try {
-    run("git checkout gh-pages");
-    run("git merge main");
-    run("git checkout main");
+    run("git branch -f gh-pages main");
   } catch (e) {}
 } else {
   console.log("\n🔒 GitHub push skipped as requested. All release files are ready locally.");
