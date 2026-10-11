@@ -2,8 +2,8 @@ import type { CapacitorConfig } from "@capacitor/cli";
 import * as fs from "fs";
 import * as path from "path";
 
-// 1. Read live Vercel URL from environment or mobile-config.json
-let liveUrl = process.env.CAPACITOR_SERVER_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+// 1. Live Vercel Production URL for mobile app
+let liveUrl = "https://pen-rx.vercel.app";
 
 try {
   const configPath = path.resolve(__dirname, "mobile-config.json");
@@ -17,23 +17,20 @@ try {
   // Ignore read error
 }
 
-const isRemote = Boolean(liveUrl && !liveUrl.includes("localhost"));
+if (process.env.CAPACITOR_SERVER_URL) {
+  liveUrl = process.env.CAPACITOR_SERVER_URL;
+}
 
 const config: CapacitorConfig = {
   appId: "com.penrxplus.app",
   appName: "PenRX+",
   webDir: "out",
-  server: isRemote
-    ? {
-        url: liveUrl.startsWith("http") ? liveUrl : `https://${liveUrl}`,
-        cleartext: true,
-        androidScheme: "https",
-        errorPath: "/error.html",
-      }
-    : {
-        androidScheme: "https",
-        cleartext: true,
-      },
+  server: {
+    url: liveUrl.startsWith("http") ? liveUrl : `https://${liveUrl}`,
+    cleartext: true,
+    androidScheme: "https",
+    errorPath: "/error.html",
+  },
   plugins: {
     CapacitorHttp: {
       enabled: true,

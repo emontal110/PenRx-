@@ -93,34 +93,6 @@ export async function GET(req: Request) {
       }
     }
 
-    if (res.ok) {
-      const releaseData = await res.json();
-      const latestTag = releaseData.tag_name || releaseData.name || currentVersion;
-      const latestVersion = latestTag.replace(/^v/, "").trim();
-      const hasUpdate = compareSemver(currentVersion, latestVersion);
-
-      let desktopUrl = versionConfig.desktopDownloadUrl;
-      let androidUrl = versionConfig.androidDownloadUrl;
-
-      if (Array.isArray(releaseData.assets)) {
-        const exeAsset = releaseData.assets.find((a: any) => a.name?.endsWith(".exe"));
-        if (exeAsset?.browser_download_url) desktopUrl = exeAsset.browser_download_url;
-
-        const apkAsset = releaseData.assets.find((a: any) => a.name?.endsWith(".apk"));
-        if (apkAsset?.browser_download_url) androidUrl = apkAsset.browser_download_url;
-      }
-
-      return NextResponse.json({
-        hasUpdate,
-        currentVersion,
-        latestVersion,
-        releaseDate: releaseData.published_at?.split("T")[0] || versionConfig.releaseDate,
-        releaseNotes: releaseData.body || versionConfig.releaseNotes,
-        desktopDownloadUrl: desktopUrl,
-        androidDownloadUrl: androidUrl,
-      });
-    }
-
     // Default if no update
     return NextResponse.json({
       hasUpdate: false,
