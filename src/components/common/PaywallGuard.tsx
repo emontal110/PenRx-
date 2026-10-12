@@ -19,6 +19,9 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
   const [copySuccess, setCopySuccess] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
 
+  const subDetails = getSubscriptionDetails(subscriptions, machineId);
+  const isHydrated = useSubscriptionStore.persist?.hasHydrated?.() ?? mounted;
+
   useEffect(() => {
     setMounted(true);
     // Initialize hardware machine ID (Electron mode)
@@ -48,9 +51,6 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
     (clinic.name?.trim() || clinic.nameAr?.trim()) &&
     clinic.phone?.trim()
   );
-
-  const subDetails = getSubscriptionDetails(subscriptions, machineId);
-  const isHydrated = useSubscriptionStore.persist?.hasHydrated?.() ?? mounted;
 
   // Auto-redirect to /settings if active but profile is not completed yet
   useEffect(() => {
