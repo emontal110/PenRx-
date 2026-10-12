@@ -1339,37 +1339,72 @@ export default function SubscriptionsPage() {
 
             {/* Payment Method Selector */}
             {activePlanForCheckout.price > 0 && (
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300 block">اختر وسيلة التحويل:</label>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300">اختر وسيلة التحويل:</label>
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                    تحويل فوري ومباشر ⚡
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3.5">
+                  {/* Vodafone Cash Button */}
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("vodafone")}
-                    className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    className={`group p-3 sm:p-3.5 rounded-2xl border-2 flex flex-col items-center justify-between gap-2.5 transition-all cursor-pointer relative overflow-hidden ${
                       paymentMethod === "vodafone"
-                        ? "bg-rose-500/15 border-rose-500 text-rose-300 shadow-lg"
-                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+                        ? "bg-rose-500/15 border-rose-500 text-rose-200 shadow-xl shadow-rose-950/40 ring-2 ring-rose-500/30 scale-[1.02]"
+                        : "bg-slate-950/90 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white hover:bg-slate-900"
                     }`}
                   >
-                    <div className="relative w-24 h-7">
-                      <Image src="/vodafone-cash.png" alt="Vodafone Cash" fill sizes="96px" className="object-contain" />
+                    {paymentMethod === "vodafone" && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <CheckCircle2 className="w-4 h-4 text-rose-400 fill-rose-500/20" />
+                      </div>
+                    )}
+                    <div className="w-full h-14 sm:h-16 bg-white rounded-xl p-2 flex items-center justify-center shadow-md shadow-black/30 group-hover:shadow-lg transition-transform">
+                      <img
+                        src="/vodafone-cash.png"
+                        alt="فودافون كاش - Vodafone Cash"
+                        loading="eager"
+                        decoding="sync"
+                        className="h-10 sm:h-11 w-auto max-w-full object-contain transform transition-transform group-hover:scale-105"
+                      />
                     </div>
-                    <span className="text-[11px] font-black">فودافون كاش</span>
+                    <div className="text-center">
+                      <span className="text-xs font-black block text-slate-100">فودافون كاش</span>
+                      <span className="text-[10px] font-bold text-rose-400 block">محفظة إلكترونية</span>
+                    </div>
                   </button>
 
+                  {/* InstaPay Button */}
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("instapay")}
-                    className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    className={`group p-3 sm:p-3.5 rounded-2xl border-2 flex flex-col items-center justify-between gap-2.5 transition-all cursor-pointer relative overflow-hidden ${
                       paymentMethod === "instapay"
-                        ? "bg-purple-500/15 border-purple-500 text-purple-300 shadow-lg"
-                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+                        ? "bg-purple-500/15 border-purple-500 text-purple-200 shadow-xl shadow-purple-950/40 ring-2 ring-purple-500/30 scale-[1.02]"
+                        : "bg-slate-950/90 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white hover:bg-slate-900"
                     }`}
                   >
-                    <div className="relative w-24 h-7">
-                      <Image src="/instapay.png" alt="InstaPay" fill sizes="96px" className="object-contain" />
+                    {paymentMethod === "instapay" && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <CheckCircle2 className="w-4 h-4 text-purple-400 fill-purple-500/20" />
+                      </div>
+                    )}
+                    <div className="w-full h-14 sm:h-16 bg-white rounded-xl p-2 flex items-center justify-center shadow-md shadow-black/30 group-hover:shadow-lg transition-transform">
+                      <img
+                        src="/instapay.png"
+                        alt="إنستا باي - InstaPay"
+                        loading="eager"
+                        decoding="sync"
+                        className="h-10 sm:h-11 w-auto max-w-full object-contain transform transition-transform group-hover:scale-105"
+                      />
                     </div>
-                    <span className="text-[11px] font-black">إنستا باي (InstaPay)</span>
+                    <div className="text-center">
+                      <span className="text-xs font-black block text-slate-100">إنستا باي (InstaPay)</span>
+                      <span className="text-[10px] font-bold text-purple-400 block">تحويل بنكي لحظي</span>
+                    </div>
                   </button>
                 </div>
               </div>
