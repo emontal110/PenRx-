@@ -638,33 +638,44 @@
 
   <!-- ================= LOGIC & CORE ENGINE ================= -->
   <script>
-    // Direct Cloud REST Database with Master Service Role Key
+    // Direct Cloud REST Database with Public Anonymous Client Key
     const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-    const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
+    const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
     const ADMIN_PHONE = "201094085228";
 
-    // Curated Egyptian & Arabic Medications Bank for Instant Offline Search
+    // Curated Egyptian & Arabic Medications Bank for Instant Offline Search (Bilingual)
     const POPULAR_DRUGS = [
-      { name: "Panadol Extra (Red)", active: "Paracetamol 500mg + Caffeine", form: "أقراص", dose: "قرص مرتين إلى 3 مرات يومياً بعد الأكل" },
-      { name: "Panadol Advance (Blue)", active: "Paracetamol 500mg", form: "أقراص", dose: "قرص عند اللزوم كل 6-8 ساعات" },
-      { name: "Augmentin 1g", active: "Amoxicillin + Clavulanic Acid", form: "أقراص", dose: "قرص كل 12 ساعة بعد الأكل لمدة 7 أيام" },
-      { name: "Curam 1g", active: "Amoxicillin + Clavulanate", form: "أقراص", dose: "قرص كل 12 ساعة لمدة 7 أيام" },
-      { name: "Brufen 400mg", active: "Ibuprofen", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل" },
-      { name: "Brufen 600mg", active: "Ibuprofen", form: "أقراص", dose: "قرص مرتين يومياً بعد الأكل" },
-      { name: "Cataflam 50mg", active: "Diclofenac Potassium", form: "أقراص", dose: "قرص مرتين إلى 3 مرات يومياً بعد الوجبات" },
-      { name: "Voltaren 100mg SR", active: "Diclofenac Sodium", form: "أقراص ممتدة", dose: "قرص واحد يومياً مساءً بعد العشاء" },
-      { name: "Congestal", active: "Paracetamol + Pseudoephedrine", form: "أقراص", dose: "قرص 3 مرات يومياً للبرد والرشح" },
-      { name: "1,2,3 (One Two Three)", active: "Paracetamol + Pseudoephedrine + Chlorpheniramine", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل" },
-      { name: "Cetal 500mg", active: "Paracetamol", form: "أقراص", dose: "قرص كل 8 ساعات لتسكين الألم وخفض الحرارة" },
-      { name: "Flagyl 500mg", active: "Metronidazole", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الوجبات لمدة 5-7 أيام" },
-      { name: "Antinal 200mg", active: "Nifuroxazide", form: "كبسول", dose: "كبسولة 4 مرات يومياً لعلاج الإسهال والمطهر المعوي" },
-      { name: "Nexium 40mg", active: "Esomeprazole", form: "أقراص", dose: "قرص واحد صباحاً على الريق قبل الإفطار بنصف ساعة" },
-      { name: "Controloc 40mg", active: "Pantoprazole", form: "أقراص", dose: "قرص قبل الإفطار بنصف ساعة لعلاج الحموضة والقرحة" },
-      { name: "Concor 5mg", active: "Bisoprolol", form: "أقراص", dose: "قرص واحد يومياً صباحاً لضغط الدم ونبض القلب" },
-      { name: "Concor 2.5mg", active: "Bisoprolol", form: "أقراص", dose: "قرص واحد يومياً صباحاً" },
-      { name: "Amaryl 2mg", active: "Glimepiride", form: "أقراص", dose: "قرص واحد يومياً قبل أول وجبة رئيسية" },
-      { name: "Cipralex 10mg", active: "Escitalopram", form: "أقراص", dose: "قرص واحد يومياً مساءً" },
-      { name: "Zithrokan 500mg", active: "Azithromycin", form: "كبسول", dose: "كبسولة واحدة يومياً قبل الأكل بساعة لمدة 3 أيام" }
+      { name: "Panadol Extra (Red) - بنادول إكسترا", active: "Paracetamol 500mg + Caffeine", form: "أقراص", dose: "قرص مرتين إلى 3 مرات يومياً بعد الأكل", price: 42 },
+      { name: "Panadol Advance (Blue) - بنادول أدفانس", active: "Paracetamol 500mg", form: "أقراص", dose: "قرص عند اللزوم كل 6-8 ساعات", price: 32 },
+      { name: "Panadol Joint 665mg - بنادول جوينت للمفاصل", active: "Paracetamol 665mg SR", form: "أقراص", dose: "قرص كل 8 ساعات ممتد المفعول", price: 54 },
+      { name: "Panadol Night - بنادول نايت للنوم والألم", active: "Paracetamol + Diphenhydramine", form: "أقراص", dose: "قرصين قبل النوم بنصف ساعة", price: 45 },
+      { name: "Panadol Cold & Flu - بنادول كولد أند فلو", active: "Paracetamol + Phenylephrine", form: "أقراص", dose: "قرص كل 8 ساعات للبرد والرشح", price: 48 },
+      { name: "Panadol Baby & Infant - بنادول شراب أطفال", active: "Paracetamol 120mg/5ml", form: "شراب", dose: "5 مل كل 6-8 ساعات خافض حرارة", price: 28 },
+      { name: "Brufen 200mg - بروفين 200 مجم مسكن", active: "Ibuprofen 200mg", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 30 },
+      { name: "Brufen 400mg - بروفين 400 مجم مسكن ومضاد للالتهاب", active: "Ibuprofen 400mg", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 45 },
+      { name: "Brufen 600mg - بروفين 600 مجم للعظام", active: "Ibuprofen 600mg", form: "أقراص", dose: "قرص مرتين يومياً بعد الأكل", price: 58 },
+      { name: "Buscopan 10mg - بوسكوبان للمغص والتقلصات", active: "Hyoscine Butylbromide", form: "أقراص", dose: "قرص عند اللزوم للتقلصات", price: 26 },
+      { name: "Buscopan Plus - بوسكوبان بلس مسكن للمغص", active: "Hyoscine + Paracetamol", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 34 },
+      { name: "Pantoloc 20mg - بانتولوك للمعدة والحموضة", active: "Pantoprazole 20mg", form: "أقراص", dose: "قرص صباحاً على الريق", price: 58 },
+      { name: "Pantoloc 40mg - بانتولوك لقرحة المعدة", active: "Pantoprazole 40mg", form: "أقراص", dose: "قرص قبل الإفطار بنصف ساعة", price: 82 },
+      { name: "Betadine Solution - بيتادين مطهر ومعقم", active: "Povidone Iodine 10%", form: "محلول موضعي", dose: "دهان موضعي مرتين يومياً", price: 38 },
+      { name: "Bisolvon 8mg - بيسولفون مذيب للبلغم", active: "Bromhexine 8mg", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 24 },
+      { name: "Augmentin 1g - أوجمنتين 1 جم مضاد حيوي", active: "Amoxicillin + Clavulanic Acid", form: "أقراص", dose: "قرص كل 12 ساعة بعد الأكل لمدة 7 أيام", price: 110 },
+      { name: "Curam 1g - كيورام 1 جم مضاد حيوي", active: "Amoxicillin + Clavulanate", form: "أقراص", dose: "قرص كل 12 ساعة لمدة 7 أيام", price: 98 },
+      { name: "Cataflam 50mg - كتافلام 50 مجم مسكن سريع", active: "Diclofenac Potassium", form: "أقراص", dose: "قرص مرتين إلى 3 مرات يومياً بعد الوجبات", price: 63 },
+      { name: "Voltaren 100mg SR - فولتارين 100 مجم ممتد", active: "Diclofenac Sodium", form: "أقراص ممتدة", dose: "قرص واحد يومياً مساءً بعد العشاء", price: 65 },
+      { name: "Congestal - كونجستال للبرد والإنفلونزا", active: "Paracetamol + Pseudoephedrine", form: "أقراص", dose: "قرص 3 مرات يومياً للبرد والرشح", price: 35 },
+      { name: "1,2,3 (One Two Three) - وان تو ثري", active: "Paracetamol + Pseudoephedrine + Chlorpheniramine", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 32 },
+      { name: "Cetal 500mg - سيتال خافض حرارة", active: "Paracetamol", form: "أقراص", dose: "قرص كل 8 ساعات لتسكين الألم وخفض الحرارة", price: 18 },
+      { name: "Flagyl 500mg - فلاجيل مطهر معوي", active: "Metronidazole", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الوجبات لمدة 5-7 أيام", price: 35 },
+      { name: "Antinal 200mg - أنتينال كبسول للإسهال", active: "Nifuroxazide", form: "كبسول", dose: "كبسولة 4 مرات يومياً لعلاج الإسهال والمطهر المعوي", price: 32 },
+      { name: "Nexium 40mg - نيكسيوم 40 مجم للحموضة", active: "Esomeprazole", form: "أقراص", dose: "قرص واحد صباحاً على الريق قبل الإفطار بنصف ساعة", price: 135 },
+      { name: "Controloc 40mg - كنترولوك لقرحة المعدة", active: "Pantoprazole", form: "أقراص", dose: "قرص قبل الإفطار بنصف ساعة لعلاج الحموضة والقرحة", price: 90 },
+      { name: "Concor 5mg - كونكور 5 مجم للضغط والقلب", active: "Bisoprolol", form: "أقراص", dose: "قرص واحد يومياً صباحاً لضغط الدم ونبض القلب", price: 62 },
+      { name: "Concor 2.5mg - كونكور 2.5 مجم", active: "Bisoprolol", form: "أقراص", dose: "قرص واحد يومياً صباحاً", price: 48 },
+      { name: "Amaryl 2mg - أماريل 2 مجم للسكر", active: "Glimepiride", form: "أقراص", dose: "قرص واحد يومياً قبل أول وجبة رئيسية", price: 42 },
+      { name: "Cipralex 10mg - سبرالكس للقلق والاكتئاب", active: "Escitalopram", form: "أقراص", dose: "قرص واحد يومياً مساءً", price: 195 },
+      { name: "Zithrokan 500mg - زيثروكان مضاد حيوي 3 أيام", active: "Azithromycin", form: "كبسول", dose: "كبسولة واحدة يومياً قبل الأكل بساعة لمدة 3 أيام", price: 55 }
     ];
 
     let machineId = "";
@@ -857,67 +868,131 @@
       alertBox.classList.remove("hidden");
     }
 
-    // 5. Drug Search & Medications Engine
+    // 5. Drug Search & Medications Engine with Incremental Prefix Matching
     async function handleDrugSearch(query) {
       const box = document.getElementById("drug-suggestions-box");
-      const q = query.trim().toLowerCase();
+      const cleanQ = query.trim();
+      const q = cleanQ.toLowerCase();
 
-      if (!q || q.length < 2) {
+      if (!q) {
         box.classList.add("hidden");
         return;
       }
 
-      const matches = POPULAR_DRUGS.filter((d) => d.name.toLowerCase().includes(q) || d.active.toLowerCase().includes(q));
+      // ── Step 1: Attempt Live Cloud API Search (Access to 43,500+ Catalog) ──
+      try {
+        const liveSearchUrl = window.location.origin.includes("http") && !window.location.origin.includes("file:")
+          ? `/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=20`
+          : `https://pen-rx.vercel.app/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=20`;
 
-      if (matches.length > 0) {
-        box.innerHTML = matches.map((d) => `
-          <div onclick='selectDrug(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="p-2 rounded-lg hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
+        const res = await fetch(liveSearchUrl, { signal: AbortSignal.timeout(1200) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            box.innerHTML = data.results.map((d) => {
+              const itemData = {
+                name: d.nameAr ? `${d.name} (${d.nameAr})` : d.name,
+                active: d.activeIngredient || "Active",
+                form: d.dosageForm || "علاج",
+                dose: "حسب الإرشاد الطبي",
+                price: d.price
+              };
+              return `
+                <div onclick='selectDrug(${JSON.stringify(itemData).replace(/'/g, "&apos;")})' class="p-2.5 rounded-xl hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
+                  <div class="space-y-0.5">
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                      <span>${itemData.name}</span>
+                      ${d.price ? `<span class="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded">${d.price} ج.م</span>` : ""}
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-mono">${d.activeIngredient} • ${d.dosageForm || "علاج"}</div>
+                  </div>
+                  <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg">إضافة +</span>
+                </div>
+              `;
+            }).join("");
+            box.classList.remove("hidden");
+            return;
+          }
+        }
+      } catch (liveErr) {
+        // Live search deferred/offline — smoothly proceed to local offline bank
+      }
+
+      // ── Step 2: High-Speed Offline Incremental Prefix Matcher ──
+      const exactPrefix = [];
+      const containsMatches = [];
+
+      POPULAR_DRUGS.forEach((d) => {
+        const nameLower = d.name.toLowerCase();
+        const activeLower = d.active.toLowerCase();
+
+        if (nameLower.startsWith(q) || (d.name.includes("-") && d.name.split("-")[1].trim().toLowerCase().startsWith(q))) {
+          exactPrefix.push(d);
+        } else if (nameLower.includes(q) || activeLower.includes(q)) {
+          containsMatches.push(d);
+        }
+      });
+
+      // Strict alphabetical sort on offline matches
+      exactPrefix.sort((a, b) => a.name.localeCompare(b.name, "ar"));
+      containsMatches.sort((a, b) => a.name.localeCompare(b.name, "ar"));
+
+      const localMatches = q.length <= 2 ? exactPrefix : [...exactPrefix, ...containsMatches];
+
+      if (localMatches.length > 0) {
+        box.innerHTML = localMatches.map((d) => `
+          <div onclick='selectDrug(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="p-2.5 rounded-xl hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
             <div>
-              <div class="font-bold text-white text-xs">${d.name}</div>
+              <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                <span>${d.name}</span>
+                ${d.price ? `<span class="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded">${d.price} ج.م</span>` : ""}
+              </div>
               <div class="text-[10px] text-slate-400">${d.active} • ${d.form}</div>
             </div>
-            <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">إضافة +</span>
+            <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg">إضافة +</span>
           </div>
         `).join("");
         box.classList.remove("hidden");
         return;
       }
 
-      // Live search fallback via OpenFDA
-      box.innerHTML = `
-        <div class="p-2 text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
-          <span class="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
-          <span>جاري البحث في البنك الدوائي المفتوح...</span>
-        </div>
-      `;
-      box.classList.remove("hidden");
+      // ── Step 3: OpenFDA Live Fallback ──
+      if (cleanQ.length >= 3) {
+        box.innerHTML = `
+          <div class="p-2 text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
+            <span class="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
+            <span>جاري البحث في البنك الدوائي المفتوح...</span>
+          </div>
+        `;
+        box.classList.remove("hidden");
 
-      try {
-        const res = await fetch(`https://api.fda.gov/drug/ndc.json?search=brand_name:"${encodeURIComponent(q)}"&limit=5`, { signal: AbortSignal.timeout(2500) });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.results && data.results.length > 0) {
-            box.innerHTML = data.results.map((r) => {
-              const d = {
-                name: r.brand_name || r.generic_name || q,
-                active: r.active_ingredients?.map((a) => a.name).join(" + ") || r.generic_name || "Active Ingredient",
-                form: r.dosage_form || "علاج",
-                dose: "حسب الإرشاد الطبي"
-              };
-              return `
-                <div onclick='selectDrug(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="p-2 rounded-lg hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
-                  <div>
-                    <div class="font-bold text-white text-xs">${d.name}</div>
-                    <div class="text-[10px] text-cyan-400">🌐 ${d.active} • ${d.form}</div>
+        try {
+          const res = await fetch(`https://api.fda.gov/drug/ndc.json?search=brand_name:"${encodeURIComponent(q)}"&limit=5`, { signal: AbortSignal.timeout(2500) });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.results && data.results.length > 0) {
+              box.innerHTML = data.results.map((r) => {
+                const d = {
+                  name: r.brand_name || r.generic_name || q,
+                  active: r.active_ingredients?.map((a) => a.name).join(" + ") || r.generic_name || "Active Ingredient",
+                  form: r.dosage_form || "علاج",
+                  dose: "حسب الإرشاد الطبي"
+                };
+                return `
+                  <div onclick='selectDrug(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="p-2.5 rounded-xl hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
+                    <div>
+                      <div class="font-bold text-white text-xs">${d.name}</div>
+                      <div class="text-[10px] text-cyan-400">🌐 ${d.active} • ${d.form}</div>
+                    </div>
+                    <span class="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-lg">إضافة +</span>
                   </div>
-                  <span class="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">إضافة +</span>
-                </div>
-              `;
-            }).join("");
-            return;
+                `;
+              }).join("");
+              return;
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       box.innerHTML = `
         <div class="p-2 text-center text-xs text-slate-400">
@@ -925,7 +1000,9 @@
           <button type="button" onclick="addCustomDrugByName('${query.replace(/'/g, "\\'")}')" class="text-emerald-400 font-bold block mx-auto mt-1 hover:underline">إضافته كدواء مخصص الآن ➕</button>
         </div>
       `;
+      box.classList.remove("hidden");
     }
+
 
     function selectDrug(d) {
       currentRxMeds.push({

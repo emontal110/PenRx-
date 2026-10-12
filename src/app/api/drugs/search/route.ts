@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
-import { searchComprehensiveDrugs, getTotalDrugCount, DrugRecord } from "@/lib/drugSearchEngine";
+import {
+  searchComprehensiveDrugs,
+  getTotalDrugCount,
+  updateDrugPricesFromCloud,
+  DrugRecord,
+} from "@/lib/drugSearchEngine";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
+// ── In-Memory LRU Cache for External APIs (1 Hour TTL) ────────────────────────
+const EXTERNAL_CACHE = new Map<string, { timestamp: number; results: DrugRecord[] }>();
+const CACHE_TTL_MS = 60 * 60 * 1000;
 
 // ── OpenFDA fallback — free, no API key ───────────────────────────────────────
 async function fetchOpenFDA(query: string, limit: number): Promise<DrugRecord[]> {
@@ -63,7 +72,7 @@ async function fetchRxNorm(query: string): Promise<DrugRecord[]> {
           name: c.name,
           nameAr: c.name,
           activeIngredient: c.synonym || c.name,
-          company: "International",
+          company: "International / NLM",
           dosageForm: "Tablet / Capsule",
           category: "International / Imported",
           isControlled: false,
@@ -73,6 +82,35 @@ async function fetchRxNorm(query: string): Promise<DrugRecord[]> {
       }
     }
     return results.slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+// ── DailyMed NLM fallback ─────────────────────────────────────────────────────
+async function fetchDailyMed(query: string): Promise<DrugRecord[]> {
+  try {
+    const url = `https://dailymed.nlm.nih.gov/dailymed/services/v2/drugnames.json?drug_name=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(2500),
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!data.data?.length) return [];
+
+    return data.data.slice(0, 4).map((d: any, i: number) => ({
+      id: `dailymed-${i}-${Date.now()}`,
+      name: d.drug_name || query,
+      nameAr: d.drug_name || query,
+      activeIngredient: query,
+      company: "DailyMed / NLM",
+      dosageForm: "Tablet / Capsule",
+      category: "International / Imported",
+      isControlled: false,
+      sourceOrigin: "International / Imported" as const,
+      isCrowdSourced: false,
+    }));
   } catch {
     return [];
   }
@@ -135,23 +173,44 @@ export async function GET(request: Request) {
         sourceOrigin: "Doctor Community" as const,
         isCrowdSourced: true,
       }));
+      // Automatically persist cloud price updates into in-memory engine
+      updateDrugPricesFromCloud(
+        dbCommunityResults.map((d) => ({
+          name: d.name,
+          price: d.price,
+          dosageForm: d.dosageForm,
+        }))
+      );
     }
   } catch {
     // Supabase offline — use local only
   }
 
-  // ── Layer 3: External APIs (only when local results are sparse) ───────────
+  // ── Layer 3: External Multi-Source APIs (OpenFDA + RxNorm + DailyMed) ────
   let externalResults: DrugRecord[] = [];
   const totalLocalResults = memoryResults.length + dbCommunityResults.length;
 
   if (totalLocalResults < 5 && cleanQuery.length >= 3) {
-    // Fetch external in parallel, with timeout
-    const [fdaRes, rxRes] = await Promise.allSettled([
-      fetchOpenFDA(cleanQuery, 5),
-      fetchRxNorm(cleanQuery),
-    ]);
-    if (fdaRes.status === "fulfilled") externalResults.push(...fdaRes.value);
-    if (rxRes.status === "fulfilled") externalResults.push(...rxRes.value);
+    const cacheKey = cleanQuery.toLowerCase();
+    const cached = EXTERNAL_CACHE.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      externalResults = cached.results;
+    } else {
+      // Fetch external sources in parallel with strict timeout
+      const [fdaRes, rxRes, dailyRes] = await Promise.allSettled([
+        fetchOpenFDA(cleanQuery, 5),
+        fetchRxNorm(cleanQuery),
+        fetchDailyMed(cleanQuery),
+      ]);
+      if (fdaRes.status === "fulfilled") externalResults.push(...fdaRes.value);
+      if (rxRes.status === "fulfilled") externalResults.push(...rxRes.value);
+      if (dailyRes.status === "fulfilled") externalResults.push(...dailyRes.value);
+
+      if (externalResults.length > 0) {
+        EXTERNAL_CACHE.set(cacheKey, { timestamp: Date.now(), results: externalResults });
+      }
+    }
   }
 
   // ── Merge + deduplicate with cloud price override ─────────────────────────
