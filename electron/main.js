@@ -1,10 +1,15 @@
-const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell, nativeTheme } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
 const http = require("http");
 const { exec, fork } = require("child_process");
+
+// Force native Windows theme to dark so the top title bar and frame match the dark aesthetic of PenRX+
+if (nativeTheme) {
+  nativeTheme.themeSource = "dark";
+}
 
 let mainWindow = null;
 let serverProcess = null;
@@ -529,7 +534,7 @@ function createMainWindow(baseUrl) {
     height: 850,
     minWidth: 1024,
     minHeight: 700,
-    title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية",
+    title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية الذكية",
     icon: iconPath,
     backgroundColor: "#020617",
     show: false,
@@ -601,6 +606,9 @@ function createMainWindow(baseUrl) {
 }
 
 app.whenReady().then(() => {
+  if (nativeTheme) {
+    nativeTheme.themeSource = "dark";
+  }
   createSplashWindow();
 
   ensureServerRunning().then((baseUrl) => {
