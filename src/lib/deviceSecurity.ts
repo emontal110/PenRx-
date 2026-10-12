@@ -156,12 +156,52 @@ export async function initializeHardwareMachineId(
 }
 
 /**
- * Check if the current device/browser supports WebAuthn / Biometrics (Fingerprint / FaceID)
+ * Detect if the current runtime is a mobile app / mobile device
+ * Strictly returns false for Electron desktop application and PC browsers.
  */
-export async function isBiometricAvailable(): Promise<boolean> {
-  if (typeof window === "undefined" || !window.PublicKeyCredential) {
+export function isMobileDevice(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const w = window as any;
+  const ua = navigator.userAgent || "";
+
+  // 1. Electron Desktop App check -> strictly false (Computer version)
+  if (w.penrxDesktop?.isElectron || ua.includes("Electron")) {
     return false;
   }
+
+  // 2. PC / Desktop operating system checks -> strictly false
+  if (/Windows NT|Macintosh|Linux x86_64/i.test(ua) && !/Android/i.test(ua)) {
+    return false;
+  }
+
+  // 3. Capacitor native mobile app check -> true
+  if (w.Capacitor?.isNativePlatform?.() || w.Capacitor?.getPlatform?.() === "android") {
+    return true;
+  }
+
+  // 4. Mobile OS user agents
+  const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i;
+  if (mobileRegex.test(ua)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if the current mobile device supports biometric fingerprint / FaceID
+ * Returns false on desktop/computer version.
+ */
+export async function isBiometricAvailable(): Promise<boolean> {
+  if (typeof window === "undefined" || !isMobileDevice()) {
+    return false;
+  }
+
+  if (!window.PublicKeyCredential) {
+    return false;
+  }
+
   try {
     return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
   } catch {
@@ -170,34 +210,127 @@ export async function isBiometricAvailable(): Promise<boolean> {
 }
 
 /**
- * Authenticate with biometric fingerprint or device PIN/FaceID
+ * Register a new biometric fingerprint credential (Mobile Fingerprint Enrollment)
  */
-export async function authenticateWithBiometrics(username = "doctor@penrx.app"): Promise<boolean> {
-  if (typeof window === "undefined" || !window.PublicKeyCredential) {
+export async function registerBiometricCredential(
+  username = "doctor@penrx.app"
+): Promise<boolean> {
+  if (typeof window === "undefined" || !isMobileDevice() || !window.PublicKeyCredential) {
     return false;
   }
 
   try {
-    const isAvailable = await isBiometricAvailable();
-    if (!isAvailable) return false;
+    const isAvail = await isBiometricAvailable();
+    if (!isAvail) return false;
 
-    // Challenge buffer
     const challenge = new Uint8Array(32);
     window.crypto.getRandomValues(challenge);
 
-    const credential = await navigator.credentials.get({
+    const userId = new Uint8Array(16);
+    window.crypto.getRandomValues(userId);
+
+    const rpConfig: PublicKeyCredentialRpEntity = {
+      name: "PenRX+ Mobile",
+    };
+    if (
+      window.location.hostname &&
+      window.location.hostname !== "localhost" &&
+      !window.location.hostname.includes("127.0.0.1")
+    ) {
+      rpConfig.id = window.location.hostname;
+    }
+
+    const credential = (await navigator.credentials.create({
       publicKey: {
         challenge,
+        rp: rpConfig,
+        user: {
+          id: userId,
+          name: username,
+          displayName: username,
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: "public-key" }, // ES256
+          { alg: -257, type: "public-key" }, // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform", // Native mobile fingerprint / FaceID
+          userVerification: "required",
+          residentKey: "preferred",
+        },
         timeout: 60000,
-        userVerification: "required",
-        rpId: window.location.hostname || "localhost",
+        attestation: "none",
       },
+    })) as PublicKeyCredential | null;
+
+    if (credential && credential.id) {
+      localStorage.setItem("penrx_biometric_credential_id", credential.id);
+      localStorage.setItem("penrx_biometric_enabled", "true");
+      return true;
+    }
+    return false;
+  } catch (err: any) {
+    console.warn("[Biometrics] Registration error:", err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Authenticate with biometric fingerprint or device FaceID / PIN on mobile
+ */
+export async function authenticateWithBiometrics(
+  username = "doctor@penrx.app"
+): Promise<boolean> {
+  if (typeof window === "undefined" || !isMobileDevice() || !window.PublicKeyCredential) {
+    return false;
+  }
+
+  try {
+    const isAvail = await isBiometricAvailable();
+    if (!isAvail) return false;
+
+    const existingCredId = localStorage.getItem("penrx_biometric_credential_id");
+
+    // If no credential enrolled yet, enroll directly via create
+    if (!existingCredId) {
+      return await registerBiometricCredential(username);
+    }
+
+    const challenge = new Uint8Array(32);
+    window.crypto.getRandomValues(challenge);
+
+    const getPublicKey: PublicKeyCredentialRequestOptions = {
+      challenge,
+      timeout: 60000,
+      userVerification: "required",
+    };
+
+    if (
+      window.location.hostname &&
+      window.location.hostname !== "localhost" &&
+      !window.location.hostname.includes("127.0.0.1")
+    ) {
+      getPublicKey.rpId = window.location.hostname;
+    }
+
+    const credential = await navigator.credentials.get({
+      publicKey: getPublicKey,
     });
 
-    return !!credential;
+    if (credential) {
+      return true;
+    }
+
+    // Fallback: re-register if get didn't match
+    return await registerBiometricCredential(username);
   } catch (err: any) {
-    // If not enrolled or user cancelled
-    console.warn("Biometric verification info:", err.message || err);
+    // If get failed because credential was not found or re-enrollment required, attempt registration
+    if (err?.name === "NotAllowedError" || err?.name === "InvalidStateError") {
+      try {
+        return await registerBiometricCredential(username);
+      } catch {}
+    }
+    console.warn("[Biometrics] Verification error:", err?.message || err);
     return false;
   }
 }

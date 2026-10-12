@@ -52,7 +52,7 @@ import {
 import { useClinicStore, Branch, PrescriptionTemplate } from "@/store/useClinicStore";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
-import { isBiometricAvailable, authenticateWithBiometrics } from "@/lib/deviceSecurity";
+import { isBiometricAvailable, authenticateWithBiometrics, isMobileDevice } from "@/lib/deviceSecurity";
 import { QRCodeSVG } from "qrcode.react";
 import { showGlobalToast } from "@/components/common/GlobalToast";
 import {
@@ -547,7 +547,8 @@ export default function SettingsPage() {
   const [showFooter, setShowFooter] = useState(clinic.showFooter !== false);
   const [biometricsEnabled, setBiometricsEnabled] = useState(clinic.biometricsEnabled || false);
 
-  // Biometrics & Save feedbacks
+  // Biometrics & Save feedbacks (Mobile only)
+  const [isMobile, setIsMobile] = useState(false);
   const [hasBiometricsHardware, setHasBiometricsHardware] = useState(false);
   const [biometricFeedback, setBiometricFeedback] = useState<string | null>(null);
   const [savedSuccessMsg, setSavedSuccessMsg] = useState<string | null>(null);
@@ -581,8 +582,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function checkHardware() {
-      const avail = await isBiometricAvailable();
-      setHasBiometricsHardware(avail);
+      const mobile = isMobileDevice();
+      setIsMobile(mobile);
+      if (mobile) {
+        const avail = await isBiometricAvailable();
+        setHasBiometricsHardware(avail);
+      } else {
+        setHasBiometricsHardware(false);
+      }
     }
     checkHardware();
 
@@ -1272,55 +1279,61 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Fingerprint & Biometrics Setup */}
-                <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/30 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                      <Fingerprint className="w-5 h-5 text-emerald-400" />
-                      <span>تسجيل الدخول ببصمة الأصبع / Touch ID / Face ID:</span>
-                    </span>
-                    <span
-                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                        biometricsEnabled
-                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                          : "bg-slate-800 text-slate-400 border-slate-700"
-                      }`}
-                    >
-                      {biometricsEnabled ? "البصمة مفعّلة ✅" : "غير مفعّلة 🔒"}
-                    </span>
-                  </div>
+                {/* Fingerprint & Biometrics Setup - Visible ONLY on Mobile Devices */}
+                {isMobile && hasBiometricsHardware && (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/30 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                        <Fingerprint className="w-5 h-5 text-emerald-400" />
+                        <span>تسجيل الدخول ببصمة الأصبع / Touch ID / Face ID:</span>
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          biometricsEnabled
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                            : "bg-slate-800 text-slate-400 border-slate-700"
+                        }`}
+                      >
+                        {biometricsEnabled ? "البصمة مفعّلة ✅" : "غير مفعّلة 🔒"}
+                      </span>
+                    </div>
 
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    سجل بصمة إصبعك أو وجهك للفتح السريع والآمن دون الحاجة لكتابة كلمات مرور كل مرة.
-                  </p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      سجل بصمة إصبعك أو وجهك للفتح السريع والآمن دون الحاجة لكتابة كلمات مرور كل مرة.
+                    </p>
 
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleTestBiometrics}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Fingerprint className="w-4 h-4" />
-                      <span>{biometricsEnabled ? "إعادة فحص البصمة 🖐️" : "تفعيل وتسجيل البصمة الآن 🖐️"}</span>
-                    </button>
-                    {biometricsEnabled && (
+                    <div className="flex items-center gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={() => {
-                          setBiometricsEnabled(false);
-                          updateClinic({ biometricsEnabled: false });
-                        }}
-                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-600/30 text-rose-300 text-xs font-bold transition-all border border-slate-700"
+                        onClick={handleTestBiometrics}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                       >
-                        إلغاء التفعيل
+                        <Fingerprint className="w-4 h-4" />
+                        <span>{biometricsEnabled ? "إعادة فحص البصمة 🖐️" : "تفعيل وتسجيل البصمة الآن 🖐️"}</span>
                       </button>
+                      {biometricsEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBiometricsEnabled(false);
+                            updateClinic({ biometricsEnabled: false });
+                            if (typeof window !== "undefined") {
+                              localStorage.removeItem("penrx_biometric_enabled");
+                              localStorage.removeItem("penrx_biometric_credential_id");
+                            }
+                          }}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-600/30 text-rose-300 text-xs font-bold transition-all border border-slate-700 cursor-pointer"
+                        >
+                          إلغاء التفعيل
+                        </button>
+                      )}
+                    </div>
+
+                    {biometricFeedback && (
+                      <p className="text-xs font-black text-amber-300 pt-1">{biometricFeedback}</p>
                     )}
                   </div>
-
-                  {biometricFeedback && (
-                    <p className="text-xs font-black text-amber-300 pt-1">{biometricFeedback}</p>
-                  )}
-                </div>
+                )}
               </div>
 
               {/* Box 2: Logo Customization */}
