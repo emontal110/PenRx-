@@ -26,7 +26,7 @@ export function DesktopTitleBar() {
   return (
     <div
       dir="ltr"
-      className="w-full h-9 bg-[#0b1329] border-b border-slate-800/80 flex items-center justify-between px-3 select-none text-xs text-slate-300 shrink-0 z-50 sticky top-0"
+      className="w-full h-9 bg-[#0b1329] border-b border-slate-800/80 flex items-center justify-between px-3 select-none text-xs text-slate-300 shrink-0"
       style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
     >
       {/* Title & App Icon (Left in LTR) */}

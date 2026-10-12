@@ -122,7 +122,7 @@ export function Navbar() {
   return (
     <>
       {/* ===== TOP DESKTOP & MOBILE HEADER ===== */}
-      <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-2xl border-b border-slate-800/80 shadow-lg">
+      <header className="w-full bg-slate-950/95 backdrop-blur-2xl border-b border-slate-800/80 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-18">
             {/* Right: Brand & Clinic */}

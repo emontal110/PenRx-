@@ -36,9 +36,12 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" className="dark">
       <body suppressHydrationWarning className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
         <AppHydrationSplash>
-          <DesktopTitleBar />
+          {/* Unified Sticky Header: binds TitleBar + Navbar together so they stick smoothly with zero content clipping on scroll */}
+          <div className="sticky top-0 z-40 w-full bg-slate-950">
+            <DesktopTitleBar />
+            <Navbar />
+          </div>
           <CapacitorNativeBridge />
-          <Navbar />
           <main className="max-w-7xl 2xl:max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 pb-24 md:pb-8">
             <SubscriptionExpiryBanner />
             <PaywallGuard>{children}</PaywallGuard>
