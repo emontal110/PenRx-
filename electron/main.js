@@ -529,6 +529,8 @@ function createMainWindow(baseUrl) {
     ? path.join(__dirname, "../public/icon.ico")
     : path.join(__dirname, "../public/icon-512.png");
 
+  const isWindows = process.platform === "win32";
+
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 850,
@@ -536,8 +538,18 @@ function createMainWindow(baseUrl) {
     minHeight: 700,
     title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية الذكية",
     icon: iconPath,
-    backgroundColor: "#020617",
+    backgroundColor: "#0b1329",
     show: false,
+    ...(isWindows
+      ? {
+          titleBarStyle: "hidden",
+          titleBarOverlay: {
+            color: "#0b1329", // كحلي داكن راقي يطابق ثيم البرنامج
+            symbolColor: "#cbd5e1", // أزرار تحكم فضية متناسقة
+            height: 36,
+          },
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
