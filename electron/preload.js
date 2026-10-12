@@ -26,5 +26,11 @@ contextBridge.exposeInMainWorld("penrxDesktop", {
    * Opens link directly in the default OS browser
    */
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
+  /**
+   * Window size & Fullscreen controls
+   */
+  toggleFullScreen: () => ipcRenderer.invoke("toggle-fullscreen"),
+  isFullScreen: () => ipcRenderer.invoke("is-fullscreen"),
+  maximizeWindow: () => ipcRenderer.invoke("maximize-window"),
 });
 

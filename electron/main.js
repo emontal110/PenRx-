@@ -130,6 +130,36 @@ ipcMain.handle("open-external", async (event, url) => {
   return false;
 });
 
+// IPC handlers: window full screen and maximize control
+ipcMain.handle("toggle-fullscreen", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const isFull = mainWindow.isFullScreen();
+    mainWindow.setFullScreen(!isFull);
+    return !isFull;
+  }
+  return false;
+});
+
+ipcMain.handle("is-fullscreen", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow.isFullScreen();
+  }
+  return false;
+});
+
+ipcMain.handle("maximize-window", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+      return false;
+    } else {
+      mainWindow.maximize();
+      return true;
+    }
+  }
+  return false;
+});
+
 // Stream file download with 301/302/307 redirect support
 function downloadFileWithRedirects(url, destPath, onProgress, maxRedirects = 6) {
   return new Promise((resolve, reject) => {
@@ -512,6 +542,17 @@ function createMainWindow(baseUrl) {
 
   Menu.setApplicationMenu(null);
 
+  // Default to Full Screen / Maximized window on application launch
+  mainWindow.maximize();
+
+  // Support F11 keyboard shortcut to toggle borderless full screen mode anytime
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (input.key === "F11" && input.type === "keyDown") {
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+      event.preventDefault();
+    }
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http:") || url.startsWith("https:") || url.startsWith("whatsapp:")) {
       shell.openExternal(url);
@@ -530,6 +571,7 @@ function createMainWindow(baseUrl) {
     hasTransitioned = true;
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.maximize();
         mainWindow.show();
         mainWindow.focus();
       }
