@@ -1641,7 +1641,7 @@ export default function SettingsPage() {
                     <span>قوالب وتصاميم شكل الروشتة الطبية (Prescription Design Templates):</span>
                   </h3>
                   <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                    6 قوالب طبية احترافية
+                    10 قوالب طبية احترافية
                   </span>
                 </div>
 
@@ -1707,6 +1707,47 @@ export default function SettingsPage() {
                                 <span className="w-4 h-1 rounded bg-slate-800" />
                                 <span className="w-6 h-1 rounded" style={{ backgroundColor: primaryColor }} />
                               </div>
+                            ) : tmpl.id === "nordic_pastel" ? (
+                              <div
+                                className="h-3 w-full rounded-t-sm flex items-center justify-between px-1"
+                                style={{
+                                  background: `linear-gradient(90deg, ${primaryColor}30, #e0f2fe)`,
+                                }}
+                              >
+                                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: `${primaryColor}60` }} />
+                                <span className="w-8 h-1 rounded" style={{ backgroundColor: primaryColor }} />
+                              </div>
+                            ) : tmpl.id === "geometric_frame" ? (
+                              <div
+                                className="h-3 w-full rounded-t-sm border-b border-dashed flex items-center justify-between px-1"
+                                style={{
+                                  borderColor: primaryColor,
+                                  backgroundColor: "#fafafa",
+                                }}
+                              >
+                                <span className="text-[7px] font-bold" style={{ color: primaryColor }}>◇</span>
+                                <span className="w-6 h-1 rounded" style={{ backgroundColor: primaryColor }} />
+                              </div>
+                            ) : tmpl.id === "soft_curves" ? (
+                              <div
+                                className="h-3.5 w-full rounded-full flex items-center justify-between px-2"
+                                style={{
+                                  backgroundColor: `${primaryColor}20`,
+                                }}
+                              >
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: primaryColor }} />
+                                <span className="w-5 h-1 rounded-full" style={{ backgroundColor: primaryColor }} />
+                              </div>
+                            ) : tmpl.id === "academic_crest" ? (
+                              <div
+                                className="h-3 w-full flex items-center justify-between px-1"
+                                style={{
+                                  backgroundColor: primaryColor,
+                                }}
+                              >
+                                <span className="w-4 h-1 rounded bg-white/70" />
+                                <span className="text-[6px] text-white">⚕</span>
+                              </div>
                             ) : tmpl.id === "tech_hex" ? (
                               <div
                                 className="h-3 w-full rounded-t-sm flex items-center justify-between px-1"
@@ -1768,6 +1809,37 @@ export default function SettingsPage() {
                                 }}
                               >
                                 <span className="w-10 h-0.5 rounded bg-slate-400" />
+                              </div>
+                            ) : tmpl.id === "nordic_pastel" ? (
+                              <div
+                                className="h-2 w-full flex items-center justify-center"
+                                style={{
+                                  background: `linear-gradient(90deg, ${primaryColor}15, #f0fdf4)`,
+                                }}
+                              >
+                                <span className="w-8 h-0.5 rounded bg-slate-300" />
+                              </div>
+                            ) : tmpl.id === "geometric_frame" ? (
+                              <div
+                                className="h-2 w-full flex items-center justify-between px-1 border-t border-dashed"
+                                style={{ borderColor: `${primaryColor}30` }}
+                              >
+                                <span className="text-[5px]" style={{ color: primaryColor }}>◇</span>
+                                <span className="w-6 h-0.5 rounded bg-slate-300" />
+                              </div>
+                            ) : tmpl.id === "soft_curves" ? (
+                              <div
+                                className="h-2.5 w-3/4 mx-auto rounded-full flex items-center justify-center"
+                                style={{ backgroundColor: `${primaryColor}15` }}
+                              >
+                                <span className="w-6 h-0.5 rounded bg-slate-300" />
+                              </div>
+                            ) : tmpl.id === "academic_crest" ? (
+                              <div
+                                className="h-2 w-full border-t flex items-center justify-center"
+                                style={{ borderColor: primaryColor }}
+                              >
+                                <span className="w-10 h-0.5 rounded" style={{ backgroundColor: primaryColor }} />
                               </div>
                             ) : tmpl.id === "tech_hex" ? (
                               <div

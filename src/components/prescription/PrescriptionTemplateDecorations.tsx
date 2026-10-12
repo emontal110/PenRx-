@@ -306,6 +306,223 @@ export function PrescriptionTemplateDecorations({
     );
   }
 
+  // 6. NORDIC PASTEL (النبض النورديك الانسيابي - هدوء وبساطة اسكندنافية)
+  if (templateId === "nordic_pastel") {
+    return (
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 print:opacity-100">
+        {/* Soft Pastel Header Horizon Wave */}
+        <svg
+          className="absolute top-0 inset-x-0 w-full h-20 sm:h-24 opacity-30"
+          viewBox="0 0 600 100"
+          preserveAspectRatio="none"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <path d="M0,0 L600,0 L600,45 C460,20 320,60 0,35 Z" fill="currentColor" fillOpacity="0.12" />
+          <path d="M0,38 C220,62 420,22 600,48" stroke="currentColor" strokeWidth="1.2" strokeDasharray="3 3" opacity="0.6" />
+          <path d="M0,22 C180,45 380,12 600,32" stroke="currentColor" strokeWidth="0.8" opacity="0.3" />
+        </svg>
+
+        {/* Delicate Pastel Circular Badge in Top-Left Corner */}
+        <svg
+          className="absolute top-3 left-3 w-8 h-8 opacity-25"
+          viewBox="0 0 32 32"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 2" />
+          <circle cx="16" cy="16" r="10" fill="currentColor" fillOpacity="0.08" />
+          <circle cx="16" cy="16" r="3" fill="currentColor" />
+        </svg>
+
+        {/* Soft Bottom Footer Wave Accent */}
+        <svg
+          className="absolute bottom-0 inset-x-0 w-full h-14 sm:h-16 opacity-25"
+          viewBox="0 0 600 70"
+          preserveAspectRatio="none"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <path d="M0,70 L600,70 L600,28 C450,55 240,15 0,40 Z" fill="currentColor" fillOpacity="0.08" />
+          <path d="M0,38 C240,15 450,55 600,28" stroke="currentColor" strokeWidth="1" strokeDasharray="4 2" opacity="0.5" />
+        </svg>
+      </div>
+    );
+  }
+
+  // 7. GEOMETRIC FRAME (الإطار الهندسي الأنيق - زوايا معمارية مقطوعة وأناقة دقيقة)
+  if (templateId === "geometric_frame") {
+    return (
+      <div className="absolute inset-0 pointer-events-none z-0 print:opacity-100 overflow-hidden">
+        {/* Precision Dotted Inner Margin Perimeter */}
+        <div
+          className="absolute inset-2 sm:inset-3 border border-dashed rounded-lg opacity-30 pointer-events-none"
+          style={{ borderColor: primaryColor }}
+        />
+
+        {/* Top-Right Chamfered Angle & Diamond */}
+        <svg
+          className="absolute top-0 right-0 w-12 h-12 opacity-70"
+          viewBox="0 0 48 48"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <polygon points="48,0 48,28 28,48 0,48 0,0" fill="currentColor" fillOpacity="0.08" />
+          <path d="M48,28 L28,48" stroke="currentColor" strokeWidth="1.8" />
+          <rect x="25" y="11" width="8" height="8" transform="rotate(45 29 15)" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1" />
+        </svg>
+
+        {/* Top-Left Chamfered Angle & Diamond */}
+        <svg
+          className="absolute top-0 left-0 w-12 h-12 opacity-70"
+          viewBox="0 0 48 48"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <polygon points="0,0 0,28 20,48 48,48 48,0" fill="currentColor" fillOpacity="0.08" />
+          <path d="M0,28 L20,48" stroke="currentColor" strokeWidth="1.8" />
+          <rect x="15" y="11" width="8" height="8" transform="rotate(45 19 15)" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1" />
+        </svg>
+
+        {/* Bottom-Right Chamfered Angle */}
+        <svg
+          className="absolute bottom-0 right-0 w-10 h-10 opacity-70"
+          viewBox="0 0 40 40"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <polygon points="40,40 40,16 16,40" fill="currentColor" fillOpacity="0.1" />
+          <path d="M40,16 L16,40" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+
+        {/* Bottom-Left Chamfered Angle */}
+        <svg
+          className="absolute bottom-0 left-0 w-10 h-10 opacity-70"
+          viewBox="0 0 40 40"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <polygon points="0,40 0,16 24,40" fill="currentColor" fillOpacity="0.1" />
+          <path d="M0,16 L24,40" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+
+        {/* Precision Crosshairs in Margin Intersections */}
+        <svg className="absolute top-6 left-6 w-3 h-3 opacity-40" viewBox="0 0 12 12" fill="none" style={{ color: primaryColor }}>
+          <line x1="6" y1="0" x2="6" y2="12" stroke="currentColor" strokeWidth="1" />
+          <line x1="0" y1="6" x2="12" y2="6" stroke="currentColor" strokeWidth="1" />
+        </svg>
+        <svg className="absolute top-6 right-6 w-3 h-3 opacity-40" viewBox="0 0 12 12" fill="none" style={{ color: primaryColor }}>
+          <line x1="6" y1="0" x2="6" y2="12" stroke="currentColor" strokeWidth="1" />
+          <line x1="0" y1="6" x2="12" y2="6" stroke="currentColor" strokeWidth="1" />
+        </svg>
+      </div>
+    );
+  }
+
+  // 8. SOFT CURVES CARE (الرعاية الدافئة وطب الأسرة والأطفال - منحنيات وكبسولات دافئة)
+  if (templateId === "soft_curves") {
+    return (
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 print:opacity-100">
+        {/* Soft Overlapping Cloud Pill Arcs in Header */}
+        <svg
+          className="absolute top-0 inset-x-0 w-full h-24 sm:h-28 opacity-35"
+          viewBox="0 0 600 120"
+          preserveAspectRatio="none"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <rect x="-30" y="-30" width="380" height="95" rx="48" fill="currentColor" fillOpacity="0.1" />
+          <rect x="260" y="-25" width="370" height="90" rx="45" fill="currentColor" fillOpacity="0.08" />
+          {/* Friendly floating micro-bubbles */}
+          <circle cx="230" cy="55" r="4.5" fill="currentColor" fillOpacity="0.35" />
+          <circle cx="248" cy="42" r="3" fill="currentColor" fillOpacity="0.25" />
+          <circle cx="370" cy="62" r="3.5" fill="currentColor" fillOpacity="0.3" />
+        </svg>
+
+        {/* Soft Pill Arc in Footer */}
+        <svg
+          className="absolute bottom-0 inset-x-0 w-full h-16 sm:h-20 opacity-30"
+          viewBox="0 0 600 80"
+          preserveAspectRatio="none"
+          fill="none"
+          style={{ color: primaryColor }}
+        >
+          <rect x="90" y="20" width="420" height="80" rx="40" fill="currentColor" fillOpacity="0.1" />
+          <circle cx="70" cy="45" r="3.5" fill="currentColor" fillOpacity="0.25" />
+          <circle cx="530" cy="45" r="3.5" fill="currentColor" fillOpacity="0.25" />
+        </svg>
+      </div>
+    );
+  }
+
+  // 9. ACADEMIC ROYAL CREST (الشريط الأكاديمي التخصصي - وقار كبرى المستشفيات مع عصا الطب)
+  if (templateId === "academic_crest") {
+    return (
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 print:opacity-100">
+        {/* Top Solid Institutional Header Ribbon Strip */}
+        <div
+          className="absolute top-0 inset-x-0 h-3 opacity-90"
+          style={{ backgroundColor: primaryColor }}
+        />
+        <div
+          className="absolute top-3.5 inset-x-0 h-0.5 opacity-50"
+          style={{ backgroundColor: primaryColor }}
+        />
+
+        {/* Central Watermark: Authentic Rod of Asclepius & Caduceus Medical Crest */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-[0.06] pointer-events-none">
+          <svg
+            className="w-48 h-64 sm:w-56 sm:h-72"
+            viewBox="0 0 200 280"
+            fill="none"
+            style={{ color: primaryColor }}
+          >
+            {/* Center Asclepius Rod */}
+            <line x1="100" y1="20" x2="100" y2="260" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+            <circle cx="100" cy="18" r="9" fill="currentColor" />
+            {/* Coiling Sacred Medical Serpent */}
+            <path
+              d="M85,240 C65,210 135,185 115,155 C95,125 65,95 100,65 C125,45 80,30 100,20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            {/* Wing elements flanking the top */}
+            <path
+              d="M100,50 C125,30 155,40 170,65 C150,68 130,62 100,75"
+              fill="currentColor"
+              fillOpacity="0.3"
+            />
+            <path
+              d="M100,50 C75,30 45,40 30,65 C50,68 70,62 100,75"
+              fill="currentColor"
+              fillOpacity="0.3"
+            />
+            {/* Classical Laurel Wreath base */}
+            <path
+              d="M50,220 C40,240 70,260 100,265 C130,260 160,240 150,220"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeDasharray="4 3"
+            />
+          </svg>
+        </div>
+
+        {/* Formal Dual-Pinstripe Collegiate Footer */}
+        <div
+          className="absolute bottom-3.5 inset-x-0 h-0.5 opacity-50"
+          style={{ backgroundColor: primaryColor }}
+        />
+        <div
+          className="absolute bottom-0 inset-x-0 h-2.5 opacity-90"
+          style={{ backgroundColor: primaryColor }}
+        />
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -352,7 +569,7 @@ export function getTemplateContainerStyles(
       return {
         style: {
           borderTop: `6px solid ${primaryColor}`,
-          borderBottom: `5px solid ${primaryColor}`,
+          borderBottom: `6px solid ${primaryColor}`,
           backgroundColor: "#ffffff",
         },
         className: "border-x-2 border-slate-200/90 shadow-2xl relative",
@@ -370,6 +587,48 @@ export function getTemplateContainerStyles(
         className: "shadow-2xl",
       };
 
+    case "nordic_pastel":
+      return {
+        style: {
+          borderTop: `5px solid ${primaryColor}80`,
+          borderBottom: `4px solid ${primaryColor}50`,
+          backgroundColor: "#fafcfd",
+        },
+        className: "border-x border-slate-200 shadow-2xl relative",
+      };
+
+    case "geometric_frame":
+      return {
+        style: {
+          border: `2px solid ${primaryColor}85`,
+          outline: `1px dashed ${primaryColor}30`,
+          outlineOffset: "-6px",
+          backgroundColor: "#ffffff",
+        },
+        className: "shadow-2xl relative",
+      };
+
+    case "soft_curves":
+      return {
+        style: {
+          borderTop: `5px solid ${primaryColor}`,
+          borderBottom: `5px solid ${primaryColor}80`,
+          borderRadius: "20px",
+          backgroundColor: "#fdfefe",
+        },
+        className: "border-x border-slate-200 shadow-2xl relative overflow-hidden",
+      };
+
+    case "academic_crest":
+      return {
+        style: {
+          borderTop: `7px solid ${primaryColor}`,
+          borderBottom: `4px solid ${primaryColor}`,
+          backgroundColor: "#fafbfc",
+        },
+        className: "border-x-2 border-slate-300 shadow-2xl relative",
+      };
+
     case "classic":
     default:
       return {
@@ -383,7 +642,7 @@ export function getTemplateContainerStyles(
 }
 
 /**
- * Metadata for all 6 prescription templates for the Settings UI.
+ * Metadata for all 10 prescription templates for the Settings UI.
  */
 export const PRESCRIPTION_TEMPLATES: {
   id: PrescriptionTemplate;
@@ -402,10 +661,42 @@ export const PRESCRIPTION_TEMPLATES: {
     description: "التصميم الكلاسيكي الأصلي بالخطوط العلوية والسفلية الأنيقة والشعار المائي دون أي تغيير.",
   },
   {
+    id: "nordic_pastel",
+    name: "النبض النورديك الانسيابي",
+    subtitle: "Nordic Clean Pastel",
+    badge: "جديد • ألوان باستيل 🌿",
+    badgeColor: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+    description: "بساطة اسكندنافية نقية وترويسة مموجة بتدرج باستيل هادئ مع مساحات واسعة مريحة للعين.",
+  },
+  {
+    id: "geometric_frame",
+    name: "الإطار الهندسي الأنيق",
+    subtitle: "Modern Geometric Frame",
+    badge: "جديد • إطار معماري 📐",
+    badgeColor: "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30",
+    description: "إطار محيطي هندسي مزدوج بزوايا مقطوعة وألماسية دقيقة تعكس الدقة المعمارية والرسمية.",
+  },
+  {
+    id: "soft_curves",
+    name: "الرعاية الدافئة وطب الأسرة",
+    subtitle: "Warm Soft Curves Care",
+    badge: "جديد • للأطفال والأسرة 🧸",
+    badgeColor: "bg-amber-500/20 text-amber-300 border border-amber-500/30",
+    description: "منحنيات دائرية دافئة وسحب كبسولية مبهجة تضفي إحساساً مريحاً ومطمئناً للمريض والطفل.",
+  },
+  {
+    id: "academic_crest",
+    name: "الشريط الأكاديمي التخصصي",
+    subtitle: "Academic Royal Crest",
+    badge: "جديد • وقار تخصصي 🏛️",
+    badgeColor: "bg-blue-600/20 text-blue-300 border border-blue-500/30",
+    description: "شريط علوي كحلي/زمردي عريض ووقور مع علامة مائية لعصا أسكليبيوس وشعار الطب العريق.",
+  },
+  {
     id: "modern_wave",
     name: "الموجات الطبية الانسيابية",
     subtitle: "Modern Medical Waves",
-    badge: "مستوحى من النموذج 1 🌊",
+    badge: "أمواج انسيابية 🌊",
     badgeColor: "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30",
     description: "تموجات انسيابية فائقة الجمال في الترويسة والتذييل، خطوط أمان شبكية وخلفية مريحة للكتابة.",
   },
@@ -413,7 +704,7 @@ export const PRESCRIPTION_TEMPLATES: {
     id: "tech_hex",
     name: "التقنية الطبية المتطورة",
     subtitle: "Bio-Tech Hexagon Network",
-    badge: "مستوحى من النموذج 2 ⚡",
+    badge: "خلايا رقمية ⚡",
     badgeColor: "bg-teal-500/20 text-teal-300 border border-teal-500/30",
     description: "شبكات خلايا سداسية ومسارات ذكاء رقمية دقيقة تعكس الحداثة والتقنية الطبية المتطورة.",
   },
@@ -429,9 +720,9 @@ export const PRESCRIPTION_TEMPLATES: {
     id: "minimal_clean",
     name: "نبض الحياة والجينوم الطبي",
     subtitle: "Bio-Pulse & DNA Helix",
-    badge: "طبي حيوي متقدم 🧬",
+    badge: "طبي حيوي 🧬",
     badgeColor: "bg-rose-500/20 text-rose-300 border border-rose-500/30",
-    description: "تصميم طبي حيوي مفعم بالحياة؛ موجات تخطيط نبض القلب (ECG Pulse)، لولب الجينوم (DNA Helix)، وفواصل سريرية حيوية وعصرية.",
+    description: "تصميم طبي حيوي مفعم بالحياة؛ موجات تخطيط نبض القلب (ECG Pulse)، ولولب الجينوم (DNA Helix).",
   },
   {
     id: "clinical_sidebar",

@@ -21,7 +21,11 @@ export type PrescriptionTemplate =
   | "tech_hex"
   | "luxury_gold"
   | "minimal_clean"
-  | "clinical_sidebar";
+  | "clinical_sidebar"
+  | "nordic_pastel"
+  | "geometric_frame"
+  | "soft_curves"
+  | "academic_crest";
 
 export interface ClinicSettings {
   id: string;
