@@ -382,12 +382,12 @@ export function LivePrescriptionPreview({
                 </span>
                 {bmiInfo && (
                   <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9.5px] font-black border transition-all ${bmiInfo.badgeClass} print:${bmiInfo.printBadgeClass} print:shadow-none`}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black border transition-all ${bmiInfo.badgeClass} print:shadow-none`}
                     title={`مؤشر كتلة الجسم (BMI): ${bmiInfo.bmiFormatted} kg/m² • الوزن المثالي: ${bmiInfo.idealWeightMin} - ${bmiInfo.idealWeightMax} كجم`}
                   >
                     <span>{bmiInfo.icon}</span>
                     <span>{bmiInfo.label}</span>
-                    <span className="font-mono text-[8.5px] font-bold" dir="ltr">({bmiInfo.bmiFormatted})</span>
+                    <span className="font-mono text-[9px] font-black" dir="ltr">({bmiInfo.bmiFormatted})</span>
                   </span>
                 )}
               </div>
