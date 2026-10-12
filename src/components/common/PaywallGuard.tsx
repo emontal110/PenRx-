@@ -28,20 +28,27 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
     initHardwareId().catch(() => {});
     syncWithServer();
 
-    // Auto-run smart cache cleaner, offline sync queue, and silent daily backup & auto-archiving
-    try {
-      usePrescriptionStore.getState().cleanExpiredCache();
-      processSyncQueue();
-      runDailySilentBackupAndAutoArchival().catch(() => {});
-    } catch {}
+    // Defer heavy maintenance (smart cache cleaner, sync queue, silent daily backup)
+    // by 15 seconds after app startup so the initial screen loads and responds with zero CPU lag
+    const deferredTasksTimer = setTimeout(() => {
+      try {
+        usePrescriptionStore.getState().cleanExpiredCache();
+        processSyncQueue();
+        runDailySilentBackupAndAutoArchival().catch(() => {});
+      } catch {}
+    }, 15000);
 
     // Adaptive background sync:
-    // If pending approval: poll every 5 seconds to catch instant activation
-    // If already active: poll every 60 seconds for quiet background verification
-    // Otherwise: poll every 30 seconds
-    const intervalMs = subDetails.isPending ? 5000 : subDetails.isActive ? 60000 : 30000;
+    // If pending approval: poll every 15 seconds to catch activation without exhausting mobile connections
+    // If already active: poll every 90 seconds for quiet background verification
+    // Otherwise: poll every 45 seconds
+    const intervalMs = subDetails.isPending ? 15000 : subDetails.isActive ? 90000 : 45000;
     const interval = setInterval(syncWithServer, intervalMs);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearTimeout(deferredTasksTimer);
+      clearInterval(interval);
+    };
   }, [syncWithServer, initHardwareId, subDetails.isPending, subDetails.isActive]);
 
   // Check if mandatory clinic profile is saved (Doctor name, clinic name, phone)

@@ -874,30 +874,32 @@ export default function SubscriptionsPage() {
                 <div className="space-y-2" ref={dropdownRef}>
                   <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
                     <span>اختر نوع الباقة المرغوبة:</span>
-                    <span className="text-[10px] text-emerald-400 font-normal">اضغط لتغيير الباقة ⬇</span>
+                    <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      اضغط لتغيير الباقة ⬇
+                    </span>
                   </label>
 
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                      className="w-full p-3.5 rounded-2xl bg-slate-950 border-2 border-slate-700 hover:border-emerald-500/60 text-slate-100 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-inner"
+                      className="w-full p-3 sm:p-3.5 rounded-2xl bg-slate-950 border-2 border-slate-700 hover:border-emerald-500/60 text-slate-100 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-inner gap-2"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
                           <Crown className="w-4 h-4" />
                         </div>
-                        <div className="text-right">
-                          <span className="text-sm font-black text-slate-100 block">
+                        <div className="text-right min-w-0">
+                          <span className="text-xs sm:text-sm font-black text-slate-100 block truncate">
                             {selectedPaidPlan.nameAr}
                           </span>
-                          <span className="text-[11px] text-slate-400 font-medium">
+                          <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">
                             {selectedPaidPlan.durationLabel}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <span className="px-2.5 py-1 rounded-xl bg-slate-900 text-emerald-400 font-mono font-black text-xs border border-slate-800">
                           {selectedPaidPlan.price} ج.م
                         </span>
@@ -905,9 +907,9 @@ export default function SubscriptionsPage() {
                       </div>
                     </button>
 
-                    {/* Dropdown Options Popup */}
+                    {/* Responsive Inline Dropdown Options (Never covers content, perfectly sized for modern phones) */}
                     {isDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-slate-950 border-2 border-emerald-500/40 rounded-2xl p-2 shadow-2xl space-y-1.5 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150 max-h-72 sm:max-h-96 overflow-y-auto">
+                      <div className="relative mt-2.5 w-full bg-slate-950/95 border-2 border-emerald-500/40 rounded-2xl p-2 sm:p-2.5 shadow-2xl space-y-2 backdrop-blur-2xl animate-in fade-in duration-150">
                         {PAID_PLANS.map((plan) => {
                           const isSelected = plan.id === selectedPaidPlanId;
 
@@ -919,41 +921,48 @@ export default function SubscriptionsPage() {
                                 setSelectedPaidPlanId(plan.id);
                                 setIsDropdownOpen(false);
                               }}
-                              className={`w-full p-3 rounded-xl text-right flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                              className={`w-full p-2.5 sm:p-3 rounded-xl text-right transition-all cursor-pointer flex flex-col gap-1.5 ${
                                 isSelected
-                                  ? "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40"
+                                  ? "bg-emerald-500/20 text-emerald-200 border-2 border-emerald-500/50 shadow-md"
                                   : "bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800"
                               }`}
                             >
-                              <div className="flex items-center gap-2.5">
-                                <div
-                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                    isSelected
-                                      ? "border-emerald-400 bg-emerald-500 text-slate-950"
-                                      : "border-slate-600 bg-slate-800"
-                                  }`}
-                                >
-                                  {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-black text-slate-100">{plan.nameAr}</span>
-                                    {plan.popular && (
-                                      <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[9px] font-black border border-amber-500/30">
-                                        الأفضل ⭐
-                                      </span>
-                                    )}
+                              {/* Top Line: Selection Radio + Plan Name + Badges (Right), Price (Left) */}
+                              <div className="w-full flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                  <div
+                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                      isSelected
+                                        ? "border-emerald-400 bg-emerald-500 text-slate-950"
+                                        : "border-slate-600 bg-slate-800"
+                                    }`}
+                                  >
+                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                                   </div>
-                                  <span className="text-[10px] text-slate-400 block">{plan.durationLabel}</span>
+                                  <span className="text-xs sm:text-sm font-black text-slate-100">
+                                    {plan.nameAr}
+                                  </span>
+                                  {plan.popular && (
+                                    <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[9px] font-black border border-amber-500/30 whitespace-nowrap">
+                                      الأفضل ⭐
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="shrink-0 text-left font-mono">
+                                  <span className="px-2 py-0.5 rounded-lg bg-slate-950 text-xs sm:text-sm font-black text-emerald-400 border border-slate-800 inline-block">
+                                    {plan.price} ج.م
+                                  </span>
                                 </div>
                               </div>
 
-                              <div className="text-left font-mono shrink-0">
-                                <span className="text-sm font-black text-emerald-400 block">
-                                  {plan.price} ج.م
+                              {/* Bottom Line: Duration Label + Discount badge (if any) */}
+                              <div className="w-full flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60 text-[10px] sm:text-[11px]">
+                                <span className="text-slate-400 font-medium truncate">
+                                  {plan.durationLabel}
                                 </span>
                                 {plan.discountText && (
-                                  <span className="text-[10px] text-amber-400 block font-sans font-bold">
+                                  <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 whitespace-nowrap shrink-0">
                                     {plan.discountText}
                                   </span>
                                 )}
@@ -987,10 +996,12 @@ export default function SubscriptionsPage() {
                 <button
                   type="button"
                   onClick={() => handleInitiatePlan(selectedPaidPlan)}
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 hover:brightness-110 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                  className="w-full py-4 px-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 hover:brightness-110 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 text-center leading-snug"
                 >
-                  <Crown className="w-4 h-4" />
-                  <span>اشترك الآن في {selectedPaidPlan.nameAr} ({selectedPaidPlan.price} ج.م) ⚡</span>
+                  <Crown className="w-4 h-4 shrink-0" />
+                  <span className="break-words">
+                    اشترك الآن في {selectedPaidPlan.nameAr} ({selectedPaidPlan.price} ج.م) ⚡
+                  </span>
                 </button>
               </div>
             </div>

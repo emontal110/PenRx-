@@ -83,13 +83,58 @@ export function AutoUpdateModal() {
           } catch {}
         }
 
-        const url = currentAppVer
-          ? `/api/version/check?currentVersion=${encodeURIComponent(currentAppVer)}`
-          : "/api/version/check";
+        const isNativeCapacitor = Boolean(
+          w?.Capacitor?.isNativePlatform?.() ||
+          (typeof window !== "undefined" && window.location.protocol === "capacitor:") ||
+          (typeof window !== "undefined" && window.location.hostname === "localhost" && /android/i.test(navigator.userAgent))
+        );
 
-        const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) return;
-        const data: UpdateInfo = await res.json();
+        let data: UpdateInfo | null = null;
+
+        if (isNativeCapacitor) {
+          // On mobile Android APK, there is no local Next.js server. Query GitHub Releases directly with strict timeout
+          try {
+            const ghRes = await fetch("https://api.github.com/repos/emontal110/PenRx-/releases/latest", {
+              headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "PenRX-Mobile-App" },
+              signal: AbortSignal.timeout(3500),
+            });
+            if (ghRes.ok) {
+              const rel = await ghRes.json();
+              const latestTag = (rel.tag_name || rel.name || "1.5").replace(/^v/, "").trim();
+              const currentVer = "1.5"; // Mobile base package version
+              const hasUpdate = compareSemver(currentVer, latestTag);
+              let apkUrl = "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk";
+              if (Array.isArray(rel.assets)) {
+                const apk = rel.assets.find((a: any) => a.name?.endsWith(".apk"));
+                if (apk?.browser_download_url) apkUrl = apk.browser_download_url;
+              }
+              data = {
+                hasUpdate,
+                currentVersion: currentVer,
+                latestVersion: latestTag,
+                releaseDate: rel.published_at?.split("T")[0] || "",
+                releaseNotes: rel.body || "",
+                androidDownloadUrl: apkUrl,
+              };
+            }
+          } catch {
+            return;
+          }
+        } else {
+          // Desktop / Web mode: fetch from local Next.js API with safety timeout
+          const url = currentAppVer
+            ? `/api/version/check?currentVersion=${encodeURIComponent(currentAppVer)}`
+            : "/api/version/check";
+
+          const res = await fetch(url, {
+            cache: "no-store",
+            signal: AbortSignal.timeout(3500),
+          });
+          if (!res.ok) return;
+          data = await res.json();
+        }
+
+        if (!data) return;
 
         // Extra safeguard: If running in Electron and app version >= latestVersion, do not show update modal
         if (currentAppVer && !compareSemver(currentAppVer, data.latestVersion)) {
@@ -104,12 +149,12 @@ export function AutoUpdateModal() {
           }
         }
       } catch {
-        // Silent catch in offline mode
+        // Silent catch in offline / timeout mode - never freeze the app
       }
     }
 
-    // Check after 2.5 seconds on app startup
-    const timer = setTimeout(checkForUpdates, 2500);
+    // Check after 6 seconds on app startup to avoid initial load contention
+    const timer = setTimeout(checkForUpdates, 6000);
     return () => clearTimeout(timer);
   }, []);
 

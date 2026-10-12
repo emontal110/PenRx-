@@ -454,45 +454,52 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         const offlineToken = get().signatureToken;
         let foundActive = false;
 
-        // 1. Fetch own subscription from local Next.js API (fast, isolated)
-        try {
-          let query = `machineId=${encodeURIComponent(machineId)}`;
-          if (subId && subId !== "SUB-0000") {
-            query += `&subscriberId=${encodeURIComponent(subId)}`;
-          }
-          const res = await fetch(`/api/subscriptions?${query}`, {
-            cache: "no-store",
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.subscription) {
-              const fresh = data.subscription;
-              set((state) => ({
-                subscriptions: [
-                  fresh,
-                  ...state.subscriptions.filter((s) => s.id !== fresh.id),
-                ],
-                currentSubscription: fresh,
-                subscriberId: fresh.subscriberId || state.subscriberId,
-                signatureToken: fresh.signatureToken || state.signatureToken,
-                lastSyncedAt: Date.now(),
-              }));
-              if (fresh.status === "ACTIVE") {
-                foundActive = true;
+        const isCapacitor =
+          typeof window !== "undefined" &&
+          Boolean(
+            (window as any)?.Capacitor?.isNativePlatform?.() ||
+            window.location.protocol === "capacitor:" ||
+            (window.location.hostname === "localhost" && /android/i.test(navigator.userAgent))
+          );
+
+        // 1. Fetch own subscription from local Next.js API (only in Electron Desktop / Web Server environments)
+        if (!isCapacitor) {
+          try {
+            let query = `machineId=${encodeURIComponent(machineId)}`;
+            if (subId && subId !== "SUB-0000") {
+              query += `&subscriberId=${encodeURIComponent(subId)}`;
+            }
+            const res = await fetch(`/api/subscriptions?${query}`, {
+              cache: "no-store",
+              signal: AbortSignal.timeout(3500),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.subscription) {
+                const fresh = data.subscription;
+                set((state) => ({
+                  subscriptions: [
+                    fresh,
+                    ...state.subscriptions.filter((s) => s.id !== fresh.id),
+                  ],
+                  currentSubscription: fresh,
+                  subscriberId: fresh.subscriberId || state.subscriberId,
+                  signatureToken: fresh.signatureToken || state.signatureToken,
+                  lastSyncedAt: Date.now(),
+                }));
+                if (fresh.status === "ACTIVE") {
+                  foundActive = true;
+                }
               }
             }
-            // Note: If data.subscription is null, do NOT purge local state.
-            // In serverless/Vercel environments, SQLite/memory cache is local to the instance
-            // and does not mirror Supabase Cloud. Purging on null caused rapid oscillatory flashing.
+          } catch {
+            // Local server fetch skipped/error
           }
-        } catch {
-          // Local server fetch skipped/error
         }
 
         // 2. Direct Cloud Query (Supabase Cloud Sync):
-        // If not active yet or local server didn't find active status,
-        // query Supabase Cloud directly (same DB the Admin Portal updates)
-        if (!foundActive) {
+        // If not active yet or in mobile APK mode, query Supabase Cloud directly (instant & resilient)
+        if (!foundActive || isCapacitor) {
           try {
             const encodedId = encodeURIComponent(machineId);
             let filter = `or=(machineId.eq.${encodedId},allowedMachineIds.cs.{${encodedId}})`;
@@ -509,6 +516,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                   Authorization: "Bearer " + SUPABASE_ANON_KEY,
                 },
                 cache: "no-store",
+                signal: AbortSignal.timeout(4000),
               }
             );
             if (cloudRes.ok) {
@@ -522,33 +530,35 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                   lastSyncedAt: Date.now(),
                 }));
               }
-              // If rows.length === 0, preserve active/pending local records to prevent UI thrashing.
-              // Users can explicitly cancel their pending request via cancelPendingRequest().
             }
           } catch {}
         }
 
-        // 2. Verify and obtain fresh cryptographic HMAC signature token from server
-        try {
-          let url = `/api/system/verify?machineId=${encodeURIComponent(machineId)}`;
-          if (subId) {
-            url += `&subscriberId=${encodeURIComponent(subId)}`;
-          }
-          if (offlineToken) {
-            url += `&offlineToken=${encodeURIComponent(offlineToken)}`;
-          }
-
-          const res = await fetch(url, { cache: "no-store" });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.status === "active" && data.token) {
-              set({ signatureToken: data.token, lastOnlineCheck: Date.now() });
-            } else if (data.status && data.status !== "active") {
-              // Server revoked or expired token
-              set({ signatureToken: null });
+        // 3. Obtain HMAC signature token from server (only on desktop/web with local Node backend)
+        if (!isCapacitor) {
+          try {
+            let url = `/api/system/verify?machineId=${encodeURIComponent(machineId)}`;
+            if (subId) {
+              url += `&subscriberId=${encodeURIComponent(subId)}`;
             }
-          }
-        } catch {}
+            if (offlineToken) {
+              url += `&offlineToken=${encodeURIComponent(offlineToken)}`;
+            }
+
+            const res = await fetch(url, {
+              cache: "no-store",
+              signal: AbortSignal.timeout(3500),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && data.status === "active" && data.token) {
+                set({ signatureToken: data.token, lastOnlineCheck: Date.now() });
+              } else if (data.status && data.status !== "active") {
+                set({ signatureToken: null });
+              }
+            }
+          } catch {}
+        }
       },
     }),
     {

@@ -397,7 +397,7 @@ async function ensureServerRunning() {
   });
 }
 
-// HTML Splash Screen to eliminate any black screen
+// HTML Splash Screen to display seamlessly within the main window while Next.js boots
 const SPLASH_HTML = `data:text/html;charset=utf-8,<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -407,7 +407,7 @@ const SPLASH_HTML = `data:text/html;charset=utf-8,<!DOCTYPE html>
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background-color: #020617;
+      background-color: #0b1329;
       color: #f8fafc;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", sans-serif;
       display: flex;
@@ -425,18 +425,19 @@ const SPLASH_HTML = `data:text/html;charset=utf-8,<!DOCTYPE html>
       margin-bottom: 24px;
     }
     .logo-box {
-      width: 72px;
-      height: 72px;
+      width: 80px;
+      height: 80px;
       background: #0f172a;
       border: 2px solid rgba(16, 185, 129, 0.5);
-      border-radius: 20px;
+      border-radius: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
       box-shadow: 0 20px 40px -10px rgba(16, 185, 129, 0.35);
+      margin-bottom: 20px;
     }
     .logo-box span {
-      font-size: 26px;
+      font-size: 28px;
       font-weight: 900;
       color: #ffffff;
       letter-spacing: -1px;
@@ -445,20 +446,20 @@ const SPLASH_HTML = `data:text/html;charset=utf-8,<!DOCTYPE html>
       color: #10b981;
     }
     .title {
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 900;
       color: #f1f5f9;
-      margin: 0 0 6px 0;
+      margin: 0 0 8px 0;
       letter-spacing: -0.5px;
     }
     .subtitle {
-      font-size: 13px;
+      font-size: 14px;
       color: #94a3b8;
       margin: 0 0 32px 0;
       font-weight: 600;
     }
     .loader-track {
-      width: 260px;
+      width: 280px;
       height: 6px;
       background: rgba(255, 255, 255, 0.08);
       border-radius: 999px;
@@ -485,46 +486,14 @@ const SPLASH_HTML = `data:text/html;charset=utf-8,<!DOCTYPE html>
     <span>PenRX<b>+</b></span>
   </div>
   <h1 class="title">منظومة PenRX+ الطبية</h1>
-  <p class="subtitle">جاري تشغيل محرك النظام وإعداد قاعدة البيانات...</p>
+  <p class="subtitle">جاري تشغيل محرك النظام وقاعدة البيانات الطبية...</p>
   <div class="loader-track">
     <div class="loader-bar"></div>
   </div>
 </body>
 </html>`;
 
-let splashWindow = null;
-
-function createSplashWindow() {
-  const iconPath = fs.existsSync(path.join(__dirname, "../public/icon.ico"))
-    ? path.join(__dirname, "../public/icon.ico")
-    : path.join(__dirname, "../public/icon-512.png");
-
-  splashWindow = new BrowserWindow({
-    width: 440,
-    height: 480,
-    frame: false,
-    transparent: false,
-    backgroundColor: "#020617",
-    resizable: false,
-    center: true,
-    alwaysOnTop: true,
-    show: false,
-    icon: iconPath,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
-
-  splashWindow.loadURL(SPLASH_HTML);
-  splashWindow.once("ready-to-show", () => {
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      splashWindow.show();
-    }
-  });
-}
-
-function createMainWindow(baseUrl) {
+function createMainWindow() {
   const iconPath = fs.existsSync(path.join(__dirname, "../public/icon.ico"))
     ? path.join(__dirname, "../public/icon.ico")
     : path.join(__dirname, "../public/icon-512.png");
@@ -559,8 +528,19 @@ function createMainWindow(baseUrl) {
 
   Menu.setApplicationMenu(null);
 
-  // Default to Full Screen / Maximized window on application launch
+  // Default to Full Screen / Maximized window on application launch directly
   mainWindow.maximize();
+
+  // Load the Splash Screen immediately in the maximized window so the user sees a single, gorgeous window instantly
+  mainWindow.loadURL(SPLASH_HTML);
+
+  mainWindow.once("ready-to-show", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.maximize();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
 
   // Support F11 keyboard shortcut to toggle borderless full screen mode anytime
   mainWindow.webContents.on("before-input-event", (event, input) => {
@@ -578,30 +558,6 @@ function createMainWindow(baseUrl) {
     return { action: "allow" };
   });
 
-  const targetUrl = `${baseUrl}/`;
-  console.log(`[PenRX+ Electron] Navigating to: ${targetUrl}`);
-  mainWindow.loadURL(targetUrl);
-
-  let hasTransitioned = false;
-  const transitionToMain = () => {
-    if (hasTransitioned) return;
-    hasTransitioned = true;
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.maximize();
-        mainWindow.show();
-        mainWindow.focus();
-      }
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.destroy();
-        splashWindow = null;
-      }
-    }, 400);
-  };
-
-  mainWindow.webContents.once("did-finish-load", transitionToMain);
-  setTimeout(transitionToMain, 7000);
-
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
     if (validatedURL && validatedURL.includes("localhost")) {
       setTimeout(() => {
@@ -615,24 +571,37 @@ function createMainWindow(baseUrl) {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  return mainWindow;
 }
 
 app.whenReady().then(() => {
   if (nativeTheme) {
     nativeTheme.themeSource = "dark";
   }
-  createSplashWindow();
+
+  // Open the main window directly (maximized with splash) without any intermediate small windows
+  createMainWindow();
 
   ensureServerRunning().then((baseUrl) => {
-    createMainWindow(baseUrl);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const targetUrl = `${baseUrl}/`;
+      console.log(`[PenRX+ Electron] Server ready, navigating main window to: ${targetUrl}`);
+      mainWindow.loadURL(targetUrl);
+    }
   });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
+      createMainWindow();
       if (activeServerUrl) {
-        createMainWindow(activeServerUrl);
+        mainWindow.loadURL(`${activeServerUrl}/`);
       } else {
-        ensureServerRunning().then((baseUrl) => createMainWindow(baseUrl));
+        ensureServerRunning().then((baseUrl) => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.loadURL(`${baseUrl}/`);
+          }
+        });
       }
     }
   });
