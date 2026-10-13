@@ -145,7 +145,7 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="space-y-6 pb-16 font-sans" dir="rtl">
+    <div className="space-y-6 pb-4 font-sans" dir="rtl">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-6 rounded-3xl shadow-xl">
         <div className="flex items-center gap-3.5">

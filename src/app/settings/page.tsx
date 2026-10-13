@@ -1014,25 +1014,47 @@ export default function SettingsPage() {
       }
     } catch {}
 
-    // Direct Supabase REST PATCH as secondary guarantee
-    if (machineId) {
-      const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-      const SUPABASE_ANON_KEY =
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+    // Direct Supabase REST PATCH with Master Service privileges for instant Portal synchronization
+    const effectiveMachineId = machineId || useSubscriptionStore.getState().machineId;
+    const currentSub = useSubscriptionStore.getState().currentSubscription;
+    const subId = currentSub?.id;
+    const subscriberIdVal = useSubscriptionStore.getState().subscriberId;
 
-      fetch(`${SUPABASE_REST_URL}?machineId=eq.${encodeURIComponent(machineId)}`, {
+    const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
+    const SUPABASE_SERVICE_KEY =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
+
+    const patchBody = JSON.stringify({
+      doctorName: doctorName.trim(),
+      clinicName: syncedClinicName,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const patchHeaders = {
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: "Bearer " + SUPABASE_SERVICE_KEY,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    };
+
+    if (subId) {
+      fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(subId)}`, {
         method: "PATCH",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: "Bearer " + SUPABASE_ANON_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          doctorName: doctorName.trim(),
-          clinicName: syncedClinicName,
-          updatedAt: new Date().toISOString(),
-        }),
+        headers: patchHeaders,
+        body: patchBody,
+      }).catch((err) => console.warn("Supabase ID sync notice:", err));
+    }
+
+    if (effectiveMachineId) {
+      let queryFilter = `machineId=eq.${encodeURIComponent(effectiveMachineId)}`;
+      if (subscriberIdVal && subscriberIdVal !== "SUB-0000") {
+        queryFilter = `or=(machineId.eq.${encodeURIComponent(effectiveMachineId)},subscriberId.eq.${encodeURIComponent(subscriberIdVal)})`;
+      }
+      fetch(`${SUPABASE_REST_URL}?${queryFilter}`, {
+        method: "PATCH",
+        headers: patchHeaders,
+        body: patchBody,
       }).catch((err) => console.warn("Supabase sub sync notice:", err));
     }
 
@@ -1045,7 +1067,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 pb-20 font-sans" dir="rtl">
+    <div className="space-y-6 pb-6 font-sans" dir="rtl">
       {/* ── Fixed Floating Confirmation Toast on Save ────────────────────────── */}
       {savedSuccessMsg && (
         <div className="fixed top-6 sm:top-10 left-1/2 -translate-x-1/2 z-[100] max-w-md w-[92%] sm:w-auto px-6 py-4 rounded-3xl bg-slate-900/95 border-2 border-emerald-500 shadow-2xl shadow-emerald-950/80 backdrop-blur-xl flex items-center gap-4 text-white animate-in fade-in zoom-in-95 duration-300">

@@ -106,11 +106,25 @@ export default function SubscriptionsPage() {
   const [paymentMethod, setPaymentMethod] = useState<"vodafone" | "instapay">("vodafone");
   const [senderPhone, setSenderPhone] = useState("");
   const [transactionRef, setTransactionRef] = useState("");
+  const [checkoutDoctorName, setCheckoutDoctorName] = useState("");
+  const [checkoutClinicName, setCheckoutClinicName] = useState("");
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [showIosGuideModal, setShowIosGuideModal] = useState(false);
+
+  // Sync clinic profile defaults when modal opens
+  useEffect(() => {
+    if (activePlanForCheckout) {
+      if (!checkoutDoctorName && clinic.doctorName) {
+        setCheckoutDoctorName(clinic.doctorName);
+      }
+      if (!checkoutClinicName && (clinic.nameAr || clinic.name)) {
+        setCheckoutClinicName(clinic.nameAr || clinic.name || "");
+      }
+    }
+  }, [activePlanForCheckout, clinic.doctorName, clinic.nameAr, clinic.name, checkoutDoctorName, checkoutClinicName]);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const TRANSFER_NUMBER = "01094085228";
@@ -340,6 +354,9 @@ export default function SubscriptionsPage() {
       return;
     }
 
+    const finalDocName = checkoutDoctorName.trim() || clinic.doctorName?.trim() || "طبيب العيادة";
+    const finalClinicName = checkoutClinicName.trim() || (clinic.nameAr || clinic.name)?.trim() || "العيادة الذكية";
+
     setIsSubmitting(true);
     try {
       await submitSubscriptionRequest({
@@ -349,10 +366,17 @@ export default function SubscriptionsPage() {
         paymentMethod,
         senderPhone: senderPhone.trim() || "",
         transactionRef: transactionRef.trim() || `TRIAL-${Date.now().toString().slice(-6)}`,
-        doctorName: clinic.isProfileSaved && clinic.doctorName?.trim() ? clinic.doctorName.trim() : "",
-        clinicName: clinic.isProfileSaved && (clinic.nameAr || clinic.name)?.trim() ? (clinic.nameAr || clinic.name).trim() : "",
+        doctorName: finalDocName,
+        clinicName: finalClinicName,
         durationDays: activePlanForCheckout.durationDays,
         isTrial: isTrialPlan,
+      });
+
+      // Update local clinic store with subscriber info
+      useClinicStore.getState().updateClinic({
+        doctorName: finalDocName,
+        nameAr: finalClinicName,
+        phone: senderPhone.trim() || clinic.phone,
       });
 
       if (typeof window !== "undefined") {
@@ -386,7 +410,7 @@ export default function SubscriptionsPage() {
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 pb-20 max-w-6xl mx-auto px-3.5 sm:px-6">
+    <div className="space-y-6 sm:space-y-8 pb-6 max-w-6xl mx-auto px-3.5 sm:px-6">
       {/* ============================================================ */}
       {/* QUICK DOWNLOAD BAR: كمبيوتر • أندرويد • آيفون */}
       {/* ============================================================ */}
@@ -1533,6 +1557,32 @@ export default function SubscriptionsPage() {
 
             {/* Confirmation Form */}
             <form onSubmit={handleConfirmSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-300 block">اسم الطبيب الكامل (يظهر بالبورتال والروشتة):</label>
+                  <input
+                    type="text"
+                    required
+                    value={checkoutDoctorName}
+                    onChange={(e) => setCheckoutDoctorName(e.target.value)}
+                    placeholder="د. الاسم الكامل..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-300 block">اسم العيادة / المركز الطبي:</label>
+                  <input
+                    type="text"
+                    required
+                    value={checkoutClinicName}
+                    onChange={(e) => setCheckoutClinicName(e.target.value)}
+                    placeholder="اسم العيادة..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
               {activePlanForCheckout.price > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">

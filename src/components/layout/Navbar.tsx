@@ -14,8 +14,6 @@ import {
   Plus,
   Sparkles,
   RotateCw,
-  Maximize,
-  Minimize,
 } from "lucide-react";
 import { useSubscriptionStore, getSubscriptionDetails } from "@/store/useSubscriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
@@ -28,36 +26,11 @@ export function Navbar() {
   const { clinic } = useClinicStore();
   const [mounted, setMounted] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     syncWithServer();
-
-    // Sync fullscreen state if in browser or desktop
-    const handleFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener("fullscreenchange", handleFsChange);
-    return () => document.removeEventListener("fullscreenchange", handleFsChange);
   }, [syncWithServer]);
-
-  const handleToggleFullScreen = async () => {
-    try {
-      if (typeof window !== "undefined" && (window as any).penrxDesktop?.toggleFullScreen) {
-        const full = await (window as any).penrxDesktop.toggleFullScreen();
-        setIsFullscreen(full);
-      } else if (typeof document !== "undefined") {
-        if (!document.fullscreenElement) {
-          await document.documentElement.requestFullscreen().catch(() => {});
-          setIsFullscreen(true);
-        } else {
-          await document.exitFullscreen().catch(() => {});
-          setIsFullscreen(false);
-        }
-      }
-    } catch {}
-  };
 
   const handlePageReload = () => {
     setIsReloading(true);
@@ -183,8 +156,8 @@ export function Navbar() {
                     </span>
                   </Link>
 
-                  {/* 4. الفيرجن مرتبط بملف الباكدج */}
-                  <span dir="ltr" className="hidden sm:inline-block px-1.5 py-0.5 rounded-md bg-slate-900 text-slate-400 text-[10px] font-mono font-bold border border-slate-800 shrink-0">
+                  {/* 4. الفيرجن مرتبط بملف الباكدج - ظاهر بوضوح على الهاتف والكمبيوتر */}
+                  <span dir="ltr" className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-slate-900/90 text-emerald-300 text-[10px] font-mono font-black border border-emerald-500/35 shrink-0 shadow-sm shadow-emerald-950/40">
                     v{packageInfo.version}
                   </span>
                 </div>
@@ -251,20 +224,6 @@ export function Navbar() {
                   )}
                 </span>
               </Link>
-
-              {/* Fullscreen Mode Toggle Button */}
-              <button
-                type="button"
-                onClick={handleToggleFullScreen}
-                className="p-2 sm:p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 border border-slate-800 hover:border-cyan-500/40 transition-all shadow-md active:scale-90 cursor-pointer flex items-center justify-center shrink-0 group"
-                title={isFullscreen ? "الخروج من وضع ملء الشاشة (F11)" : "ملء الشاشة بالكامل (F11)"}
-              >
-                {isFullscreen ? (
-                  <Minimize className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
-                ) : (
-                  <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:scale-110 transition-transform" />
-                )}
-              </button>
 
               {/* Ultra-Modern Quick Reload Button */}
               <button

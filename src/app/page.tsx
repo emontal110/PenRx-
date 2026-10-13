@@ -162,7 +162,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 pb-12">
+    <div className="space-y-6 sm:space-y-8 pb-4">
       {/* Expiry Warning Banner (<= 7 days) */}
       {mounted && subDetails.isActive && subDetails.daysRemaining <= 7 && (
         <div

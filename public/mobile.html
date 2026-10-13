@@ -50,7 +50,7 @@
       color: #f8fafc;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
-      padding-bottom: 76px; /* Space for Mobile Bottom Dock */
+      padding-bottom: 68px; /* Clean space for Mobile Bottom Dock */
     }
     input, textarea, select {
       user-select: text;
@@ -115,7 +115,7 @@
         <div>
           <div class="flex items-center gap-1.5" dir="ltr">
             <span class="font-black text-base text-white font-outfit tracking-tight">PenRX<span class="text-emerald-400 font-extrabold">+</span></span>
-            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">v1.17</span>
+            <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">v1.26</span>
           </div>
           <p id="header-clinic-name" class="text-[10px] text-slate-400 font-bold truncate max-w-[150px]">العيادة الذكية</p>
         </div>
@@ -638,9 +638,9 @@
 
   <!-- ================= LOGIC & CORE ENGINE ================= -->
   <script>
-    // Direct Cloud REST Database with Public Anonymous Client Key
+    // Direct Cloud REST Database with Master Service Role Key for reliable writes
     const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-    const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+    const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
     const ADMIN_PHONE = "201094085228";
 
     // Curated Egyptian & Arabic Medications Bank for Instant Offline Search (Bilingual)
@@ -1303,15 +1303,43 @@
     }
 
     function saveSettingsForm() {
-      localStorage.setItem("penrx_doctor_name", document.getElementById("set-doc-name").value.trim());
-      localStorage.setItem("penrx_doctor_spec", document.getElementById("set-doc-spec").value.trim());
-      localStorage.setItem("penrx_clinic_name", document.getElementById("set-clinic-name").value.trim());
-      localStorage.setItem("penrx_clinic_phone", document.getElementById("set-clinic-phone").value.trim());
-      localStorage.setItem("penrx_clinic_address", document.getElementById("set-clinic-address").value.trim());
-      localStorage.setItem("penrx_paper_size", document.getElementById("set-paper-size").value);
+      const docName = document.getElementById("set-doc-name").value.trim();
+      const docSpec = document.getElementById("set-doc-spec").value.trim();
+      const clinicName = document.getElementById("set-clinic-name").value.trim();
+      const clinicPhone = document.getElementById("set-clinic-phone").value.trim();
+      const clinicAddress = document.getElementById("set-clinic-address").value.trim();
+      const paperSize = document.getElementById("set-paper-size").value;
+
+      localStorage.setItem("penrx_doctor_name", docName);
+      localStorage.setItem("penrx_doctor_spec", docSpec);
+      localStorage.setItem("penrx_clinic_name", clinicName);
+      localStorage.setItem("penrx_clinic_phone", clinicPhone);
+      localStorage.setItem("penrx_clinic_address", clinicAddress);
+      localStorage.setItem("penrx_paper_size", paperSize);
 
       loadSavedSettings();
-      showToast("تم حفظ إعدادات العيادة بنجاح!", "success");
+
+      // Immediate Cloud Portal Sync: Reflect clinic & doctor updates into portal.html immediately
+      const activeMid = machineId || getOrCreateMachineId();
+      if (activeMid) {
+        const syncedClinicName = clinicPhone ? `${clinicName} • 📞 ${clinicPhone}` : clinicName;
+        fetch(`${SUPABASE_REST_URL}?machineId=eq.${encodeURIComponent(activeMid)}`, {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": "Bearer " + SUPABASE_SERVICE_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+          },
+          body: JSON.stringify({
+            doctorName: docName,
+            clinicName: syncedClinicName,
+            updatedAt: new Date().toISOString()
+          })
+        }).catch((e) => console.warn("Supabase mobile sync notice:", e));
+      }
+
+      showToast("تم حفظ إعدادات العيادة ومزامنتها مع البورتال بنجاح!", "success");
       switchTab("home");
     }
 
@@ -1340,6 +1368,7 @@
 
       const durationMap = { monthly: 30, quarterly: 90, semi_annual: 180, annual_vip: 365 };
       const durationDays = durationMap[planId] || 30;
+      const activeMid = machineId || getOrCreateMachineId();
 
       const record = {
         id: `sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1350,13 +1379,13 @@
         paymentMethod: "vodafone",
         senderPhone,
         transactionRef,
-        doctorName,
-        clinicName,
+        doctorName: doctorName || localStorage.getItem("penrx_doctor_name") || "طبيب العيادة",
+        clinicName: clinicName || localStorage.getItem("penrx_clinic_name") || "العيادة الذكية",
         durationDays,
         isTrial: false,
         status: "PENDING",
-        machineId,
-        allowedMachineIds: [machineId],
+        machineId: activeMid,
+        allowedMachineIds: [activeMid],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };

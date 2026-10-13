@@ -328,7 +328,7 @@ export default function NewPrescriptionPage() {
   };
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="space-y-6 pb-4">
       {/* Toast */}
       {toast && (
         <div className="p-4 rounded-2xl bg-emerald-500/20 border-2 border-emerald-500 text-emerald-200 text-xs font-black shadow-xl flex items-center justify-between animate-bounce">
