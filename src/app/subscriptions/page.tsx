@@ -124,15 +124,21 @@ export default function SubscriptionsPage() {
     return () => clearInterval(interval);
   }, [syncWithServer, initHardwareId]);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click with touch support & DOM detachment safety
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node | null;
+      if (!target || !document.contains(target)) return;
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setIsDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
   }, []);
 
   const subDetails = getSubscriptionDetails(subscriptions, machineId);
@@ -918,20 +924,54 @@ export default function SubscriptionsPage() {
                   )}
                 </div>
 
-                {/* ELEGANT INTEGRATED DROPDOWN MENU */}
-                <div className="space-y-2" ref={dropdownRef}>
-                  <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                {/* ELEGANT INTEGRATED DROPDOWN MENU & 1-CLICK SELECTOR */}
+                <div className="space-y-2.5" ref={dropdownRef}>
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                     <span>اختر نوع الباقة المرغوبة:</span>
-                    <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                      اضغط لتغيير الباقة ⬇
-                    </span>
-                  </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsDropdownOpen((prev) => !prev)}
+                      className="text-[10px] text-emerald-300 font-bold bg-emerald-500/15 hover:bg-emerald-500/25 px-2.5 py-1 rounded-full border border-emerald-500/30 transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm"
+                    >
+                      <span>{isDropdownOpen ? "إغلاق الخيارات ⬆" : "اضغط لتغيير الباقة ⬇"}</span>
+                    </button>
+                  </div>
+
+                  {/* DIRECT 1-CLICK PLAN PILLS (Instant selection without waiting) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
+                    {PAID_PLANS.map((plan) => {
+                      const isSelected = plan.id === selectedPaidPlanId;
+                      return (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPaidPlanId(plan.id);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`p-2 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
+                            isSelected
+                              ? "bg-emerald-500/25 border-emerald-400 text-white shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400/50"
+                              : "bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700"
+                          }`}
+                        >
+                          <span className="text-[11px] font-black leading-tight truncate w-full">
+                            {plan.id === "annual_vip" ? "السنوي VIP ⭐" : plan.nameAr.replace(" (ربع سنوي)", "").replace(" (نصف سنوي)", "")}
+                          </span>
+                          <span className={`text-[10px] font-mono font-bold ${isSelected ? "text-emerald-300" : "text-emerald-400"}`}>
+                            {plan.price} ج.م
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                      className="w-full p-3 sm:p-3.5 rounded-2xl bg-slate-950 border-2 border-slate-700 hover:border-emerald-500/60 text-slate-100 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-inner gap-2"
+                      id="plan-dropdown-btn"
+                      onClick={() => setIsDropdownOpen((prev) => !prev)}
+                      className="w-full p-3 sm:p-3.5 rounded-2xl bg-slate-950 border-2 border-slate-700 hover:border-emerald-500/60 text-slate-100 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-inner gap-2 active:scale-[0.99]"
                     >
                       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
