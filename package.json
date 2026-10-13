@@ -57,7 +57,6 @@
     "compression": "normal",
     "asar": true,
     "asarUnpack": [
-      "electron/**/*",
       "prisma/**/*",
       "**/node_modules/.prisma/**/*",
       "**/node_modules/@prisma/client/**/*"

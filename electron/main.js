@@ -41,11 +41,9 @@ app.on("second-instance", () => {
   }
 });
 
-// Determine app root directory (supports both asar archive and unpacked directory)
-const appDir = app.isPackaged
-  ? (fs.existsSync(path.join(process.resourcesPath, "app.asar"))
-      ? path.join(process.resourcesPath, "app.asar")
-      : path.join(process.resourcesPath, "app"))
+// Real OS working directory for child processes (never an .asar file path)
+const processCwd = app.isPackaged
+  ? process.resourcesPath
   : path.resolve(__dirname, "..");
 
 // --- HARDWARE FINGERPRINTING ENGINE (mirrors Classico's getMid()) ---
@@ -449,17 +447,13 @@ async function ensureServerRunning() {
 
   // 2. Spawn the embedded server
   return new Promise((resolve) => {
-    const serverScript = app.isPackaged
-      ? (fs.existsSync(path.join(process.resourcesPath, "app.asar.unpacked", "electron", "start-server.js"))
-          ? path.join(process.resourcesPath, "app.asar.unpacked", "electron", "start-server.js")
-          : path.join(__dirname, "start-server.js"))
-      : path.join(__dirname, "start-server.js");
+    const serverScript = path.join(__dirname, "start-server.js");
     const targetPort = 3000;
 
     console.log(`[PenRX+ Electron] Spawning background Next.js server via ${serverScript}...`);
 
     serverProcess = fork(serverScript, [], {
-      cwd: appDir,
+      cwd: processCwd,
       env: {
         ...process.env,
         PORT: String(targetPort),
@@ -467,6 +461,10 @@ async function ensureServerRunning() {
         ELECTRON_RUN_AS_NODE: "1",
       },
       stdio: ["ignore", "pipe", "pipe", "ipc"],
+    });
+
+    serverProcess.on("error", (err) => {
+      console.error("[PenRX+ Electron] Failed to spawn Next.js server:", err);
     });
 
     serverProcess.stdout.on("data", (d) => {
