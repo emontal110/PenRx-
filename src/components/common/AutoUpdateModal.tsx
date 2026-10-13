@@ -181,29 +181,45 @@ export function AutoUpdateModal() {
       setDownloadStatus("downloading");
       setDownloadError(null);
 
-      const targetUrl =
-        updateInfo.desktopDownloadUrl ||
-        "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
-
       // Subscribe to live IPC progress from Electron main process
       let unsubscribe: (() => void) | undefined;
       if (typeof w?.penrxDesktop?.onUpdateProgress === "function") {
         unsubscribe = w.penrxDesktop.onUpdateProgress((progress: any) => {
           if (typeof progress?.percent === "number") {
             setDownloadProgress(progress.percent);
+          } else if (typeof progress?.progress === "number") {
+            setDownloadProgress(progress.progress);
           }
-          if (typeof progress?.downloadedMB === "number") {
-            setDownloadedMB(progress.downloadedMB);
+          if (typeof progress?.downloadedMB === "number" || typeof progress?.downloadedMB === "string") {
+            setDownloadedMB(Number(progress.downloadedMB));
           }
-          if (typeof progress?.totalMB === "number") {
-            setTotalMB(progress.totalMB);
+          if (typeof progress?.totalMB === "number" || typeof progress?.totalMB === "string") {
+            setTotalMB(Number(progress.totalMB));
           }
-          if (progress?.completed) {
+          if (progress?.completed || progress?.status === "completed") {
             setDownloadProgress(100);
             setDownloadStatus("completed");
+            setTimeout(() => {
+              if (typeof w?.penrxDesktop?.quitAndInstallUpdate === "function") {
+                w.penrxDesktop.quitAndInstallUpdate();
+              }
+            }, 1200);
           }
         });
       }
+
+      // Try official differential delta update (Classico-style) first
+      if (typeof w?.penrxDesktop?.downloadDifferentialUpdate === "function") {
+        try {
+          const diffRes = await w.penrxDesktop.downloadDifferentialUpdate();
+          if (diffRes?.success) return;
+        } catch {}
+      }
+
+      // Fallback: direct download & install
+      const targetUrl =
+        updateInfo.desktopDownloadUrl ||
+        "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
 
       try {
         const res = await w.penrxDesktop.downloadAndInstallUpdate(targetUrl);
@@ -386,19 +402,6 @@ export function AutoUpdateModal() {
               <ExternalLink className="w-3.5 h-3.5" />
               <span>تنزيل التحديث المباشر من GitHub في المتصفح</span>
             </button>
-          </div>
-        )}
-
-        {/* Release Notes */}
-        {!isDownloading && updateInfo.releaseNotes && (
-          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-2 text-xs">
-            <span className="font-bold text-slate-300 flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>أبرز ما يقدمه هذا التحديث:</span>
-            </span>
-            <p className="text-slate-300 leading-relaxed whitespace-pre-line text-[11px] font-medium">
-              {updateInfo.releaseNotes}
-            </p>
           </div>
         )}
 

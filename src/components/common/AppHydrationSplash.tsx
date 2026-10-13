@@ -6,6 +6,7 @@ import { Sparkles, ShieldCheck } from "lucide-react";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
+import versionConfig from "@/config/version.json";
 
 /**
  * AppHydrationSplash – Modern Micro-Splash & Hydration Guard.
@@ -22,6 +23,20 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
   const [shouldRenderSplash, setShouldRenderSplash] = useState(true);
 
   useEffect(() => {
+    // 1. Auto Cache Cleaning upon version upgrade (Mobile APK & Desktop)
+    try {
+      const lastCachedVer = localStorage.getItem("penrx_client_version");
+      if (lastCachedVer && lastCachedVer !== versionConfig.version) {
+        console.log(`[PenRX+ Cache] Version upgrade detected (v${lastCachedVer} -> v${versionConfig.version}). Purging stale browser caches...`);
+        if (typeof window !== "undefined" && "caches" in window) {
+          caches.keys().then((keys) => {
+            keys.forEach((key) => caches.delete(key));
+          });
+        }
+      }
+      localStorage.setItem("penrx_client_version", versionConfig.version);
+    } catch {}
+
     // Fast path: check if stores are already hydrated
     const checkAllHydrated = () => {
       const subHydrated = useSubscriptionStore.persist?.hasHydrated?.() ?? true;

@@ -36,6 +36,8 @@ import {
   Palette,
   WifiOff,
   Share2,
+  Download,
+  Smartphone,
 } from "lucide-react";
 import {
   useSubscriptionStore,
@@ -108,6 +110,7 @@ export default function SubscriptionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
+  const [showIosGuideModal, setShowIosGuideModal] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const TRANSFER_NUMBER = "01094085228";
@@ -378,6 +381,51 @@ export default function SubscriptionsPage() {
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-20 max-w-6xl mx-auto px-3.5 sm:px-6">
+      {/* ============================================================ */}
+      {/* QUICK DOWNLOAD BAR: كمبيوتر • أندرويد • آيفون */}
+      {/* ============================================================ */}
+      <div className="p-3 sm:p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+          <Download className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>تحميل وتثبيت البرنامج لأجهزتك:</span>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+          {/* Windows PC */}
+          <a
+            href="https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe"
+            download
+            target="_blank"
+            rel="noreferrer"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-cyan-400 border border-slate-700 hover:border-cyan-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center"
+          >
+            <Laptop className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>تنزيل نسخه الكمبيوتر</span>
+          </a>
+
+          {/* Android Mobile */}
+          <a
+            href="https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
+            download
+            target="_blank"
+            rel="noreferrer"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 border border-slate-700 hover:border-emerald-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>تنزيل نسخه اندرويد</span>
+          </a>
+
+          {/* Apple iPhone */}
+          <button
+            type="button"
+            onClick={() => setShowIosGuideModal(true)}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-400 border border-slate-700 hover:border-amber-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>تنزيل نسخه الايفون</span>
+          </button>
+        </div>
+      </div>
       {/* ============================================================ */}
       {/* CASE 1: WAITING FOR ACTIVATION SCREEN (صفحة انتظار التفعيل) */}
       {/* ============================================================ */}
@@ -1576,6 +1624,66 @@ export default function SubscriptionsPage() {
                 className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
               >
                 تراجع
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Simple iOS Guide Modal */}
+      {showIosGuideModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-slate-900 border border-amber-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 text-right relative overflow-hidden" dir="rtl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                  <Smartphone className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-100">تثبيت نسخة الآيفون 🍏</h3>
+                  <p className="text-[11px] text-slate-400">خطوات بسيطة وسريعة من متصفح Safari</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowIosGuideModal(false)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5 text-xs text-slate-300">
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <span>افتح الرابط في متصفح <strong>Safari</strong> على الآيفون.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <span>اضغط على أيقونة <strong>المشاركة (Share ⬆️)</strong> بالأسفل.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                <span>اختر <strong>"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</strong>.</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <a
+                href="https://pen-rx.vercel.app"
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xs hover:brightness-110 active:scale-95 transition-all text-center cursor-pointer shadow-md"
+              >
+                فتح الرابط للآيفون الآن 📲
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  handleCopy("https://pen-rx.vercel.app", "ios-link");
+                }}
+                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer shrink-0"
+              >
+                {copySuccess === "ios-link" ? "✓ تم" : "نسخ الرابط"}
               </button>
             </div>
           </div>

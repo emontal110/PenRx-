@@ -31,6 +31,14 @@ contextBridge.exposeInMainWorld("penrxDesktop", {
    */
   toggleFullScreen: () => ipcRenderer.invoke("toggle-fullscreen"),
   isFullScreen: () => ipcRenderer.invoke("is-fullscreen"),
-  maximizeWindow: () => ipcRenderer.invoke("maximize-window"),
+  maximizeWindow: (force) => ipcRenderer.invoke("maximize-window", force),
+  ensureMaximized: () => ipcRenderer.invoke("ensure-maximized"),
+  /**
+   * Differential auto-updater methods (Classico parity)
+   */
+  restartApp: () => ipcRenderer.send("restart_app"),
+  quitAndInstallUpdate: () => ipcRenderer.invoke("quit-and-install-update"),
+  checkDifferentialUpdate: () => ipcRenderer.invoke("check-differential-update"),
+  downloadDifferentialUpdate: () => ipcRenderer.invoke("download-differential-update"),
 });
 

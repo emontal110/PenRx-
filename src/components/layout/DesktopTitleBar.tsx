@@ -11,6 +11,9 @@ export function DesktopTitleBar() {
       const w = window as any;
       if (w.penrxDesktop?.isElectron || navigator.userAgent.includes("Electron")) {
         setIsElectron(true);
+        if (w.penrxDesktop?.ensureMaximized) {
+          w.penrxDesktop.ensureMaximized().catch(() => {});
+        }
       }
 
       const handleFsChange = () => {

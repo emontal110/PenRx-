@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, nativeTheme } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell, nativeTheme, screen, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -16,6 +16,16 @@ let serverProcess = null;
 let CACHED_HARDWARE_ID = null;
 let activeServerUrl = null;
 
+// Official differential auto-updater (Classico-style)
+let autoUpdater = null;
+try {
+  autoUpdater = require("electron-updater").autoUpdater;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+} catch (e) {
+  console.warn("[PenRX+ AutoUpdater] electron-updater not initialized:", e.message);
+}
+
 // --- SINGLE INSTANCE LOCK ---
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -31,9 +41,11 @@ app.on("second-instance", () => {
   }
 });
 
-// Determine app root directory
+// Determine app root directory (supports both asar archive and unpacked directory)
 const appDir = app.isPackaged
-  ? path.join(process.resourcesPath, "app")
+  ? (fs.existsSync(path.join(process.resourcesPath, "app.asar"))
+      ? path.join(process.resourcesPath, "app.asar")
+      : path.join(process.resourcesPath, "app"))
   : path.resolve(__dirname, "..");
 
 // --- HARDWARE FINGERPRINTING ENGINE (mirrors Classico's getMid()) ---
@@ -152,8 +164,12 @@ ipcMain.handle("is-fullscreen", () => {
   return false;
 });
 
-ipcMain.handle("maximize-window", () => {
+ipcMain.handle("maximize-window", (_event, force) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    if (force === true) {
+      if (!mainWindow.isMaximized()) mainWindow.maximize();
+      return true;
+    }
     if (mainWindow.isMaximized()) {
       mainWindow.unmaximize();
       return false;
@@ -161,6 +177,93 @@ ipcMain.handle("maximize-window", () => {
       mainWindow.maximize();
       return true;
     }
+  }
+  return false;
+});
+
+ipcMain.handle("ensure-maximized", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (!mainWindow.isMaximized()) {
+      mainWindow.maximize();
+    }
+    return true;
+  }
+  return false;
+});
+
+// Differential Auto-Updater Events & IPC Handlers (matches Classico implementation)
+if (autoUpdater) {
+  autoUpdater.on("update-available", (info) => {
+    const version = info ? info.version : "";
+    console.log(`[PenRX+ AutoUpdater] Differential update available: v${version}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update_available", version);
+    }
+  });
+
+  autoUpdater.on("download-progress", (progressObj) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("download_progress", progressObj.percent);
+      mainWindow.webContents.send("update-download-progress", {
+        progress: Math.round(progressObj.percent),
+        downloadedMB: ((progressObj.transferred || 0) / 1024 / 1024).toFixed(1),
+        totalMB: ((progressObj.total || 0) / 1024 / 1024).toFixed(1),
+        status: "downloading",
+      });
+    }
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    console.log("[PenRX+ AutoUpdater] Differential update downloaded successfully!");
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update_downloaded");
+      mainWindow.webContents.send("update-download-progress", {
+        progress: 100,
+        status: "completed",
+      });
+    }
+  });
+}
+
+ipcMain.handle("check-differential-update", async () => {
+  if (autoUpdater) {
+    try {
+      const res = await autoUpdater.checkForUpdates();
+      return { success: true, updateInfo: res?.updateInfo };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, error: "AutoUpdater not available" };
+});
+
+ipcMain.handle("download-differential-update", async () => {
+  if (autoUpdater) {
+    try {
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, error: "AutoUpdater not available" };
+});
+
+ipcMain.on("restart_app", () => {
+  if (autoUpdater) {
+    autoUpdater.quitAndInstall();
+  }
+});
+
+ipcMain.handle("quit-and-install-update", async () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      await mainWindow.webContents.session.clearCache();
+    } catch {}
+  }
+  if (autoUpdater) {
+    autoUpdater.quitAndInstall();
+    return true;
   }
   return false;
 });
@@ -346,7 +449,11 @@ async function ensureServerRunning() {
 
   // 2. Spawn the embedded server
   return new Promise((resolve) => {
-    const serverScript = path.join(__dirname, "start-server.js");
+    const serverScript = app.isPackaged
+      ? (fs.existsSync(path.join(process.resourcesPath, "app.asar.unpacked", "electron", "start-server.js"))
+          ? path.join(process.resourcesPath, "app.asar.unpacked", "electron", "start-server.js")
+          : path.join(__dirname, "start-server.js"))
+      : path.join(__dirname, "start-server.js");
     const targetPort = 3000;
 
     console.log(`[PenRX+ Electron] Spawning background Next.js server via ${serverScript}...`);
@@ -500,9 +607,14 @@ function createMainWindow() {
 
   const isWindows = process.platform === "win32";
 
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
+
   mainWindow = new BrowserWindow({
-    width: 1366,
-    height: 850,
+    width,
+    height,
+    x: 0,
+    y: 0,
     minWidth: 1024,
     minHeight: 700,
     title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية الذكية",
@@ -528,17 +640,22 @@ function createMainWindow() {
 
   Menu.setApplicationMenu(null);
 
-  // Default to Full Screen / Maximized window on application launch directly
-  mainWindow.maximize();
-
-  // Load the Splash Screen immediately in the maximized window so the user sees a single, gorgeous window instantly
+  // Load the Splash Screen immediately
   mainWindow.loadURL(SPLASH_HTML);
 
   mainWindow.once("ready-to-show", () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.maximize();
       mainWindow.show();
+      mainWindow.maximize();
       mainWindow.focus();
+    }
+  });
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (!mainWindow.isMaximized()) {
+        mainWindow.maximize();
+      }
     }
   });
 
@@ -580,6 +697,28 @@ app.whenReady().then(() => {
     nativeTheme.themeSource = "dark";
   }
 
+  // Auto clean cache on version update to ensure fresh UI and assets
+  try {
+    const lastVersionFile = path.join(app.getPath("userData"), "last-version.txt");
+    let lastVersion = "";
+    if (fs.existsSync(lastVersionFile)) {
+      lastVersion = fs.readFileSync(lastVersionFile, "utf8").trim();
+    }
+    const currentVersion = app.getVersion();
+    if (lastVersion && lastVersion !== currentVersion) {
+      console.log(`[PenRX+ Electron] App updated from v${lastVersion} to v${currentVersion}. Cleaning cache...`);
+      if (session.defaultSession) {
+        session.defaultSession.clearCache().catch(() => {});
+        session.defaultSession.clearStorageData({
+          storages: ["appcache", "serviceworkers", "cachestorage"],
+        }).catch(() => {});
+      }
+    }
+    fs.writeFileSync(lastVersionFile, currentVersion, "utf8");
+  } catch (err) {
+    console.warn("[PenRX+ Electron] Notice during update cache check:", err.message);
+  }
+
   // Open the main window directly (maximized with splash) without any intermediate small windows
   createMainWindow();
 
@@ -588,6 +727,9 @@ app.whenReady().then(() => {
       const targetUrl = `${baseUrl}/`;
       console.log(`[PenRX+ Electron] Server ready, navigating main window to: ${targetUrl}`);
       mainWindow.loadURL(targetUrl);
+      if (!mainWindow.isMaximized()) {
+        mainWindow.maximize();
+      }
     }
   });
 

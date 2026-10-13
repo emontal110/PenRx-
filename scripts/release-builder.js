@@ -324,6 +324,14 @@ if (fs.existsSync(distElectron)) {
     console.log(`✓ Updated official Windows Setup installer:`);
     console.log(`   - releases/PenRX+-Setup.exe`);
   }
+
+  // Copy differential update metadata files (.blockmap, latest.yml) for Classico-style instant delta updates
+  for (const f of files) {
+    if (f.endsWith(".blockmap") || f === "latest.yml") {
+      fs.copyFileSync(path.join(distElectron, f), path.join(releasesDir, f));
+      console.log(`✓ Updated differential update metadata: releases/${f}`);
+    }
+  }
 }
 completeStep(5, "Windows Desktop Installer Packaged");
 
