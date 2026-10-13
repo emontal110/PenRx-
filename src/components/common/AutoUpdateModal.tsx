@@ -92,47 +92,23 @@ export function AutoUpdateModal() {
         let data: UpdateInfo | null = null;
 
         if (isNativeCapacitor) {
-          // On mobile Android APK, there is no local Next.js server. Query GitHub Releases directly with strict timeout
-          try {
-            const ghRes = await fetch("https://api.github.com/repos/emontal110/PenRx-/releases/latest", {
-              headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "PenRX-Mobile-App" },
-              signal: AbortSignal.timeout(3500),
-            });
-            if (ghRes.ok) {
-              const rel = await ghRes.json();
-              const latestTag = (rel.tag_name || rel.name || "1.5").replace(/^v/, "").trim();
-              const currentVer = "1.5"; // Mobile base package version
-              const hasUpdate = compareSemver(currentVer, latestTag);
-              let apkUrl = "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk";
-              if (Array.isArray(rel.assets)) {
-                const apk = rel.assets.find((a: any) => a.name?.endsWith(".apk"));
-                if (apk?.browser_download_url) apkUrl = apk.browser_download_url;
-              }
-              data = {
-                hasUpdate,
-                currentVersion: currentVer,
-                latestVersion: latestTag,
-                releaseDate: rel.published_at?.split("T")[0] || "",
-                releaseNotes: rel.body || "",
-                androidDownloadUrl: apkUrl,
-              };
-            }
-          } catch {
-            return;
-          }
-        } else {
-          // Desktop / Web mode: fetch from local Next.js API with safety timeout
-          const url = currentAppVer
-            ? `/api/version/check?currentVersion=${encodeURIComponent(currentAppVer)}`
-            : "/api/version/check";
-
-          const res = await fetch(url, {
-            cache: "no-store",
-            signal: AbortSignal.timeout(3500),
-          });
-          if (!res.ok) return;
-          data = await res.json();
+          // Mobile APK is powered by Live Cloud Updates directly from Vercel (Capacitor live server).
+          // All updates, features, templates, and drug data are pulled instantly and silently from the cloud
+          // on startup without forcing the doctor to re-download a 50MB APK or perform manual installation.
+          return;
         }
+
+        // Desktop / PC mode: fetch from local Next.js API with safety timeout
+        const url = currentAppVer
+          ? `/api/version/check?currentVersion=${encodeURIComponent(currentAppVer)}`
+          : "/api/version/check";
+
+        const res = await fetch(url, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(3500),
+        });
+        if (!res.ok) return;
+        data = await res.json();
 
         if (!data) return;
 
