@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { showGlobalToast } from "./GlobalToast";
 
 export function CapacitorNativeBridge() {
   const pathname = usePathname();
   const router = useRouter();
+  const listenersAttached = useRef(false);
 
   useEffect(() => {
     let unlistenBackButton: (() => void) | undefined;
+    let offlineHandler: (() => void) | undefined;
+    let onlineHandler: (() => void) | undefined;
 
     async function setupNativeBridge() {
       try {
@@ -33,14 +36,18 @@ export function CapacitorNativeBridge() {
           backHandle.remove();
         };
 
-        // 2. Network connectivity listener
-        window.addEventListener("offline", () => {
-          showGlobalToast("⚠️ تم فقدان الاتصال بالإنترنت. يرجى التحقق من الشبكة.", "error");
-        });
-
-        window.addEventListener("online", () => {
-          showGlobalToast("✅ عاد الاتصال بالإنترنت بنجاح.", "success");
-        });
+        // 2. Network connectivity listeners (attach only once to prevent accumulation)
+        if (!listenersAttached.current) {
+          listenersAttached.current = true;
+          offlineHandler = () => {
+            showGlobalToast("⚠️ تم فقدان الاتصال بالإنترنت. يرجى التحقق من الشبكة.", "error");
+          };
+          onlineHandler = () => {
+            showGlobalToast("✅ عاد الاتصال بالإنترنت بنجاح.", "success");
+          };
+          window.addEventListener("offline", offlineHandler);
+          window.addEventListener("online", onlineHandler);
+        }
       } catch (e) {
         // Silent catch for non-capacitor environments
       }
@@ -51,6 +58,13 @@ export function CapacitorNativeBridge() {
     return () => {
       if (unlistenBackButton) {
         unlistenBackButton();
+      }
+      if (offlineHandler) {
+        window.removeEventListener("offline", offlineHandler);
+      }
+      if (onlineHandler) {
+        window.removeEventListener("online", onlineHandler);
+        listenersAttached.current = false;
       }
     };
   }, [pathname, router]);

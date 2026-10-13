@@ -158,6 +158,11 @@ function generateLocalSubscriberId(): string {
   return `SUB-${rand}`;
 }
 
+// ── Shared Sync Throttle: Prevents race conditions from multiple components
+// triggering syncWithServer at the same time (PaywallGuard + SubscriptionsPage + Navbar)
+let _lastSyncTime = 0;
+const SYNC_THROTTLE_MS = 5000; // Minimum 5 seconds between sync calls
+
 export const useSubscriptionStore = create<SubscriptionStoreState>()(
   persist(
     (set, get) => ({
@@ -449,6 +454,11 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       },
 
       syncWithServer: async () => {
+        // Throttle: Skip if another sync ran less than 5 seconds ago
+        const now = Date.now();
+        if (now - _lastSyncTime < SYNC_THROTTLE_MS) return;
+        _lastSyncTime = now;
+
         const machineId = get().machineId || getOrCreateMachineId();
         const subId = get().subscriberId;
         const offlineToken = get().signatureToken;
@@ -516,7 +526,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                   Authorization: "Bearer " + SUPABASE_ANON_KEY,
                 },
                 cache: "no-store",
-                signal: AbortSignal.timeout(4000),
+                signal: AbortSignal.timeout(isCapacitor ? 8000 : 4000),
               }
             );
             if (cloudRes.ok) {

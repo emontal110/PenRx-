@@ -365,8 +365,10 @@ function notifySyncStatus(status: SyncStatus): void {
   window.dispatchEvent(new CustomEvent("penrx_sync_status", { detail: { status } }));
 }
 
-// Auto-drain queue when browser comes online
-if (typeof window !== "undefined") {
+// Auto-drain queue when browser comes online (guarded to prevent duplicate registration)
+let _onlineListenerAttached = false;
+if (typeof window !== "undefined" && !_onlineListenerAttached) {
+  _onlineListenerAttached = true;
   window.addEventListener("online", () => {
     console.log("[SyncQueue] Network connection restored. Processing sync queue...");
     processSyncQueue();

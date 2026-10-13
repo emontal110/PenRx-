@@ -22,6 +22,12 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
   const subDetails = getSubscriptionDetails(subscriptions, machineId);
   const isHydrated = useSubscriptionStore.persist?.hasHydrated?.() ?? mounted;
 
+  // Track subscription status via ref to avoid re-creating the interval on every render
+  const isPendingRef = React.useRef(subDetails.isPending);
+  const isActiveRef = React.useRef(subDetails.isActive);
+  isPendingRef.current = subDetails.isPending;
+  isActiveRef.current = subDetails.isActive;
+
   useEffect(() => {
     setMounted(true);
     // Initialize hardware machine ID (Electron mode)
@@ -38,18 +44,20 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
       } catch {}
     }, 15000);
 
-    // Adaptive background sync:
-    // If pending approval: poll every 15 seconds to catch activation without exhausting mobile connections
-    // If already active: poll every 90 seconds for quiet background verification
-    // Otherwise: poll every 45 seconds
-    const intervalMs = subDetails.isPending ? 15000 : subDetails.isActive ? 90000 : 45000;
-    const interval = setInterval(syncWithServer, intervalMs);
+    // Adaptive background sync with stable interval:
+    // Uses a single interval that checks current status via refs
+    const interval = setInterval(() => {
+      const ms = isPendingRef.current ? 15000 : isActiveRef.current ? 90000 : 45000;
+      // The throttle in useSubscriptionStore already prevents excessive calls,
+      // so we can safely call syncWithServer and let the throttle manage timing
+      syncWithServer();
+    }, 15000); // Check every 15 seconds, throttle handles the rest
 
     return () => {
       clearTimeout(deferredTasksTimer);
       clearInterval(interval);
     };
-  }, [syncWithServer, initHardwareId, subDetails.isPending, subDetails.isActive]);
+  }, [syncWithServer, initHardwareId]);
 
   // Check if mandatory clinic profile is saved (Doctor name, clinic name, phone)
   const isProfileComplete = Boolean(

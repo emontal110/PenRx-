@@ -117,7 +117,7 @@ export default function SubscriptionsPage() {
     setMounted(true);
     initHardwareId().catch(() => {});
     syncWithServer();
-    const interval = setInterval(syncWithServer, 2500);
+    const interval = setInterval(syncWithServer, 8000);
     return () => clearInterval(interval);
   }, [syncWithServer, initHardwareId]);
 
