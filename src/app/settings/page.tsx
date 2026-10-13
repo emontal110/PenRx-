@@ -197,121 +197,249 @@ function SettingsPrescriptionPreview({
           </div>
         </div>
 
-        {/* Clinic & Doctor Header */}
+        {/* Clinic & Doctor Header (Respects showHeader & Adapts to Template) */}
         {showHeader !== false ? (
-          <div
-            className="border-b-2 pb-2.5 space-y-1.5 relative z-10"
-            style={{ borderColor: `${primaryColor}30` }}
-          >
-            <div className="flex items-start justify-between gap-3">
-              {/* Right: Logo + Doctor Details */}
-              <div className="flex items-center gap-2.5">
-                {logoUrl && (
-                  <div
-                    className="rounded-2xl overflow-hidden border border-slate-200 p-1 shrink-0 flex items-center justify-center bg-white shadow-sm"
-                    style={{ width: "52px", height: "52px" }}
-                  >
-                    <img src={logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+          (() => {
+            const isAcademic = templateId === "academic_crest";
+            const isSoftCurves = templateId === "soft_curves";
+            const isNordic = templateId === "nordic_pastel";
+            const isGeometric = templateId === "geometric_frame";
+
+            return (
+              <div
+                className={`transition-all relative z-10 ${
+                  isAcademic
+                    ? "-mx-5 sm:-mx-6 -mt-5 sm:-mt-6 p-4 sm:p-5 pt-3 pb-3 mb-2 text-white"
+                    : isSoftCurves
+                    ? "-mx-5 sm:-mx-6 -mt-5 sm:-mt-6 p-4 sm:p-5 pt-3 pb-3.5 mb-2 text-white"
+                    : isNordic
+                    ? "-mx-5 sm:-mx-6 -mt-5 sm:-mt-6 p-4 sm:p-5 pt-3 pb-3.5 mb-2 text-emerald-950"
+                    : isGeometric
+                    ? "border-b-2 border-emerald-600 pb-2 mb-2 space-y-1.5"
+                    : "border-b-2 pb-2.5 space-y-1.5 relative z-10"
+                }`}
+                style={
+                  !isAcademic && !isSoftCurves && !isNordic && !isGeometric
+                    ? { borderColor: `${primaryColor}30` }
+                    : undefined
+                }
+              >
+                <div className="flex items-start justify-between gap-3">
+                  {/* Right: Logo + Doctor Details */}
+                  <div className="flex items-center gap-2.5">
+                    {logoUrl && (
+                      <div
+                        className={`rounded-2xl overflow-hidden border p-1 shrink-0 flex items-center justify-center shadow-sm ${
+                          isAcademic || isSoftCurves
+                            ? "bg-white/95 border-white/60"
+                            : isNordic
+                            ? "bg-white border-teal-200"
+                            : "bg-white border-slate-200"
+                        }`}
+                        style={{ width: "52px", height: "52px" }}
+                      >
+                        <img src={logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    )}
+                    <div>
+                      <h3
+                        className={`text-base font-black leading-tight ${
+                          isAcademic || isSoftCurves
+                            ? "text-white drop-shadow-xs"
+                            : isNordic
+                            ? "text-emerald-950 font-black"
+                            : isGeometric
+                            ? "text-emerald-700"
+                            : ""
+                        }`}
+                        style={
+                          !isAcademic && !isSoftCurves && !isNordic && !isGeometric
+                            ? { color: primaryColor }
+                            : undefined
+                        }
+                      >
+                        {doctorName || "د. الطبيب المعالج"}
+                      </h3>
+                      <p
+                        className={`text-[10px] font-bold ${
+                          isAcademic
+                            ? "text-slate-200"
+                            : isSoftCurves
+                            ? "text-rose-100"
+                            : isNordic
+                            ? "text-emerald-900"
+                            : "text-slate-700"
+                        }`}
+                      >
+                        {doctorTitle || "أخصائي واستشاري"}
+                      </p>
+                      <p
+                        className={`text-[9px] font-semibold ${
+                          isAcademic
+                            ? "text-emerald-300"
+                            : isSoftCurves
+                            ? "text-orange-100"
+                            : isNordic
+                            ? "text-emerald-800"
+                            : isGeometric
+                            ? "text-emerald-600"
+                            : "text-slate-500"
+                        }`}
+                      >
+                        {specialty || "التخصص الطبي"}
+                      </p>
+                      {syndicateId && (
+                        <p
+                          className={`text-[8px] font-mono ${
+                            isAcademic || isSoftCurves
+                              ? "text-white/80"
+                              : isNordic
+                              ? "text-emerald-900/80"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          ترخيص: {syndicateId}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                )}
-                <div>
-                  <h3 className="text-base font-black leading-tight" style={{ color: primaryColor }}>
-                    {doctorName || "د. الطبيب المعالج"}
-                  </h3>
-                  <p className="text-[10px] font-bold text-slate-700">
-                    {doctorTitle || "أخصائي واستشاري"}
-                  </p>
-                  <p className="text-[9px] font-semibold text-slate-500">
-                    {specialty || "التخصص الطبي"}
-                  </p>
-                  {syndicateId && (
-                    <p className="text-[8px] text-slate-400 font-mono">ترخيص: {syndicateId}</p>
-                  )}
+
+                  {/* Left: Clinic Details with distinctive, elegant typography for Clinic Name & Specialty */}
+                  <div className="text-left space-y-1">
+                    <h4
+                      className={`text-sm font-black leading-tight tracking-tight drop-shadow-xs ${
+                        isAcademic || isSoftCurves
+                          ? "text-white"
+                          : isNordic
+                          ? "text-emerald-950"
+                          : "text-slate-900"
+                      }`}
+                      style={{
+                        fontFamily: "'El Messiri', 'Alexandria', 'Cairo', serif",
+                        letterSpacing: "-0.01em",
+                      }}
+                    >
+                      {nameAr || "المركز الطبي"}
+                    </h4>
+                    {name && (
+                      <p
+                        className={`text-[11px] font-bold ${
+                          isAcademic
+                            ? "text-emerald-300"
+                            : isSoftCurves
+                            ? "text-orange-100"
+                            : isNordic
+                            ? "text-teal-800"
+                            : isGeometric
+                            ? "text-emerald-600"
+                            : ""
+                        }`}
+                        style={
+                          !isAcademic && !isSoftCurves && !isNordic && !isGeometric
+                            ? {
+                                fontFamily: "'Alexandria', 'Cairo', sans-serif",
+                                color: primaryColor,
+                              }
+                            : { fontFamily: "'Alexandria', 'Cairo', sans-serif" }
+                        }
+                      >
+                        {name}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              {/* Left: Clinic Details with distinctive, elegant typography for Clinic Name & Specialty */}
-              <div className="text-left space-y-1">
-                <h4
-                  className="text-sm font-black leading-tight tracking-tight drop-shadow-xs"
-                  style={{
-                    fontFamily: "'El Messiri', 'Alexandria', 'Cairo', serif",
-                    color: "#0f172a",
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  {nameAr || "المركز الطبي"}
-                </h4>
-                {name && (
-                  <p
-                    className="text-[11px] font-bold"
-                    style={{
-                      fontFamily: "'Alexandria', 'Cairo', sans-serif",
-                      color: primaryColor,
-                    }}
-                  >
-                    {name}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
+            );
+          })()
         ) : (
           <div className="p-2 text-center text-[10px] font-bold text-slate-400 bg-slate-100 rounded-xl border border-dashed border-slate-300">
             (تم إخفاء الترويسة العلوية حسب رغبتك للطباعة على ورق مروّس جاهز)
           </div>
         )}
 
-        {/* Patient Bar Preview (Reflects visibleFields) */}
-        <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-[10px] flex flex-wrap items-center justify-between gap-x-3 gap-y-1 relative z-10">
-          <div>
-            <span className="text-slate-400 font-medium text-[9px]">المريض: </span>
-            <span className="font-bold text-slate-900 text-[10.5px]">محمد أحمد محمود</span>
-          </div>
+        {/* Patient Bar Preview (Reflects visibleFields & Adapts to Template) */}
+        {(() => {
+          const isSoftCurves = templateId === "soft_curves";
+          const isNordic = templateId === "nordic_pastel";
 
-          {(visibleFields.showAge || visibleFields.showGender) && (
-            <div className="text-slate-700 font-bold">
-              <span className="text-slate-400 font-medium">السن/النوع: </span>
-              <span>
-                {visibleFields.showAge && "38 سنة"}
-                {visibleFields.showAge && visibleFields.showGender && " / "}
-                {visibleFields.showGender && "ذكر"}
-              </span>
-            </div>
-          )}
+          return (
+            <div
+              className={`px-3 py-1.5 rounded-xl border text-[10px] flex flex-wrap items-center justify-between gap-x-3 gap-y-1 relative z-10 ${
+                isSoftCurves
+                  ? "bg-orange-50/70 border-orange-200/80"
+                  : isNordic
+                  ? "bg-teal-50/60 border-teal-200/70"
+                  : "bg-slate-50 border-slate-200"
+              }`}
+            >
+              <div className="flex items-center gap-1">
+                {isSoftCurves ? (
+                  <span className="bg-[#fed7aa] text-orange-950 px-2 py-0.5 rounded-md font-bold text-[9px]">
+                    الاسم:
+                  </span>
+                ) : (
+                  <span className="text-slate-400 font-medium text-[9px]">المريض: </span>
+                )}
+                <span className="font-bold text-slate-900 text-[10.5px]">محمد أحمد محمود</span>
+              </div>
 
-          {(visibleFields.showHeight || visibleFields.showWeight) && (
-            <div className="text-slate-700 font-bold flex items-center gap-1 flex-wrap">
-              <span className="text-slate-400 font-medium">القياسات: </span>
-              <span>
-                {visibleFields.showHeight && "178 سم"}
-                {visibleFields.showHeight && visibleFields.showWeight && " • "}
-                {visibleFields.showWeight && "82 كجم"}
-              </span>
-              {visibleFields.showHeight && visibleFields.showWeight && (
-                <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-800 dark:text-amber-300 border border-amber-400/60 inline-flex items-center gap-1 shadow-xs">
-                  <span>⚠️</span>
-                  <span>وزن زائد (Overweight)</span>
-                  <span className="font-mono text-[8.5px] opacity-90" dir="ltr">(25.9)</span>
-                </span>
+              {(visibleFields.showAge || visibleFields.showGender) && (
+                <div className="text-slate-700 font-bold flex items-center gap-1">
+                  {isSoftCurves ? (
+                    <span className="bg-[#fed7aa] text-orange-950 px-2 py-0.5 rounded-md font-bold text-[9px]">
+                      السن:
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-medium">السن/النوع: </span>
+                  )}
+                  <span>
+                    {visibleFields.showAge && "38 سنة"}
+                    {visibleFields.showAge && visibleFields.showGender && " / "}
+                    {visibleFields.showGender && "ذكر"}
+                  </span>
+                </div>
               )}
-            </div>
-          )}
 
-          {visibleFields.showBloodType && (
-            <div>
-              <span className="text-slate-400 font-medium">فصيلة: </span>
-              <span className="font-black text-rose-600">A+</span>
-            </div>
-          )}
+              {(visibleFields.showHeight || visibleFields.showWeight) && (
+                <div className="text-slate-700 font-bold flex items-center gap-1 flex-wrap">
+                  <span className="text-slate-400 font-medium">القياسات: </span>
+                  <span>
+                    {visibleFields.showHeight && "178 سم"}
+                    {visibleFields.showHeight && visibleFields.showWeight && " • "}
+                    {visibleFields.showWeight && "82 كجم"}
+                  </span>
+                  {visibleFields.showHeight && visibleFields.showWeight && (
+                    <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-800 dark:text-amber-300 border border-amber-400/60 inline-flex items-center gap-1 shadow-xs">
+                      <span>⚠️</span>
+                      <span>وزن زائد (Overweight)</span>
+                      <span className="font-mono text-[8.5px] opacity-90" dir="ltr">(25.9)</span>
+                    </span>
+                  )}
+                </div>
+              )}
 
-          <div>
-            <span className="text-slate-400 font-medium">التاريخ: </span>
-            <span className="font-bold text-slate-800">
-              {new Date().toLocaleDateString("ar-EG")}
-            </span>
-          </div>
-        </div>
+              {visibleFields.showBloodType && (
+                <div>
+                  <span className="text-slate-400 font-medium">فصيلة: </span>
+                  <span className="font-black text-rose-600">A+</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1">
+                {isSoftCurves ? (
+                  <span className="bg-[#bae6fd] text-sky-950 px-2 py-0.5 rounded-md font-bold text-[9px]">
+                    التاريخ:
+                  </span>
+                ) : (
+                  <span className="text-slate-400 font-medium">التاريخ: </span>
+                )}
+                <span className="font-bold text-slate-800">
+                  {new Date().toLocaleDateString("ar-EG")}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Diagnosis Preview (Reflects visibleFields.showDiagnosis) */}
         {visibleFields.showDiagnosis && (
@@ -377,57 +505,107 @@ function SettingsPrescriptionPreview({
         {/* Comfortable natural breathing margin between medications and footer */}
         <div className="flex-1 min-h-[50px]" aria-hidden="true" />
 
-        {/* Footer Preview */}
+        {/* Footer Preview (Adapts to Template) */}
         {showFooter !== false ? (
-          <div className="space-y-1 relative z-10 pt-1">
-            {/* Branches & Clinic Phone Numbers & Working Hours (No Doctor Signature, No 'الفرع الرئيسي') */}
-            <div className="border-t border-slate-200/80 pt-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[9px] text-slate-600 font-semibold w-full">
-              {(() => {
-                // If branches exist, inject the live form values (branchAddress, clinicPhone, workingHours) into the primary/active branch
-                const liveBranches = branches && branches.length > 0
-                  ? branches.map((b, idx) => {
-                      const isTarget = activeBranchId ? b.id === activeBranchId : idx === 0;
-                      if (isTarget) {
-                        return {
-                          ...b,
-                          address: branchAddress !== undefined ? branchAddress : b.address,
-                          phone: clinicPhone !== undefined ? clinicPhone : b.phone,
-                          workingHours: workingHours !== undefined ? workingHours : b.workingHours,
-                        };
-                      }
-                      return b;
-                    })
-                  : [
-                      {
-                        id: "preview-default",
-                        name: "Main",
-                        nameAr: nameAr || "الفرع الرئيسي",
-                        address: branchAddress || "",
-                        phone: clinicPhone || "",
-                        workingHours: workingHours || "",
-                        isDefault: true,
-                      },
-                    ];
+          (() => {
+            const isAcademic = templateId === "academic_crest";
+            const isSoftCurves = templateId === "soft_curves";
+            const isNordic = templateId === "nordic_pastel";
+            const isGeometric = templateId === "geometric_frame";
 
-                return liveBranches.map((b, idx) => (
-                  <div key={b.id || idx} className="flex items-center gap-2 flex-wrap justify-center">
-                    {b.address && <span>📍 {b.address}</span>}
-                    {b.phone && (
-                      <span className="font-mono font-bold text-slate-700" dir="ltr">
-                        📞 {b.phone}
-                      </span>
-                    )}
-                    {b.workingHours && <span>🕒 {b.workingHours}</span>}
-                  </div>
-                ));
-              })()}
-            </div>
+            return (
+              <div
+                className={`relative z-10 transition-all ${
+                  isAcademic
+                    ? "-mx-5 sm:-mx-6 -mb-5 sm:-mb-6 p-3 text-white"
+                    : isSoftCurves
+                    ? "-mx-5 sm:-mx-6 -mb-5 sm:-mb-6 p-3 text-slate-800"
+                    : isNordic
+                    ? "-mx-5 sm:-mx-6 -mb-5 sm:-mb-6 p-3 text-emerald-950"
+                    : isGeometric
+                    ? "border-t-2 border-emerald-600 pt-2 space-y-1"
+                    : "space-y-1 pt-1"
+                }`}
+              >
+                {/* Branches & Clinic Phone Numbers & Working Hours (No Doctor Signature, No 'الفرع الرئيسي') */}
+                <div
+                  className={`flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[9px] font-semibold w-full ${
+                    !isGeometric && !isAcademic && !isSoftCurves && !isNordic ? "border-t border-slate-200/80 pt-2" : "pt-1"
+                  } ${
+                    isAcademic
+                      ? "text-slate-200"
+                      : isNordic
+                      ? "text-emerald-950"
+                      : "text-slate-600"
+                  }`}
+                >
+                  {(() => {
+                    // If branches exist, inject the live form values (branchAddress, clinicPhone, workingHours) into the primary/active branch
+                    const liveBranches = branches && branches.length > 0
+                      ? branches.map((b, idx) => {
+                          const isTarget = activeBranchId ? b.id === activeBranchId : idx === 0;
+                          if (isTarget) {
+                            return {
+                              ...b,
+                              address: branchAddress !== undefined ? branchAddress : b.address,
+                              phone: clinicPhone !== undefined ? clinicPhone : b.phone,
+                              workingHours: workingHours !== undefined ? workingHours : b.workingHours,
+                            };
+                          }
+                          return b;
+                        })
+                      : [
+                          {
+                            id: "preview-default",
+                            name: "Main",
+                            nameAr: nameAr || "الفرع الرئيسي",
+                            address: branchAddress || "",
+                            phone: clinicPhone || "",
+                            workingHours: workingHours || "",
+                            isDefault: true,
+                          },
+                        ];
 
-            {/* Sentence: نتمنى لكم الشفاء العاجل directly above the bottom border */}
-            <p className="text-center font-bold text-slate-500 text-[9px] pt-0.5">
-              {footerText || "نتمنى لكم الشفاء العاجل ودوام الصحة والعافية"}
-            </p>
-          </div>
+                    return liveBranches.map((b, idx) => (
+                      <div key={b.id || idx} className="flex items-center gap-2 flex-wrap justify-center">
+                        {b.address && <span>📍 {b.address}</span>}
+                        {b.phone && (
+                          <span
+                            className={`font-mono font-bold ${
+                              isAcademic
+                                ? "text-emerald-300"
+                                : isNordic
+                                ? "text-emerald-950 font-black"
+                                : "text-slate-700"
+                            }`}
+                            dir="ltr"
+                          >
+                            📞 {b.phone}
+                          </span>
+                        )}
+                        {b.workingHours && <span>🕒 {b.workingHours}</span>}
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                {/* Sentence: نتمنى لكم الشفاء العاجل directly above the bottom border */}
+                <p
+                  className={`text-center font-bold text-[9px] pt-0.5 ${
+                    isAcademic
+                      ? "text-emerald-300"
+                      : isSoftCurves
+                      ? "text-rose-900"
+                      : isNordic
+                      ? "text-emerald-900 font-black"
+                      : "text-slate-500"
+                  }`}
+                >
+                  {footerText || "نتمنى لكم الشفاء العاجل ودوام الصحة والعافية"}
+                </p>
+              </div>
+            );
+          })()
         ) : (
           <div className="p-1.5 text-center text-[9px] font-bold text-slate-400 bg-slate-100 rounded-lg border border-dashed border-slate-300">
             (تم إخفاء التذييل السفلي حسب رغبتك)
@@ -1709,44 +1887,40 @@ export default function SettingsPage() {
                               </div>
                             ) : tmpl.id === "nordic_pastel" ? (
                               <div
-                                className="h-3 w-full rounded-t-sm flex items-center justify-between px-1"
+                                className="h-3.5 w-full -mx-2 -mt-2 px-2 flex items-center justify-between"
                                 style={{
-                                  background: `linear-gradient(90deg, ${primaryColor}30, #e0f2fe)`,
+                                  backgroundColor: "#9fe1d4",
+                                  borderBottom: "1.5px solid #67e8f9",
                                 }}
                               >
-                                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: `${primaryColor}60` }} />
-                                <span className="w-8 h-1 rounded" style={{ backgroundColor: primaryColor }} />
+                                <span className="w-5 h-1 rounded bg-teal-950/70" />
+                                <span className="w-7 h-1 rounded bg-teal-900" />
                               </div>
                             ) : tmpl.id === "geometric_frame" ? (
                               <div
-                                className="h-3 w-full rounded-t-sm border-b border-dashed flex items-center justify-between px-1"
-                                style={{
-                                  borderColor: primaryColor,
-                                  backgroundColor: "#fafafa",
-                                }}
+                                className="h-3 w-full border-b border-emerald-500 bg-emerald-50/50 flex items-center justify-between px-1"
                               >
-                                <span className="text-[7px] font-bold" style={{ color: primaryColor }}>◇</span>
-                                <span className="w-6 h-1 rounded" style={{ backgroundColor: primaryColor }} />
+                                <span className="text-[7px] font-bold text-emerald-600">◇</span>
+                                <span className="w-6 h-1 rounded bg-emerald-600" />
                               </div>
                             ) : tmpl.id === "soft_curves" ? (
                               <div
-                                className="h-3.5 w-full rounded-full flex items-center justify-between px-2"
+                                className="h-3.5 w-full -mx-2 -mt-2 px-2 flex items-center justify-between"
                                 style={{
-                                  backgroundColor: `${primaryColor}20`,
+                                  backgroundColor: "#ff7659",
+                                  borderBottom: "1.5px solid #38bdf8",
                                 }}
                               >
-                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: primaryColor }} />
-                                <span className="w-5 h-1 rounded-full" style={{ backgroundColor: primaryColor }} />
+                                <span className="w-5 h-1 rounded bg-white/80" />
+                                <span className="w-7 h-1 rounded bg-white" />
                               </div>
                             ) : tmpl.id === "academic_crest" ? (
                               <div
-                                className="h-3 w-full flex items-center justify-between px-1"
-                                style={{
-                                  backgroundColor: primaryColor,
-                                }}
+                                className="h-3.5 w-full -mx-2 -mt-2 px-2 flex items-center justify-between bg-[#0f2942] border-b border-emerald-500"
                               >
-                                <span className="w-4 h-1 rounded bg-white/70" />
-                                <span className="text-[6px] text-white">⚕</span>
+                                <span className="w-5 h-1 rounded bg-white/70" />
+                                <span className="text-[7px] text-emerald-400">⚕</span>
+                                <span className="w-7 h-1 rounded bg-white" />
                               </div>
                             ) : tmpl.id === "tech_hex" ? (
                               <div
@@ -1792,8 +1966,25 @@ export default function SettingsPage() {
                             )}
 
                             {/* Middle writeable area preview */}
-                            <div className="flex items-center justify-between px-1 text-[8px] text-slate-400 font-serif">
-                              <span className="font-bold" style={{ color: primaryColor }}>℞</span>
+                            <div className="flex items-center justify-between px-1 text-[8px] text-slate-400 font-serif relative">
+                              {tmpl.id === "academic_crest" && (
+                                <span className="absolute inset-0 flex items-center justify-center text-[11px] text-[#0f2942]/20 font-bold">
+                                  ⚕
+                                </span>
+                              )}
+                              <span
+                                className="font-bold"
+                                style={{
+                                  color:
+                                    tmpl.id === "geometric_frame"
+                                      ? "#059669"
+                                      : tmpl.id === "academic_crest"
+                                      ? "#0f2942"
+                                      : primaryColor,
+                                }}
+                              >
+                                ℞
+                              </span>
                               <div className="space-y-0.5 flex-1 mx-2">
                                 <div className="h-0.5 w-3/4 bg-slate-200 rounded" />
                                 <div className="h-0.5 w-1/2 bg-slate-100 rounded" />
@@ -1812,34 +2003,36 @@ export default function SettingsPage() {
                               </div>
                             ) : tmpl.id === "nordic_pastel" ? (
                               <div
-                                className="h-2 w-full flex items-center justify-center"
+                                className="h-2.5 w-full -mx-2 -mb-2 flex items-center justify-center"
                                 style={{
-                                  background: `linear-gradient(90deg, ${primaryColor}15, #f0fdf4)`,
+                                  backgroundColor: "#9fe1d4",
+                                  borderTop: "1px solid #67e8f9",
                                 }}
                               >
-                                <span className="w-8 h-0.5 rounded bg-slate-300" />
+                                <span className="w-8 h-0.5 rounded bg-teal-900/60" />
                               </div>
                             ) : tmpl.id === "geometric_frame" ? (
                               <div
-                                className="h-2 w-full flex items-center justify-between px-1 border-t border-dashed"
-                                style={{ borderColor: `${primaryColor}30` }}
+                                className="h-2 w-full flex items-center justify-between px-1 border-t border-emerald-500 bg-emerald-50/40"
                               >
-                                <span className="text-[5px]" style={{ color: primaryColor }}>◇</span>
-                                <span className="w-6 h-0.5 rounded bg-slate-300" />
+                                <span className="text-[5px] text-emerald-600">◇</span>
+                                <span className="w-6 h-0.5 rounded bg-emerald-600" />
                               </div>
                             ) : tmpl.id === "soft_curves" ? (
                               <div
-                                className="h-2.5 w-3/4 mx-auto rounded-full flex items-center justify-center"
-                                style={{ backgroundColor: `${primaryColor}15` }}
+                                className="h-2.5 w-full -mx-2 -mb-2 flex items-center justify-center"
+                                style={{
+                                  backgroundColor: "#ff7659",
+                                  borderTop: "1.5px solid #38bdf8",
+                                }}
                               >
-                                <span className="w-6 h-0.5 rounded bg-slate-300" />
+                                <span className="w-8 h-0.5 rounded bg-white/80" />
                               </div>
                             ) : tmpl.id === "academic_crest" ? (
                               <div
-                                className="h-2 w-full border-t flex items-center justify-center"
-                                style={{ borderColor: primaryColor }}
+                                className="h-2.5 w-full -mx-2 -mb-2 flex items-center justify-center bg-[#0f2942] border-t border-emerald-500"
                               >
-                                <span className="w-10 h-0.5 rounded" style={{ backgroundColor: primaryColor }} />
+                                <span className="w-8 h-0.5 rounded bg-emerald-300" />
                               </div>
                             ) : tmpl.id === "tech_hex" ? (
                               <div

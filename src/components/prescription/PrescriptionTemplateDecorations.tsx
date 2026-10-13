@@ -306,112 +306,81 @@ export function PrescriptionTemplateDecorations({
     );
   }
 
-  // 6. NORDIC PASTEL (النبض النورديك الانسيابي - هدوء وبساطة اسكندنافية)
+  // 6. NORDIC PASTEL (النبض النورديك الانسيابي - هدوء وبساطة اسكندنافية بأمواج الباستيل المينت والسيان)
   if (templateId === "nordic_pastel") {
     return (
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 print:opacity-100">
-        {/* Soft Pastel Header Horizon Wave */}
-        <svg
-          className="absolute top-0 inset-x-0 w-full h-20 sm:h-24 opacity-30"
-          viewBox="0 0 600 100"
-          preserveAspectRatio="none"
-          fill="none"
-          style={{ color: primaryColor }}
-        >
-          <path d="M0,0 L600,0 L600,45 C460,20 320,60 0,35 Z" fill="currentColor" fillOpacity="0.12" />
-          <path d="M0,38 C220,62 420,22 600,48" stroke="currentColor" strokeWidth="1.2" strokeDasharray="3 3" opacity="0.6" />
-          <path d="M0,22 C180,45 380,12 600,32" stroke="currentColor" strokeWidth="0.8" opacity="0.3" />
-        </svg>
+        {/* Full-width Top Pastel Mint Header Wave Banner with Cyan Accent Ribbon */}
+        <div className="absolute top-0 inset-x-0 h-28 sm:h-32 overflow-hidden pointer-events-none z-0">
+          <svg className="w-full h-full" viewBox="0 0 600 120" preserveAspectRatio="none" fill="none">
+            {/* Primary Mint Pastel Wave */}
+            <path d="M0,0 L600,0 L600,78 C440,52 280,105 0,68 Z" fill="#9fe1d4" />
+            {/* Secondary Soft Cyan Wave Ribbon */}
+            <path d="M0,68 C280,105 440,52 600,78 L600,92 C440,65 280,118 0,82 Z" fill="#67e8f9" />
+          </svg>
+        </div>
 
-        {/* Delicate Pastel Circular Badge in Top-Left Corner */}
+        {/* Delicate Circular Pastel Watermark Stamp in Top Left */}
         <svg
-          className="absolute top-3 left-3 w-8 h-8 opacity-25"
+          className="absolute top-3 left-4 w-10 h-10 opacity-30 pointer-events-none z-10"
           viewBox="0 0 32 32"
           fill="none"
-          style={{ color: primaryColor }}
+          style={{ color: "#065f46" }}
         >
           <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 2" />
-          <circle cx="16" cy="16" r="10" fill="currentColor" fillOpacity="0.08" />
+          <circle cx="16" cy="16" r="9" fill="currentColor" fillOpacity="0.1" />
           <circle cx="16" cy="16" r="3" fill="currentColor" />
         </svg>
 
-        {/* Soft Bottom Footer Wave Accent */}
-        <svg
-          className="absolute bottom-0 inset-x-0 w-full h-14 sm:h-16 opacity-25"
-          viewBox="0 0 600 70"
-          preserveAspectRatio="none"
-          fill="none"
-          style={{ color: primaryColor }}
-        >
-          <path d="M0,70 L600,70 L600,28 C450,55 240,15 0,40 Z" fill="currentColor" fillOpacity="0.08" />
-          <path d="M0,38 C240,15 450,55 600,28" stroke="currentColor" strokeWidth="1" strokeDasharray="4 2" opacity="0.5" />
-        </svg>
+        {/* Matching Soft Mint & Cyan Bottom Footer Wave */}
+        <div className="absolute bottom-0 inset-x-0 h-18 sm:h-22 overflow-hidden pointer-events-none z-0">
+          <svg className="w-full h-full" viewBox="0 0 600 80" preserveAspectRatio="none" fill="none">
+            {/* Secondary Cyan Ribbon */}
+            <path d="M0,20 C180,-5 380,38 600,14 L600,25 C380,48 180,6 0,32 Z" fill="#67e8f9" />
+            {/* Primary Mint Wave */}
+            <path d="M0,32 C180,6 380,48 600,25 L600,80 L0,80 Z" fill="#9fe1d4" />
+          </svg>
+        </div>
       </div>
     );
   }
 
-  // 7. GEOMETRIC FRAME (الإطار الهندسي الأنيق - زوايا معمارية مقطوعة وأناقة دقيقة)
+  // 7. GEOMETRIC FRAME (الإطار الهندسي الأنيق - إطار زمردي مزدوج وزوايا ألماسية معمارية)
   if (templateId === "geometric_frame") {
     return (
       <div className="absolute inset-0 pointer-events-none z-0 print:opacity-100 overflow-hidden">
-        {/* Precision Dotted Inner Margin Perimeter */}
-        <div
-          className="absolute inset-2 sm:inset-3 border border-dashed rounded-lg opacity-30 pointer-events-none"
-          style={{ borderColor: primaryColor }}
-        />
+        {/* Outer Perimeter Emerald Frame */}
+        <div className="absolute inset-1.5 sm:inset-2.5 border-2 border-emerald-500 pointer-events-none" />
 
-        {/* Top-Right Chamfered Angle & Diamond */}
-        <svg
-          className="absolute top-0 right-0 w-12 h-12 opacity-70"
-          viewBox="0 0 48 48"
-          fill="none"
-          style={{ color: primaryColor }}
-        >
-          <polygon points="48,0 48,28 28,48 0,48 0,0" fill="currentColor" fillOpacity="0.08" />
-          <path d="M48,28 L28,48" stroke="currentColor" strokeWidth="1.8" />
-          <rect x="25" y="11" width="8" height="8" transform="rotate(45 29 15)" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1" />
+        {/* Inner Precision Inset Border */}
+        <div className="absolute inset-3 sm:inset-4 border border-emerald-500/80 pointer-events-none" />
+
+        {/* Top-Right Diamond Corner */}
+        <svg className="absolute top-2 right-2 sm:top-3 sm:right-3 w-5 h-5 text-emerald-600" viewBox="0 0 20 20" fill="none">
+          <rect x="6" y="6" width="8" height="8" transform="rotate(45 10 10)" fill="currentColor" />
         </svg>
 
-        {/* Top-Left Chamfered Angle & Diamond */}
-        <svg
-          className="absolute top-0 left-0 w-12 h-12 opacity-70"
-          viewBox="0 0 48 48"
-          fill="none"
-          style={{ color: primaryColor }}
-        >
-          <polygon points="0,0 0,28 20,48 48,48 48,0" fill="currentColor" fillOpacity="0.08" />
-          <path d="M0,28 L20,48" stroke="currentColor" strokeWidth="1.8" />
-          <rect x="15" y="11" width="8" height="8" transform="rotate(45 19 15)" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1" />
+        {/* Top-Left Diamond Corner */}
+        <svg className="absolute top-2 left-2 sm:top-3 sm:left-3 w-5 h-5 text-emerald-600" viewBox="0 0 20 20" fill="none">
+          <rect x="6" y="6" width="8" height="8" transform="rotate(45 10 10)" fill="currentColor" />
         </svg>
 
-        {/* Bottom-Right Chamfered Angle */}
-        <svg
-          className="absolute bottom-0 right-0 w-10 h-10 opacity-70"
-          viewBox="0 0 40 40"
-          fill="none"
-          style={{ color: primaryColor }}
-        >
-          <polygon points="40,40 40,16 16,40" fill="currentColor" fillOpacity="0.1" />
-          <path d="M40,16 L16,40" stroke="currentColor" strokeWidth="1.8" />
+        {/* Bottom-Right Diamond Corner */}
+        <svg className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 w-5 h-5 text-emerald-600" viewBox="0 0 20 20" fill="none">
+          <rect x="6" y="6" width="8" height="8" transform="rotate(45 10 10)" fill="currentColor" />
         </svg>
 
-        {/* Bottom-Left Chamfered Angle */}
-        <svg
-          className="absolute bottom-0 left-0 w-10 h-10 opacity-70"
-          viewBox="0 0 40 40"
-          fill="none"
-          style={{ color: primaryColor }}
-        >
-          <polygon points="0,40 0,16 24,40" fill="currentColor" fillOpacity="0.1" />
-          <path d="M0,16 L24,40" stroke="currentColor" strokeWidth="1.8" />
+        {/* Bottom-Left Diamond Corner */}
+        <svg className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 w-5 h-5 text-emerald-600" viewBox="0 0 20 20" fill="none">
+          <rect x="6" y="6" width="8" height="8" transform="rotate(45 10 10)" fill="currentColor" />
         </svg>
 
-        {/* Precision Crosshairs in Margin Intersections */}
-        <svg className="absolute top-6 left-6 w-3 h-3 opacity-40" viewBox="0 0 12 12" fill="none" style={{ color: primaryColor }}>
+        {/* Geometric Margin Crosshairs */}
+        <svg className="absolute top-8 left-8 w-3 h-3 text-emerald-500/50" viewBox="0 0 12 12" fill="none">
           <line x1="6" y1="0" x2="6" y2="12" stroke="currentColor" strokeWidth="1" />
           <line x1="0" y1="6" x2="12" y2="6" stroke="currentColor" strokeWidth="1" />
         </svg>
-        <svg className="absolute top-6 right-6 w-3 h-3 opacity-40" viewBox="0 0 12 12" fill="none" style={{ color: primaryColor }}>
+        <svg className="absolute top-8 right-8 w-3 h-3 text-emerald-500/50" viewBox="0 0 12 12" fill="none">
           <line x1="6" y1="0" x2="6" y2="12" stroke="currentColor" strokeWidth="1" />
           <line x1="0" y1="6" x2="12" y2="6" stroke="currentColor" strokeWidth="1" />
         </svg>
@@ -419,89 +388,88 @@ export function PrescriptionTemplateDecorations({
     );
   }
 
-  // 8. SOFT CURVES CARE (الرعاية الدافئة وطب الأسرة والأطفال - منحنيات وكبسولات دافئة)
+  // 8. SOFT CURVES CARE (الرعاية الدافئة وطب الأسرة - ترويسة مرجانية دافئة مع موجة سماوية ناعمة)
   if (templateId === "soft_curves") {
     return (
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 print:opacity-100">
-        {/* Soft Overlapping Cloud Pill Arcs in Header */}
-        <svg
-          className="absolute top-0 inset-x-0 w-full h-24 sm:h-28 opacity-35"
-          viewBox="0 0 600 120"
-          preserveAspectRatio="none"
-          fill="none"
-          style={{ color: primaryColor }}
-        >
-          <rect x="-30" y="-30" width="380" height="95" rx="48" fill="currentColor" fillOpacity="0.1" />
-          <rect x="260" y="-25" width="370" height="90" rx="45" fill="currentColor" fillOpacity="0.08" />
-          {/* Friendly floating micro-bubbles */}
-          <circle cx="230" cy="55" r="4.5" fill="currentColor" fillOpacity="0.35" />
-          <circle cx="248" cy="42" r="3" fill="currentColor" fillOpacity="0.25" />
-          <circle cx="370" cy="62" r="3.5" fill="currentColor" fillOpacity="0.3" />
-        </svg>
+        {/* Full-width Warm Coral Header Banner with Sky Blue Wave Ribbon */}
+        <div className="absolute top-0 inset-x-0 h-28 sm:h-32 overflow-hidden pointer-events-none z-0">
+          <svg className="w-full h-full" viewBox="0 0 600 120" preserveAspectRatio="none" fill="none">
+            {/* Primary Warm Coral Header */}
+            <path d="M0,0 L600,0 L600,76 C420,58 240,98 0,70 Z" fill="#ff7659" />
+            {/* Secondary Sky Blue Ribbon Wave */}
+            <path d="M0,70 C240,98 420,58 600,76 L600,88 C420,70 240,110 0,82 Z" fill="#38bdf8" />
+          </svg>
+        </div>
 
-        {/* Soft Pill Arc in Footer */}
-        <svg
-          className="absolute bottom-0 inset-x-0 w-full h-16 sm:h-20 opacity-30"
-          viewBox="0 0 600 80"
-          preserveAspectRatio="none"
-          fill="none"
-          style={{ color: primaryColor }}
-        >
-          <rect x="90" y="20" width="420" height="80" rx="40" fill="currentColor" fillOpacity="0.1" />
-          <circle cx="70" cy="45" r="3.5" fill="currentColor" fillOpacity="0.25" />
-          <circle cx="530" cy="45" r="3.5" fill="currentColor" fillOpacity="0.25" />
-        </svg>
+        {/* Friendly Floating Circles in Top Corner */}
+        <div className="absolute top-3 left-4 flex items-center gap-1.5 opacity-40 z-10">
+          <span className="w-2.5 h-2.5 rounded-full bg-white" />
+          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+        </div>
+
+        {/* Matching Warm Coral & Sky Blue Bottom Footer Wave */}
+        <div className="absolute bottom-0 inset-x-0 h-18 sm:h-22 overflow-hidden pointer-events-none z-0">
+          <svg className="w-full h-full" viewBox="0 0 600 80" preserveAspectRatio="none" fill="none">
+            {/* Secondary Sky Blue Ribbon */}
+            <path d="M0,18 C200,-5 380,36 600,12 L600,22 C380,46 200,5 0,28 Z" fill="#38bdf8" />
+            {/* Primary Warm Coral Wave */}
+            <path d="M0,28 C200,5 380,46 600,22 L600,80 L0,80 Z" fill="#ff7659" />
+          </svg>
+        </div>
       </div>
     );
   }
 
-  // 9. ACADEMIC ROYAL CREST (الشريط الأكاديمي التخصصي - وقار كبرى المستشفيات مع عصا الطب)
+  // 9. ACADEMIC ROYAL CREST (الشريط الأكاديمي التخصصي - شريط كحلي وقور مع خط زمردي وشعار الكادوسيوس الطبي)
   if (templateId === "academic_crest") {
     return (
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 print:opacity-100">
-        {/* Top Solid Institutional Header Ribbon Strip */}
-        <div
-          className="absolute top-0 inset-x-0 h-3 opacity-90"
-          style={{ backgroundColor: primaryColor }}
-        />
-        <div
-          className="absolute top-3.5 inset-x-0 h-0.5 opacity-50"
-          style={{ backgroundColor: primaryColor }}
-        />
+        {/* Top Solid Royal Navy Banner with Emerald Green Bottom Stripe */}
+        <div className="absolute top-0 inset-x-0 h-24 sm:h-28 bg-[#0f2942] pointer-events-none z-0">
+          <div className="absolute bottom-0 inset-x-0 h-1.5 bg-emerald-500 shadow-sm" />
+        </div>
 
-        {/* Central Watermark: Authentic Rod of Asclepius & Caduceus Medical Crest */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-[0.06] pointer-events-none">
+        {/* Central Prominent Caduceus / Rod of Asclepius Medical Crest Watermark */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.08] z-0">
           <svg
-            className="w-48 h-64 sm:w-56 sm:h-72"
+            className="w-52 h-64 sm:w-64 sm:h-80"
             viewBox="0 0 200 280"
             fill="none"
-            style={{ color: primaryColor }}
+            style={{ color: "#0f2942" }}
           >
-            {/* Center Asclepius Rod */}
-            <line x1="100" y1="20" x2="100" y2="260" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-            <circle cx="100" cy="18" r="9" fill="currentColor" />
-            {/* Coiling Sacred Medical Serpent */}
+            {/* Center Asclepius Rod & Pinecone finial */}
+            <line x1="100" y1="18" x2="100" y2="265" stroke="currentColor" strokeWidth="5.5" strokeLinecap="round" />
+            <circle cx="100" cy="16" r="8" fill="currentColor" />
+            {/* Symmetrical Twin Serpents (Caduceus) */}
             <path
-              d="M85,240 C65,210 135,185 115,155 C95,125 65,95 100,65 C125,45 80,30 100,20"
+              d="M75,230 C50,200 135,175 115,145 C95,115 55,90 95,55 C125,35 75,25 95,16"
               fill="none"
               stroke="currentColor"
               strokeWidth="4"
               strokeLinecap="round"
             />
-            {/* Wing elements flanking the top */}
             <path
-              d="M100,50 C125,30 155,40 170,65 C150,68 130,62 100,75"
+              d="M125,230 C150,200 65,175 85,145 C105,115 145,90 105,55 C75,35 125,25 105,16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            {/* Classical Angelic Healing Wings */}
+            <path
+              d="M100,52 C135,22 175,35 190,65 C165,68 135,60 100,75"
               fill="currentColor"
-              fillOpacity="0.3"
+              fillOpacity="0.4"
             />
             <path
-              d="M100,50 C75,30 45,40 30,65 C50,68 70,62 100,75"
+              d="M100,52 C65,22 25,35 10,65 C35,68 65,60 100,75"
               fill="currentColor"
-              fillOpacity="0.3"
+              fillOpacity="0.4"
             />
-            {/* Classical Laurel Wreath base */}
+            {/* Formal Medical Laurel Wreath Base */}
             <path
-              d="M50,220 C40,240 70,260 100,265 C130,260 160,240 150,220"
+              d="M45,210 C35,235 65,260 100,265 C135,260 165,235 155,210"
               fill="none"
               stroke="currentColor"
               strokeWidth="2.5"
@@ -510,15 +478,10 @@ export function PrescriptionTemplateDecorations({
           </svg>
         </div>
 
-        {/* Formal Dual-Pinstripe Collegiate Footer */}
-        <div
-          className="absolute bottom-3.5 inset-x-0 h-0.5 opacity-50"
-          style={{ backgroundColor: primaryColor }}
-        />
-        <div
-          className="absolute bottom-0 inset-x-0 h-2.5 opacity-90"
-          style={{ backgroundColor: primaryColor }}
-        />
+        {/* Bottom Solid Royal Navy Footer Banner with Emerald Green Top Accent */}
+        <div className="absolute bottom-0 inset-x-0 h-16 sm:h-18 bg-[#0f2942] pointer-events-none z-0">
+          <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500 shadow-sm" />
+        </div>
       </div>
     );
   }
@@ -590,43 +553,38 @@ export function getTemplateContainerStyles(
     case "nordic_pastel":
       return {
         style: {
-          borderTop: `5px solid ${primaryColor}80`,
-          borderBottom: `4px solid ${primaryColor}50`,
-          backgroundColor: "#fafcfd",
+          backgroundColor: "#ffffff",
+          borderColor: "#99f6e4",
         },
-        className: "border-x border-slate-200 shadow-2xl relative",
+        className: "border-2 border-teal-200/90 shadow-2xl relative overflow-hidden",
       };
 
     case "geometric_frame":
       return {
         style: {
-          border: `2px solid ${primaryColor}85`,
-          outline: `1px dashed ${primaryColor}30`,
-          outlineOffset: "-6px",
           backgroundColor: "#ffffff",
+          border: "3px solid #10b981",
         },
-        className: "shadow-2xl relative",
+        className: "shadow-2xl relative overflow-hidden",
       };
 
     case "soft_curves":
       return {
         style: {
-          borderTop: `5px solid ${primaryColor}`,
-          borderBottom: `5px solid ${primaryColor}80`,
-          borderRadius: "20px",
-          backgroundColor: "#fdfefe",
+          backgroundColor: "#ffffff",
+          borderRadius: "24px",
+          border: "2px solid #fdba74",
         },
-        className: "border-x border-slate-200 shadow-2xl relative overflow-hidden",
+        className: "shadow-2xl relative overflow-hidden",
       };
 
     case "academic_crest":
       return {
         style: {
-          borderTop: `7px solid ${primaryColor}`,
-          borderBottom: `4px solid ${primaryColor}`,
-          backgroundColor: "#fafbfc",
+          backgroundColor: "#ffffff",
+          border: "2px solid #0f2942",
         },
-        className: "border-x-2 border-slate-300 shadow-2xl relative",
+        className: "shadow-2xl relative overflow-hidden",
       };
 
     case "classic":

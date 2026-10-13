@@ -255,161 +255,279 @@ export function LivePrescriptionPreview({
           </div>
         </div>
 
-        {/* Clinic & Doctor Header (Respects showHeader) */}
-        {clinic.showHeader !== false && (
-          <div
-            className="border-b pb-2.5 mb-2 space-y-1.5 relative z-10"
-            style={{ borderColor: `${primaryColor}25` }}
-          >
-            <div className="flex items-start justify-between gap-4">
-              {/* Right: Logo + Doctor Identity */}
-              <div className="flex items-center gap-3">
-                {clinic.logoUrl && (
-                  <div
-                    className="relative rounded-2xl overflow-hidden border border-slate-200/90 shadow-sm shrink-0 flex items-center justify-center p-1 bg-white"
-                    style={{
-                      width: "58px",
-                      height: "58px",
-                    }}
-                  >
-                    {clinic.logoUrl.startsWith("data:") || clinic.logoUrl.startsWith("http") ? (
-                      <img
-                        src={clinic.logoUrl}
-                        alt="Clinic Logo"
-                        className="max-h-full max-w-full object-contain"
-                      />
-                    ) : (
-                      <Image
-                        src={clinic.logoUrl}
-                        alt="Clinic Logo"
-                        fill
-                        sizes="70px"
-                        className="object-contain"
-                      />
+        {/* Clinic & Doctor Header (Respects showHeader & Adapts to Template) */}
+        {(() => {
+          const isAcademic = templateId === "academic_crest";
+          const isSoftCurves = templateId === "soft_curves";
+          const isNordic = templateId === "nordic_pastel";
+          const isGeometric = templateId === "geometric_frame";
+
+          return (
+            clinic.showHeader !== false && (
+              <div
+                className={`transition-all relative z-10 ${
+                  isAcademic
+                    ? "-mx-5 sm:-mx-8 -mt-5 sm:-mt-8 p-5 sm:p-8 pt-3 sm:pt-4 pb-3 mb-2 text-white"
+                    : isSoftCurves
+                    ? "-mx-5 sm:-mx-8 -mt-5 sm:-mt-8 p-5 sm:p-8 pt-3 sm:pt-4 pb-4 mb-2 text-white"
+                    : isNordic
+                    ? "-mx-5 sm:-mx-8 -mt-5 sm:-mt-8 p-5 sm:p-8 pt-3 sm:pt-4 pb-4 mb-2 text-emerald-950"
+                    : isGeometric
+                    ? "border-b-2 border-emerald-600 pb-2.5 mb-2 space-y-1.5"
+                    : "border-b pb-2.5 mb-2 space-y-1.5"
+                }`}
+                style={
+                  !isAcademic && !isSoftCurves && !isNordic && !isGeometric
+                    ? { borderColor: `${primaryColor}25` }
+                    : undefined
+                }
+              >
+                <div className="flex items-start justify-between gap-4">
+                  {/* Right: Logo + Doctor Identity */}
+                  <div className="flex items-center gap-3">
+                    {clinic.logoUrl && (
+                      <div
+                        className={`relative rounded-2xl overflow-hidden border shadow-sm shrink-0 flex items-center justify-center p-1 ${
+                          isAcademic || isSoftCurves
+                            ? "bg-white/95 border-white/60"
+                            : isNordic
+                            ? "bg-white border-teal-200"
+                            : "bg-white border-slate-200/90"
+                        }`}
+                        style={{
+                          width: "58px",
+                          height: "58px",
+                        }}
+                      >
+                        {clinic.logoUrl.startsWith("data:") || clinic.logoUrl.startsWith("http") ? (
+                          <img
+                            src={clinic.logoUrl}
+                            alt="Clinic Logo"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        ) : (
+                          <Image
+                            src={clinic.logoUrl}
+                            alt="Clinic Logo"
+                            fill
+                            sizes="70px"
+                            className="object-contain"
+                          />
+                        )}
+                      </div>
                     )}
+                    <div className="space-y-0.5">
+                      <h2
+                        className={`text-lg sm:text-xl font-black font-serif leading-tight tracking-tight ${
+                          isAcademic || isSoftCurves
+                            ? "text-white drop-shadow-xs"
+                            : isNordic
+                            ? "text-emerald-950"
+                            : isGeometric
+                            ? "text-emerald-700"
+                            : ""
+                        }`}
+                        style={
+                          !isAcademic && !isSoftCurves && !isNordic && !isGeometric
+                            ? { color: primaryColor }
+                            : undefined
+                        }
+                      >
+                        {activeBranch?.doctorName || clinic.doctorName || "د. الطبيب المعالج"}
+                      </h2>
+                      <p
+                        className={`text-xs sm:text-sm font-bold ${
+                          isAcademic
+                            ? "text-slate-200"
+                            : isSoftCurves
+                            ? "text-rose-100"
+                            : isNordic
+                            ? "text-emerald-900"
+                            : "text-slate-700"
+                        }`}
+                      >
+                        {activeBranch?.doctorTitle || clinic.doctorTitle || "أخصائي واستشاري"}
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                        {(activeBranch?.specialty || clinic.specialty) && (
+                          <span
+                            className={`font-semibold ${
+                              isAcademic
+                                ? "text-emerald-300"
+                                : isSoftCurves
+                                ? "text-orange-100"
+                                : isNordic
+                                ? "text-emerald-800"
+                                : isGeometric
+                                ? "text-emerald-600"
+                                : "text-slate-600"
+                            }`}
+                          >
+                            {activeBranch?.specialty || clinic.specialty}
+                          </span>
+                        )}
+                        {(activeBranch?.syndicateId || clinic.syndicateId) && (
+                          <>
+                            <span className={isAcademic || isSoftCurves ? "text-white/40" : "text-slate-300"}>•</span>
+                            <span
+                              className={`font-mono ${
+                                isAcademic || isSoftCurves
+                                  ? "text-white/80"
+                                  : isNordic
+                                  ? "text-emerald-900/80"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              ترخيص: {activeBranch?.syndicateId || clinic.syndicateId}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
-                <div className="space-y-0.5">
-                  <h2
-                    className="text-lg sm:text-xl font-black font-serif leading-tight tracking-tight"
-                    style={{ color: primaryColor }}
-                  >
-                    {activeBranch?.doctorName || clinic.doctorName || "د. الطبيب المعالج"}
-                  </h2>
-                  <p className="text-xs sm:text-sm font-bold text-slate-700">
-                    {activeBranch?.doctorTitle || clinic.doctorTitle || "أخصائي واستشاري"}
-                  </p>
-                  <div className="flex items-center gap-2 flex-wrap text-[10px]">
-                    {(activeBranch?.specialty || clinic.specialty) && (
-                      <span className="font-semibold text-slate-600">
-                        {activeBranch?.specialty || clinic.specialty}
-                      </span>
-                    )}
-                    {(activeBranch?.syndicateId || clinic.syndicateId) && (
-                      <>
-                        <span className="text-slate-300">•</span>
-                        <span className="text-slate-400 font-mono">
-                          ترخيص: {activeBranch?.syndicateId || clinic.syndicateId}
-                        </span>
-                      </>
+
+                  {/* Left: Clinic Details */}
+                  <div className="text-left space-y-1">
+                    <h3
+                      className={`text-base sm:text-lg font-black leading-tight tracking-tight ${
+                        isAcademic || isSoftCurves
+                          ? "text-white drop-shadow-xs"
+                          : isNordic
+                          ? "text-emerald-950"
+                          : "text-slate-900"
+                      }`}
+                      style={{
+                        fontFamily: "'El Messiri', 'Alexandria', 'Cairo', serif",
+                        letterSpacing: "-0.01em",
+                      }}
+                    >
+                      {activeBranch?.nameAr || clinic.nameAr || "المركز الطبي"}
+                    </h3>
+                    {(activeBranch?.name || clinic.name || clinic.headerText) && (
+                      <p
+                        className={`text-xs sm:text-[13px] font-bold ${
+                          isAcademic
+                            ? "text-emerald-300"
+                            : isSoftCurves
+                            ? "text-orange-100"
+                            : isNordic
+                            ? "text-teal-800"
+                            : isGeometric
+                            ? "text-emerald-600"
+                            : ""
+                        }`}
+                        style={
+                          !isAcademic && !isSoftCurves && !isNordic && !isGeometric
+                            ? {
+                                fontFamily: "'Alexandria', 'Cairo', sans-serif",
+                                color: primaryColor,
+                              }
+                            : { fontFamily: "'Alexandria', 'Cairo', sans-serif" }
+                        }
+                      >
+                        {activeBranch?.name || clinic.name || clinic.headerText}
+                      </p>
                     )}
                   </div>
                 </div>
               </div>
+            )
+          );
+        })()}
 
-              {/* Left: Clinic Details with distinctive, elegant typography for Clinic Name & Specialty */}
-              <div className="text-left space-y-1">
-                <h3
-                  className="text-base sm:text-lg font-black leading-tight tracking-tight"
-                  style={{
-                    fontFamily: "'El Messiri', 'Alexandria', 'Cairo', serif",
-                    color: "#0f172a",
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  {activeBranch?.nameAr || clinic.nameAr || "المركز الطبي"}
-                </h3>
-                {(activeBranch?.name || clinic.name || clinic.headerText) && (
-                  <p
-                    className="text-xs sm:text-[13px] font-bold"
-                    style={{
-                      fontFamily: "'Alexandria', 'Cairo', sans-serif",
-                      color: primaryColor,
-                    }}
-                  >
-                    {activeBranch?.name || clinic.name || clinic.headerText}
-                  </p>
+        {/* Compact Patient Information Strip (Respects visibleFields & Adapts to Template) */}
+        {(() => {
+          const isSoftCurves = templateId === "soft_curves";
+          const isNordic = templateId === "nordic_pastel";
+
+          return (
+            <div
+              className={`my-1.5 px-3 py-1.5 rounded-xl border text-[10px] relative z-10 ${
+                isSoftCurves
+                  ? "bg-orange-50/70 border-orange-200/80"
+                  : isNordic
+                  ? "bg-teal-50/60 border-teal-200/70"
+                  : "bg-slate-50/80 border-slate-200/80"
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-3">
+                {/* Patient Name */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-slate-400 text-[9px] font-semibold">المريض:</span>
+                  <span className="text-slate-900 font-bold text-[10.5px] truncate">{patient.name || "—"}</span>
+                </div>
+
+                {/* Age & Gender */}
+                {(visibleFields.showAge || visibleFields.showGender) && (
+                  <div className="flex items-center gap-1 font-semibold">
+                    <span className="text-slate-400 text-[9.5px] font-normal">السن/النوع:</span>
+                    <span
+                      className={
+                        isSoftCurves
+                          ? "bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full font-bold"
+                          : "text-slate-700"
+                      }
+                    >
+                      {visibleFields.showAge && (patient.age ? `${patient.age} سنة` : "—")}
+                      {visibleFields.showAge && visibleFields.showGender && " / "}
+                      {visibleFields.showGender &&
+                        (patient.gender === "FEMALE" ? "أنثى" : "ذكر")}
+                    </span>
+                  </div>
                 )}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Compact Patient Information Strip (Respects visibleFields) */}
-        <div className="my-1.5 px-3 py-1.5 rounded-lg bg-slate-50/80 border border-slate-200/80 text-[10px] relative z-10">
-          <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-3">
-            {/* Patient Name */}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-slate-400 text-[9px] font-semibold">المريض:</span>
-              <span className="text-slate-900 font-bold text-[10.5px] truncate">{patient.name || "—"}</span>
-            </div>
+                {/* Height & Weight with Smart Clinical BMI Badge */}
+                {(visibleFields.showHeight || visibleFields.showWeight) && (
+                  <div className="flex items-center gap-1.5 text-slate-700 font-semibold flex-wrap">
+                    <span className="text-slate-400 text-[9.5px] font-normal">القياسات:</span>
+                    <span>
+                      {visibleFields.showHeight && (
+                        <span>{patient.height ? `${patient.height} سم` : "— سم"}</span>
+                      )}
+                      {visibleFields.showHeight && visibleFields.showWeight && " • "}
+                      {visibleFields.showWeight && (
+                        <span>{patient.weight ? `${patient.weight} كجم` : "— كجم"}</span>
+                      )}
+                    </span>
+                    {bmiInfo && (
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black border transition-all ${bmiInfo.badgeClass} print:shadow-none`}
+                        title={`مؤشر كتلة الجسم (BMI): ${bmiInfo.bmiFormatted} kg/m² • الوزن المثالي: ${bmiInfo.idealWeightMin} - ${bmiInfo.idealWeightMax} كجم`}
+                      >
+                        <span>{bmiInfo.icon}</span>
+                        <span>{bmiInfo.label}</span>
+                        <span className="font-mono text-[9px] font-black" dir="ltr">({bmiInfo.bmiFormatted})</span>
+                      </span>
+                    )}
+                  </div>
+                )}
 
-            {/* Age & Gender */}
-            {(visibleFields.showAge || visibleFields.showGender) && (
-              <div className="flex items-center gap-1 text-slate-700 font-semibold">
-                <span className="text-slate-400 text-[9.5px] font-normal">السن/النوع:</span>
-                <span>
-                  {visibleFields.showAge && (patient.age ? `${patient.age} سنة` : "—")}
-                  {visibleFields.showAge && visibleFields.showGender && " / "}
-                  {visibleFields.showGender &&
-                    (patient.gender === "FEMALE" ? "أنثى" : "ذكر")}
-                </span>
-              </div>
-            )}
+                {/* Blood Type */}
+                {visibleFields.showBloodType && (
+                  <div className="flex items-center gap-1 font-bold">
+                    <span className="text-slate-400 text-[9.5px] font-normal">الفصيلة:</span>
+                    <span className="text-rose-600 font-black">{patient.bloodType || "—"}</span>
+                  </div>
+                )}
 
-            {/* Height & Weight with Smart Clinical BMI Badge */}
-            {(visibleFields.showHeight || visibleFields.showWeight) && (
-              <div className="flex items-center gap-1.5 text-slate-700 font-semibold flex-wrap">
-                <span className="text-slate-400 text-[9.5px] font-normal">القياسات:</span>
-                <span>
-                  {visibleFields.showHeight && (
-                    <span>{patient.height ? `${patient.height} سم` : "— سم"}</span>
-                  )}
-                  {visibleFields.showHeight && visibleFields.showWeight && " • "}
-                  {visibleFields.showWeight && (
-                    <span>{patient.weight ? `${patient.weight} كجم` : "— كجم"}</span>
-                  )}
-                </span>
-                {bmiInfo && (
+                {/* Date */}
+                <div className="flex items-center gap-1 font-medium">
+                  <span className="text-slate-400 text-[9.5px]">التاريخ:</span>
                   <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black border transition-all ${bmiInfo.badgeClass} print:shadow-none`}
-                    title={`مؤشر كتلة الجسم (BMI): ${bmiInfo.bmiFormatted} kg/m² • الوزن المثالي: ${bmiInfo.idealWeightMin} - ${bmiInfo.idealWeightMax} كجم`}
+                    suppressHydrationWarning
+                    className={
+                      isSoftCurves
+                        ? "bg-sky-100 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-full font-bold font-mono text-[10px]"
+                        : "font-mono font-bold text-slate-800"
+                    }
                   >
-                    <span>{bmiInfo.icon}</span>
-                    <span>{bmiInfo.label}</span>
-                    <span className="font-mono text-[9px] font-black" dir="ltr">({bmiInfo.bmiFormatted})</span>
+                    {mounted ? currentDate : ""}
                   </span>
-                )}
+                </div>
               </div>
-            )}
-
-            {/* Blood Type */}
-            {visibleFields.showBloodType && (
-              <div className="flex items-center gap-1 font-bold">
-                <span className="text-slate-400 text-[9.5px] font-normal">الفصيلة:</span>
-                <span className="text-rose-600 font-black">{patient.bloodType || "—"}</span>
-              </div>
-            )}
-
-            {/* Date */}
-            <div className="flex items-center gap-1 text-slate-600 font-medium">
-              <span className="text-slate-400 text-[9.5px]">التاريخ:</span>
-              <span suppressHydrationWarning className="font-mono font-bold">
-                {mounted ? currentDate : ""}
-              </span>
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Diagnosis Note if enabled */}
         {visibleFields.showDiagnosis && (
@@ -648,56 +766,121 @@ export function LivePrescriptionPreview({
         </div>
 
         {/* Footer: Branches & Clinic Contact & Greeting (Respects showFooter) */}
-        {clinic.showFooter !== false && (
-          <div className="mt-auto pt-2 space-y-1.5 relative z-10">
-            {/* Notes if any */}
-            {notes && (
-              <p className="text-[10px] text-slate-700 font-medium leading-relaxed bg-slate-50 p-1.5 rounded-lg border border-slate-200/70 mb-1">
-                <strong className="text-slate-900">ملاحظات وتعليمات:</strong> {notes}
-              </p>
-            )}
+        {clinic.showFooter !== false && (() => {
+          const isAcademic = templateId === "academic_crest";
+          const isSoftCurves = templateId === "soft_curves";
+          const isNordic = templateId === "nordic_pastel";
+          const isGeometric = templateId === "geometric_frame";
 
-            {/* Branches & Clinic Phone Numbers & Working Hours (No Doctor Signature, No 'الفرع الرئيسي') */}
-            <div className="border-t border-slate-200/90 pt-2 flex flex-wrap items-center justify-center gap-x-6 gap-y-1.5 text-[9.5px] sm:text-[10px] text-slate-600 font-semibold w-full">
-              {branches && branches.length > 0 ? (
-                branches.map((b, idx) => (
-                  <div key={b.id || idx} className="flex items-center gap-2 flex-wrap justify-center">
-                    {(b.address || clinic.address) && (
-                      <span>📍 {b.address || clinic.address}</span>
+          return (
+            <div
+              className={`mt-auto relative z-10 transition-all ${
+                isAcademic
+                  ? "-mx-5 sm:-mx-8 -mb-5 sm:-mb-8 p-3 sm:p-4 text-white"
+                  : isSoftCurves
+                  ? "-mx-5 sm:-mx-8 -mb-5 sm:-mb-8 p-3 sm:p-4 text-slate-800"
+                  : isNordic
+                  ? "-mx-5 sm:-mx-8 -mb-5 sm:-mb-8 p-3 sm:p-4 text-emerald-950"
+                  : isGeometric
+                  ? "border-t-2 border-emerald-600 pt-2 space-y-1.5"
+                  : "pt-2 space-y-1.5"
+              }`}
+            >
+              {/* Notes if any */}
+              {notes && (
+                <p
+                  className={`text-[10px] font-medium leading-relaxed p-1.5 rounded-lg border mb-1 ${
+                    isAcademic
+                      ? "bg-slate-800/90 border-slate-700 text-slate-200"
+                      : "bg-slate-50 border-slate-200/70 text-slate-700"
+                  }`}
+                >
+                  <strong className={isAcademic ? "text-white" : "text-slate-900"}>ملاحظات وتعليمات:</strong> {notes}
+                </p>
+              )}
+
+              {/* Branches & Clinic Phone Numbers & Working Hours (No Doctor Signature, No 'الفرع الرئيسي') */}
+              <div
+                className={`pt-1.5 flex flex-wrap items-center justify-center gap-x-6 gap-y-1.5 text-[9.5px] sm:text-[10px] font-semibold w-full ${
+                  !isGeometric && !isAcademic && !isSoftCurves && !isNordic ? "border-t border-slate-200/90" : ""
+                } ${
+                  isAcademic
+                    ? "text-slate-200"
+                    : isNordic
+                    ? "text-emerald-950"
+                    : "text-slate-600"
+                }`}
+              >
+                {branches && branches.length > 0 ? (
+                  branches.map((b, idx) => (
+                    <div key={b.id || idx} className="flex items-center gap-2 flex-wrap justify-center">
+                      {(b.address || clinic.address) && (
+                        <span>📍 {b.address || clinic.address}</span>
+                      )}
+                      {(b.phone || clinic.phone) && (
+                        <span
+                          className={`font-mono font-bold ${
+                            isAcademic
+                              ? "text-emerald-300"
+                              : isNordic
+                              ? "text-emerald-950 font-black"
+                              : "text-slate-800"
+                          }`}
+                          dir="ltr"
+                        >
+                          📞 {b.phone || clinic.phone}
+                        </span>
+                      )}
+                      {(b.workingHours || clinic.workingHours) && (
+                        <span>🕒 {b.workingHours || clinic.workingHours}</span>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex items-center gap-3 flex-wrap justify-center">
+                    {(clinic.address || activeBranch?.address) && (
+                      <span>📍 {clinic.address || activeBranch?.address}</span>
                     )}
-                    {(b.phone || clinic.phone) && (
-                      <span className="font-mono font-bold text-slate-800" dir="ltr">📞 {b.phone || clinic.phone}</span>
+                    {(clinic.phone || activeBranch?.phone) && (
+                      <span
+                        className={`font-mono font-bold ${
+                          isAcademic
+                            ? "text-emerald-300"
+                            : isNordic
+                            ? "text-emerald-950 font-black"
+                            : "text-slate-800"
+                        }`}
+                        dir="ltr"
+                      >
+                        📞 {clinic.phone || activeBranch?.phone}
+                      </span>
                     )}
-                    {(b.workingHours || clinic.workingHours) && (
-                      <span>🕒 {b.workingHours || clinic.workingHours}</span>
+                    {(clinic.workingHours || activeBranch?.workingHours) && (
+                      <span>🕒 {clinic.workingHours || activeBranch?.workingHours}</span>
                     )}
                   </div>
-                ))
-              ) : (
-                <div className="flex items-center gap-3 flex-wrap justify-center">
-                  {(clinic.address || activeBranch?.address) && (
-                    <span>📍 {clinic.address || activeBranch?.address}</span>
-                  )}
-                  {(clinic.phone || activeBranch?.phone) && (
-                    <span className="font-mono font-bold text-slate-800" dir="ltr">
-                      📞 {clinic.phone || activeBranch?.phone}
-                    </span>
-                  )}
-                  {(clinic.workingHours || activeBranch?.workingHours) && (
-                    <span>🕒 {clinic.workingHours || activeBranch?.workingHours}</span>
-                  )}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            {/* Sentence: نتمنى لكم الشفاء العاجل (directly above the bottom border line) */}
-            <div className="text-center w-full pt-0.5 pb-0.5">
-              <p className="text-[10px] sm:text-[11px] font-bold text-slate-500">
-                {clinic.footerText || "نتمنى لكم الشفاء العاجل ودوام الصحة والعافية"}
-              </p>
+              {/* Sentence: نتمنى لكم الشفاء العاجل (directly above the bottom border line) */}
+              <div className="text-center w-full pt-0.5 pb-0.5">
+                <p
+                  className={`text-[10px] sm:text-[11px] font-bold ${
+                    isAcademic
+                      ? "text-emerald-300"
+                      : isSoftCurves
+                      ? "text-rose-900"
+                      : isNordic
+                      ? "text-emerald-900 font-black"
+                      : "text-slate-500"
+                  }`}
+                >
+                  {clinic.footerText || "نتمنى لكم الشفاء العاجل ودوام الصحة والعافية"}
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
