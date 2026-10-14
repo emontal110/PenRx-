@@ -579,33 +579,42 @@ export default function DashboardPage() {
         </div>
 
         {displayPrescriptions.length === 0 ? (
-          <div className="p-12 text-center bg-slate-900/60 border border-slate-800 rounded-3xl space-y-3">
-            <HeartPulse className="w-10 h-10 text-slate-600 mx-auto" />
-            <p className="text-xs font-bold text-slate-400">
-              {startDate || endDate
-                ? "لا توجد روشتات مسجلة مطابقة للفترة المحددة."
-                : "لا توجد روشتات مسجلة بعد. ابدأ بكتابة أول روشتة الآن بضغطة زر."}
-            </p>
-            {!(startDate || endDate) ? (
-              <NewRxGuard>
-                <Link
-                  href="/prescriptions/new"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-lg transition-all"
+          <div className="py-12 px-6 text-center bg-slate-900/60 border border-slate-800 rounded-3xl flex flex-col items-center justify-center gap-4 shadow-inner">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-sm">
+              <HeartPulse className="w-6 h-6" />
+            </div>
+            <div className="max-w-md space-y-1.5">
+              <p className="text-sm font-black text-slate-100">
+                {startDate || endDate ? "لا توجد روشتات في هذه الفترة" : "لا توجد روشتات مسجلة بعد"}
+              </p>
+              <p className="text-xs font-medium text-slate-400 leading-relaxed">
+                {startDate || endDate
+                  ? "لا توجد روشتات مسجلة مطابقة للفترة المحددة. جرب توسيع نطاق البحث أو تصفية الكل."
+                  : "ابدأ بكتابة أول روشتة الآن بضغطة زر مع الحفظ التلقائي والطباعة الفورية."}
+              </p>
+            </div>
+            <div className="pt-2">
+              {!(startDate || endDate) ? (
+                <NewRxGuard>
+                  <Link
+                    href="/prescriptions/new"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>كتابة أول روشتة ✍️</span>
+                  </Link>
+                </NewRxGuard>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handlePresetSelect("all")}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer border border-slate-700/60"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>كتابة أول روشتة ✍️</span>
-                </Link>
-              </NewRxGuard>
-            ) : (
-              <button
-                type="button"
-                onClick={() => handlePresetSelect("all")}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>عرض جميع الروشتات</span>
-              </button>
-            )}
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>عرض جميع الروشتات</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">

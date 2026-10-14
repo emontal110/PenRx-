@@ -204,6 +204,7 @@ async function hydrateCache(force = false): Promise<void> {
     const res = await fetchSupabaseRest("?select=*&order=createdAt.desc");
     if (res.ok) {
       const records = await res.json();
+      globalSubscriptionsCache.clear();
       for (const r of records) {
         if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
           r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
@@ -224,6 +225,7 @@ async function hydrateCache(force = false): Promise<void> {
       orderBy: { createdAt: "desc" },
     });
 
+    globalSubscriptionsCache.clear();
     for (const r of records) {
       const subId = (r as any).subscriberId || generateSubscriberId();
       const expiresAtIso = r.expiresAt ? r.expiresAt.toISOString() : undefined;
