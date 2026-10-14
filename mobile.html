@@ -1498,6 +1498,10 @@
       const activeMid = machineId || getOrCreateMachineId();
       let matchedSub = null;
 
+      let confirmedSub = null;
+      let serverResponded = false;
+      let serverReportedNoSub = false;
+
       // 1. Check via Cloud API
       try {
         const encodedId = encodeURIComponent(activeMid);
@@ -1515,44 +1519,60 @@
         });
 
         if (res.ok) {
+          serverResponded = true;
           const data = await res.json();
           if (data && data.subscription) {
-            matchedSub = data.subscription;
+            confirmedSub = data.subscription;
+          } else if (data && data.subscription === null) {
+            serverReportedNoSub = true;
           }
         }
       } catch (err) {
         console.warn("Cloud API status fetch deferred:", err);
       }
 
-      // 2. Fallback: Direct Supabase Cloud REST verification (ensures instant unlock even if serverless is cold/sleeping)
-      if (!matchedSub || matchedSub.status !== "ACTIVE") {
-        try {
-          const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
-          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(machineId.eq.${encodeURIComponent(activeMid)},allowedMachineIds.cs.{${encodeURIComponent(activeMid)}})&order=updatedAt.desc&limit=1`;
-          const supaRes = await fetch(supaUrl, {
-            headers: {
-              apikey: supaKey,
-              Authorization: "Bearer " + supaKey,
-            },
-            signal: AbortSignal.timeout(5000),
-          });
-          if (supaRes.ok) {
-            const list = await supaRes.json();
-            if (Array.isArray(list) && list.length > 0 && list[0].status === "ACTIVE") {
-              matchedSub = list[0];
+      // 2. Direct Supabase Cloud REST verification (ensures instant sync even if serverless is cold/sleeping)
+      let supaResponded = false;
+      let supaReportedNoSub = false;
+      try {
+        const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+        const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(machineId.eq.${encodeURIComponent(activeMid)},allowedMachineIds.cs.{${encodeURIComponent(activeMid)}})&order=updatedAt.desc&limit=1`;
+        const supaRes = await fetch(supaUrl, {
+          headers: {
+            apikey: supaKey,
+            Authorization: "Bearer " + supaKey,
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (supaRes.ok) {
+          supaResponded = true;
+          const list = await supaRes.json();
+          if (Array.isArray(list)) {
+            if (list.length > 0) {
+              confirmedSub = list[0];
+            } else {
+              supaReportedNoSub = true;
             }
           }
-        } catch {}
-      }
+        }
+      } catch {}
 
-      if (matchedSub) {
-        currentSubscription = matchedSub;
+      if (confirmedSub) {
+        currentSubscription = confirmedSub;
         localStorage.setItem("penrx_last_sub", JSON.stringify(currentSubscription));
         updateUiForSubscription(currentSubscription);
         return;
       }
 
-      // Fallback to local stored record
+      // If cloud database explicitly confirmed that no subscription exists (deleted or revoked)
+      if ((supaResponded && supaReportedNoSub) || (serverResponded && serverReportedNoSub)) {
+        localStorage.removeItem("penrx_last_sub");
+        currentSubscription = null;
+        updateUiForSubscription(null);
+        return;
+      }
+
+      // Fallback to local stored record ONLY if server/cloud was completely unreachable (offline)
       const local = localStorage.getItem("penrx_last_sub");
       if (local) {
         try {

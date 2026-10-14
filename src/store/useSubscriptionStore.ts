@@ -445,9 +445,9 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         const subId = get().subscriberId;
         const offlineToken = get().signatureToken;
 
-        // Relative /api paths work on every platform: web + Capacitor (served from
-        // the cloud app) and desktop (served by the local Next.js server, which
-        // transparently proxies privileged routes when it holds no credentials).
+        let confirmedSub: SubscriptionRecord | null = null;
+        let serverResponded = false;
+        let serverReportedNoSub = false;
 
         // 1. Fetch this machine's subscription from the app API
         try {
@@ -460,19 +460,12 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             signal: AbortSignal.timeout(8000),
           });
           if (res.ok) {
+            serverResponded = true;
             const data = await res.json();
-            if (data.subscription) {
-              const fresh = data.subscription;
-              set((state) => ({
-                subscriptions: [
-                  fresh,
-                  ...state.subscriptions.filter((s) => s.id !== fresh.id),
-                ],
-                currentSubscription: fresh,
-                subscriberId: fresh.subscriberId || state.subscriberId,
-                signatureToken: fresh.signatureToken || state.signatureToken,
-                lastSyncedAt: Date.now(),
-              }));
+            if (data && data.subscription) {
+              confirmedSub = data.subscription;
+            } else if (data && data.subscription === null) {
+              serverReportedNoSub = true;
             }
           }
         } catch {
@@ -494,52 +487,83 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             signal: AbortSignal.timeout(8000),
           });
           if (res.ok) {
+            serverResponded = true;
             const data = await res.json();
             if (data.success && data.status === "active") {
-              const updates: any = { signatureToken: data.token || null, lastOnlineCheck: Date.now() };
               if (data.subscription) {
-                const fresh = data.subscription;
-                updates.currentSubscription = fresh;
-                updates.subscriberId = fresh.subscriberId || get().subscriberId;
-                updates.subscriptions = [
-                  fresh,
-                  ...get().subscriptions.filter((s) => s.id !== fresh.id),
-                ];
+                confirmedSub = data.subscription;
               }
-              set(updates);
+              set({
+                signatureToken: data.token || null,
+                lastOnlineCheck: Date.now(),
+              });
+            } else if (data.status === "none") {
+              serverReportedNoSub = true;
+              set({ signatureToken: null, lastOnlineCheck: Date.now() });
             } else if (data.status && data.status !== "active") {
-              set({ signatureToken: null });
+              set({ signatureToken: null, lastOnlineCheck: Date.now() });
+              if (data.subscription) {
+                confirmedSub = data.subscription;
+              }
             }
           }
         } catch {}
 
-        // 3. Fallback: Direct Supabase Cloud REST verification (ensures instant unlock even if serverless is cold/sleeping)
-        if (!get().currentSubscription || get().currentSubscription?.status !== "ACTIVE") {
-          try {
-            const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
-            const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(machineId.eq.${encodeURIComponent(machineId)},allowedMachineIds.cs.{${encodeURIComponent(machineId)}})&order=updatedAt.desc&limit=1`;
-            const supaRes = await fetch(supaUrl, {
-              headers: {
-                apikey: supaKey,
-                Authorization: "Bearer " + supaKey,
-              },
-              signal: AbortSignal.timeout(5000),
-            });
-            if (supaRes.ok) {
-              const supaData = await supaRes.json();
-              if (Array.isArray(supaData) && supaData.length > 0) {
-                const s = supaData[0];
-                if (s.status === "ACTIVE") {
-                  set((state) => ({
-                    subscriptions: [s, ...state.subscriptions.filter((x) => x.id !== s.id)],
-                    currentSubscription: s,
-                    subscriberId: s.subscriberId || state.subscriberId,
-                    lastSyncedAt: Date.now(),
-                  }));
-                }
+        // 3. Direct Supabase Cloud REST verification (ensures instant sync even if serverless is cold/sleeping)
+        let supaResponded = false;
+        let supaReportedNoSub = false;
+        try {
+          const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(machineId.eq.${encodeURIComponent(machineId)},allowedMachineIds.cs.{${encodeURIComponent(machineId)}})&order=updatedAt.desc&limit=1`;
+          const supaRes = await fetch(supaUrl, {
+            headers: {
+              apikey: supaKey,
+              Authorization: "Bearer " + supaKey,
+            },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (supaRes.ok) {
+            supaResponded = true;
+            const supaData = await supaRes.json();
+            if (Array.isArray(supaData)) {
+              if (supaData.length > 0) {
+                confirmedSub = supaData[0];
+              } else {
+                supaReportedNoSub = true;
               }
             }
-          } catch {}
+          }
+        } catch {}
+
+        // If an active/valid subscription was found, update state
+        if (confirmedSub) {
+          const fresh = confirmedSub;
+          set((state) => ({
+            subscriptions: [
+              fresh,
+              ...state.subscriptions.filter((s) => s.id !== fresh.id),
+            ],
+            currentSubscription: fresh,
+            subscriberId: fresh.subscriberId || state.subscriberId,
+            signatureToken: fresh.signatureToken || state.signatureToken,
+            lastSyncedAt: Date.now(),
+          }));
+          return;
+        }
+
+        // If cloud database explicitly confirmed that no subscription exists (deleted or revoked)
+        if ((supaResponded && supaReportedNoSub) || (serverResponded && serverReportedNoSub)) {
+          set({
+            subscriptions: [],
+            currentSubscription: null,
+            signatureToken: null,
+            lastSyncedAt: Date.now(),
+          });
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.removeItem("penrx_last_sub");
+            } catch {}
+          }
         }
       },
     }),
