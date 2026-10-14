@@ -989,7 +989,8 @@ export default function SettingsPage() {
       updateClinic(updates);
     }
 
-    // Mandatory Portal Sync: Always propagate updated doctorName, clinicName, and clinicPhone to Subscription in Supabase & Portal
+    // Mandatory Portal Sync: propagate updated doctorName, clinicName, and clinicPhone
+    // to the Subscription record via the app API (server holds cloud credentials)
     const baseClinicName = (nameAr || name || ("عيادة د. " + doctorName)).trim();
     const syncedClinicName = clinicPhone.trim()
       ? `${baseClinicName} • 📞 ${clinicPhone.trim()}`
@@ -997,15 +998,15 @@ export default function SettingsPage() {
 
     try {
       const subState = useSubscriptionStore.getState();
-      const targetSubId = subState.subscriberId || subState.machineId || machineId;
-      if (targetSubId) {
+      const targetMachineId = subState.machineId || machineId;
+      if (subState.subscriberId || targetMachineId) {
         fetch("/api/subscriptions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "update_profile",
             subscriberId: subState.subscriberId,
-            machineId: subState.machineId || machineId,
+            machineId: targetMachineId,
             doctorName: doctorName.trim(),
             clinicName: syncedClinicName,
             phone: clinicPhone.trim(),
@@ -1013,50 +1014,6 @@ export default function SettingsPage() {
         }).catch((err) => console.warn("Portal sync notice:", err));
       }
     } catch {}
-
-    // Direct Supabase REST PATCH with Master Service privileges for instant Portal synchronization
-    const effectiveMachineId = machineId || useSubscriptionStore.getState().machineId;
-    const currentSub = useSubscriptionStore.getState().currentSubscription;
-    const subId = currentSub?.id;
-    const subscriberIdVal = useSubscriptionStore.getState().subscriberId;
-
-    const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-    const SUPABASE_SERVICE_KEY =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
-
-    const patchBody = JSON.stringify({
-      doctorName: doctorName.trim(),
-      clinicName: syncedClinicName,
-      updatedAt: new Date().toISOString(),
-    });
-
-    const patchHeaders = {
-      apikey: SUPABASE_SERVICE_KEY,
-      Authorization: "Bearer " + SUPABASE_SERVICE_KEY,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    };
-
-    if (subId) {
-      fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(subId)}`, {
-        method: "PATCH",
-        headers: patchHeaders,
-        body: patchBody,
-      }).catch((err) => console.warn("Supabase ID sync notice:", err));
-    }
-
-    if (effectiveMachineId) {
-      let queryFilter = `machineId=eq.${encodeURIComponent(effectiveMachineId)}`;
-      if (subscriberIdVal && subscriberIdVal !== "SUB-0000") {
-        queryFilter = `or=(machineId.eq.${encodeURIComponent(effectiveMachineId)},subscriberId.eq.${encodeURIComponent(subscriberIdVal)})`;
-      }
-      fetch(`${SUPABASE_REST_URL}?${queryFilter}`, {
-        method: "PATCH",
-        headers: patchHeaders,
-        body: patchBody,
-      }).catch((err) => console.warn("Supabase sub sync notice:", err));
-    }
 
     // Re-lock the form into dimmed read-only mode
     setIsEditing(false);

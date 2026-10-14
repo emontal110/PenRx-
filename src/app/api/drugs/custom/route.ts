@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { registerCustomDrug } from "@/lib/drugSearchEngine";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionBySubscriberId, getSubscriptionByMachine } from "@/lib/subscriptionManager";
+import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,12 @@ function sanitizeString(str: string, maxLength: number): string {
 
 export async function POST(request: Request) {
   try {
+    // Packaged desktop runtime holds no cloud credentials — contribution requires
+    // subscription verification + community persistence on the cloud API
+    if (!hasCloudCredentials()) {
+      return proxyToCloud(request, "/api/drugs/custom");
+    }
+
     const clientIp = request.headers.get("x-forwarded-for") || "local-client";
 
     // 1. Rate Limiting Check

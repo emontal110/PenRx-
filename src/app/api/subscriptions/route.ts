@@ -6,9 +6,12 @@ import {
   submitSubscription,
   linkDeviceToSubscriber,
   updateSubscriptionDoctorProfile,
+  deleteSubscription,
   validateAdminAuthorization,
+  machineOwnsSubscription,
 } from "@/lib/subscriptionManager";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
+import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +36,11 @@ function jsonResponse(data: any, init?: { status?: number }) {
 }
 
 export async function GET(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/subscriptions");
+  }
+
   // Rate Limit: 30 requests per minute per IP (prevent subscription enumeration)
   if (!checkRateLimit(request, { maxRequests: 30, windowMs: 60_000, prefix: "sub-get" })) {
     return rateLimitExceededResponse(60);
@@ -43,6 +51,10 @@ export async function GET(request: Request) {
     const machineId = searchParams.get("machineId");
     const subscriberId = searchParams.get("subscriberId");
 
+    // Redact payment metadata unless the caller's machine actually owns the record
+    const redactPaymentFields = (sub: any) =>
+      sub ? { ...sub, senderPhone: undefined, transactionRef: undefined } : sub;
+
     // Machine-specific or Subscriber-specific lookup
     if (machineId) {
       const cleanMachineId = machineId.trim();
@@ -51,6 +63,9 @@ export async function GET(request: Request) {
       // If not matched directly by machine, check subscriberId
       if (!match && subscriberId) {
         match = await getSubscriptionBySubscriberId(subscriberId.trim());
+        if (match && !machineOwnsSubscription(match, cleanMachineId)) {
+          match = redactPaymentFields(match);
+        }
       }
 
       // [SECURITY FIX CRIT-02]: Auto-linking unknown devices has been REMOVED.
@@ -61,7 +76,7 @@ export async function GET(request: Request) {
 
     if (subscriberId) {
       const match = await getSubscriptionBySubscriberId(subscriberId.trim());
-      return jsonResponse({ subscription: match });
+      return jsonResponse({ subscription: redactPaymentFields(match) });
     }
 
     // CRITICAL SECURITY CHECK: Viewing all subscriptions requires Master Administrative Secret
@@ -80,6 +95,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/subscriptions");
+  }
+
   // Rate Limit: 5 subscription submissions per 10 minutes per IP
   if (!checkRateLimit(request, { maxRequests: 5, windowMs: 10 * 60_000, prefix: "sub-post" })) {
     return rateLimitExceededResponse(600);
@@ -98,6 +118,12 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+      if (!verificationPhone || !String(verificationPhone).trim()) {
+        return jsonResponse(
+          { error: "رقم هاتف التحقق مطلوب لإتمام ربط الجهاز الجديد (يجب أن يطابق الرقم المسجل)" },
+          { status: 400 }
+        );
+      }
 
       const result = await linkDeviceToSubscriber(subscriberId, machineId, verificationPhone);
       if (!result.success) {
@@ -111,16 +137,70 @@ export async function POST(request: Request) {
       });
     }
 
+    // Doctor cancelling their own PENDING request before admin review
+    if (action === "cancel_request") {
+      const { id, subscriberId, machineId } = body;
+      if (!id || !machineId) {
+        return jsonResponse(
+          { error: "معرّف الطلب وكود الجهاز مطلوبان لإلغاء الطلب" },
+          { status: 400 }
+        );
+      }
+
+      const sub = subscriberId
+        ? await getSubscriptionBySubscriberId(String(subscriberId).trim())
+        : await getSubscriptionByMachine(String(machineId).trim());
+      if (!sub || sub.id !== id) {
+        return jsonResponse({ error: "لم يتم العثور على الطلب المطلوب إلغاؤه" }, { status: 404 });
+      }
+      if (sub.status !== "PENDING") {
+        return jsonResponse(
+          { error: "لا يمكن إلغاء طلب تمت مراجعته أو تفعيله مسبقاً" },
+          { status: 400 }
+        );
+      }
+      if (!machineOwnsSubscription(sub, String(machineId).trim())) {
+        return jsonResponse(
+          { error: "هذا الجهاز غير مصرح له بإلغاء هذا الطلب" },
+          { status: 403 }
+        );
+      }
+
+      await deleteSubscription(sub.id);
+      return jsonResponse({
+        success: true,
+        message: "تم إلغاء طلب الاشتراك وحذفه من البورتال بنجاح",
+      });
+    }
+
     // Update mandatory doctor/clinic profile on subscription for Admin Portal sync
     if (action === "update_profile") {
       const { subscriberId, machineId, doctorName, clinicName, phone } = body;
-      const targetId = subscriberId || machineId;
-      if (!targetId) {
-        return jsonResponse({ error: "subscriberId or machineId is required" }, { status: 400 });
+      if (!machineId) {
+        return jsonResponse(
+          { error: "كود الجهاز (machineId) مطلوب لتحديث بيانات الاشتراك" },
+          { status: 400 }
+        );
+      }
+
+      const existing = subscriberId
+        ? await getSubscriptionBySubscriberId(String(subscriberId).trim())
+        : await getSubscriptionByMachine(String(machineId).trim());
+      if (!existing) {
+        return jsonResponse(
+          { error: "لم يتم العثور على اشتراك مطابق لتحديث بيانات الطبيب" },
+          { status: 404 }
+        );
+      }
+      if (!machineOwnsSubscription(existing, String(machineId).trim())) {
+        return jsonResponse(
+          { error: "هذا الجهاز غير مصرح له بتحديث بيانات هذا الاشتراك" },
+          { status: 403 }
+        );
       }
 
       const updated = await updateSubscriptionDoctorProfile(
-        targetId,
+        existing.subscriberId || String(machineId).trim(),
         doctorName || "",
         clinicName || "",
         phone || ""

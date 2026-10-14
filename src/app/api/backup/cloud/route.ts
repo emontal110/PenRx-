@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
-import { getSubscriptionBySubscriberId } from "@/lib/subscriptionManager";
+import {
+  getSubscriptionByMachine,
+  getSubscriptionBySubscriberId,
+  machineOwnsSubscription,
+} from "@/lib/subscriptionManager";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
+import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
-// [SECURITY FIX]: No hardcoded Supabase key fallbacks — requires environment variable.
+// RLS on CloudBackup only admits service_role — anon key writes are silently rejected
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 export interface CloudBackupRecord {
   id: string;
@@ -24,18 +30,25 @@ export interface CloudBackupRecord {
 const serverCloudBackupCache = new Map<string, CloudBackupRecord[]>();
 
 /**
- * Validates that the request's subscriberId exists and is an active subscription.
- * Returns the subscription record, or null if unauthorized.
+ * Resolves an ACTIVE (or trial) subscription for the caller and confirms
+ * that the requesting machine actually owns it. Fails closed on DB errors.
  */
-async function validateSubscriberAccess(subscriberId: string): Promise<boolean> {
-  if (!subscriberId) return false;
+async function resolveAuthorizedSubscription(
+  subscriberId?: string,
+  machineId?: string
+): Promise<boolean> {
+  if (!subscriberId && !machineId) return false;
   try {
-    const sub = await getSubscriptionBySubscriberId(subscriberId);
-    return !!(sub && (sub.status === "ACTIVE" || sub.isTrial));
+    const sub = subscriberId
+      ? await getSubscriptionBySubscriberId(subscriberId)
+      : await getSubscriptionByMachine(machineId!);
+    if (!sub) return false;
+    if (!(sub.status === "ACTIVE" || sub.isTrial)) return false;
+    if (machineId && !machineOwnsSubscription(sub, machineId.trim())) return false;
+    return true;
   } catch {
-    // If DB is unreachable, be permissive for active subscribers (they may be offline)
-    // but we still need at least a valid-format subscriberId
-    return subscriberId.startsWith("SUB-") && subscriberId.length >= 6;
+    // Fail closed: DB unreachable means we cannot confirm identity
+    return false;
   }
 }
 
@@ -45,6 +58,11 @@ async function validateSubscriberAccess(subscriberId: string): Promise<boolean> 
  * [SECURITY FIX HIGH-04]: Now validates subscriber identity before serving data.
  */
 export async function GET(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/backup/cloud");
+  }
+
   // Rate Limit: 15 requests per minute per IP
   if (!checkRateLimit(request, { maxRequests: 15, windowMs: 60_000, prefix: "cloud-backup-get" })) {
     return rateLimitExceededResponse(60);
@@ -63,15 +81,13 @@ export async function GET(request: Request) {
       );
     }
 
-    // [SECURITY FIX HIGH-04]: Validate subscriber identity before serving backup data
-    if (subscriberId) {
-      const isAuthorized = await validateSubscriberAccess(subscriberId);
-      if (!isAuthorized) {
-        return NextResponse.json(
-          { error: "غير مصرح: لا يوجد اشتراك نشط بهذا المعرف" },
-          { status: 403 }
-        );
-      }
+    // [SECURITY FIX HIGH-04]: Validate subscriber identity + device ownership before serving data
+    const isAuthorized = await resolveAuthorizedSubscription(subscriberId, machineId);
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { error: "غير مصرح: لا يوجد اشتراك نشط مرتبط بهذا الجهاز" },
+        { status: 403 }
+      );
     }
 
     // 1. Check in-memory partitioned cache first
@@ -141,6 +157,11 @@ export async function GET(request: Request) {
  * [SECURITY FIX HIGH-04]: Now validates subscriber identity before accepting backup.
  */
 export async function POST(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/backup/cloud");
+  }
+
   // Rate Limit: 5 uploads per hour per IP (backups are daily, so this is very generous)
   if (!checkRateLimit(request, { maxRequests: 5, windowMs: 60 * 60_000, prefix: "cloud-backup-post" })) {
     return rateLimitExceededResponse(3600);
@@ -172,15 +193,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // [SECURITY FIX HIGH-04]: Validate subscriber before accepting their backup upload
-    if (subscriberId) {
-      const isAuthorized = await validateSubscriberAccess(subscriberId);
-      if (!isAuthorized) {
-        return NextResponse.json(
-          { error: "غير مصرح: لا يوجد اشتراك نشط بهذا المعرف" },
-          { status: 403 }
-        );
-      }
+    // [SECURITY FIX HIGH-04]: Validate subscriber identity + device ownership before accepting upload
+    const isAuthorized = await resolveAuthorizedSubscription(
+      subscriberId?.trim(),
+      machineId?.trim()
+    );
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { error: "غير مصرح: لا يوجد اشتراك نشط مرتبط بهذا الجهاز" },
+        { status: 403 }
+      );
     }
 
     // Validate payload size (max 50MB Base64 encoded)

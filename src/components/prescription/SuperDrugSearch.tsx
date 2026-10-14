@@ -28,7 +28,8 @@ import {
   ShieldCheck,
   AlertTriangle,
 } from "lucide-react";
-import { DrugRecord, recordDrugPrescribed } from "@/lib/drugSearchEngine";
+import { DrugRecord } from "@/types/drug";
+import { recordDrugPrescribed } from "@/lib/drugTracker";
 import { PrescriptionItem, usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { showGlobalToast } from "@/components/common/GlobalToast";
 

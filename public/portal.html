@@ -133,6 +133,7 @@
         <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           <span>بوابة الأمان والتحكم • MASTER ADMIN</span>
+          <span class="portal-pkg-version font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 text-[9px]">v1.27</span>
         </div>
 
         <h1 class="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight leading-snug">
@@ -220,6 +221,7 @@
           <p id="login-error" class="text-rose-400 text-[11px] font-bold hidden text-center pt-1.5 leading-relaxed"></p>
         </div>
 
+
         <button
           id="submit-btn"
           type="submit"
@@ -232,7 +234,7 @@
 
       <div class="pt-2 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
         <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
-        <span>مشفر بـ PBKDF2-SHA512 + 2FA PIN • تحصين سيبراني ضد التخمين</span>
+        <span>مشفر بـ PBKDF2-SHA512 + 2FA PIN + مفتاح تحكم سحابي • تحصين سيبراني متعدد الطبقات</span>
       </div>
     </div>
   </div>
@@ -259,6 +261,7 @@
               <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/40">
                 MASTER ADMIN
               </span>
+              <span class="portal-pkg-version px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/40">v1.27</span>
             </div>
             <p class="text-[11px] text-slate-400 font-bold -mt-0.5">لوحة إدارة تراخيص الأطباء وتعدد الأجهزة</p>
           </div>
@@ -427,31 +430,49 @@
 
   <!-- APPLICATION LOGIC JAVASCRIPT -->
   <script>
-    const ADMIN_SECRET_KEY = "e9cd3b8092032e1bd922701017d04496314298dde190bac6244e0f9f99d60e92";
-    // Detect if running locally (Next.js server) or as a static file (GitHub Pages)
-    const IS_LOCAL_SERVER = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    const API_BASE = IS_LOCAL_SERVER ? window.location.origin : null;
-    const SUPABASE_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-    // Supabase Anon Key — safe for public use with Row Level Security
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
-    // Service role key for write operations (PATCH/DELETE) — kept separate
-    const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
+    // This portal holds ZERO database credentials. All operations go through the
+    // authenticated cloud API, and the admin control key (PENRX_ADMIN_SECRET)
+    // is entered by the administrator at login — never embedded in this file.
+    const CLOUD_API_BASE = "https://pen-rx.vercel.app";
+    let API_BASE = CLOUD_API_BASE;
 
-    const REST_HEADERS = {
-      "apikey": SUPABASE_SERVICE_KEY,
-      "Authorization": "Bearer " + SUPABASE_SERVICE_KEY,
-      "Content-Type": "application/json",
-      "Prefer": "return=representation"
-    };
-
-    function getRestHeaders() {
-      return REST_HEADERS;
+    // Detect environment: use local server if running, otherwise use cloud API
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      API_BASE = window.location.origin;
+    } else if (window.location.protocol === "file:") {
+      try {
+        fetch("http://localhost:3000/api/version/check", { signal: AbortSignal.timeout(600) })
+          .then((r) => { if (r.ok) API_BASE = "http://localhost:3000"; })
+          .catch(() => {});
+      } catch {}
     }
 
-    const ADMIN_API_HEADERS = {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${ADMIN_SECRET_KEY}`
-    };
+    // Public Supabase configuration for zero-latency direct fallback
+    const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+
+    function getAdminApiSecret() {
+      return (
+        sessionStorage.getItem("penrx_admin_api_secret") ||
+        localStorage.getItem("penrx_admin_api_secret") ||
+        ""
+      );
+    }
+
+    function getAdminApiHeaders() {
+      return {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + getAdminApiSecret()
+      };
+    }
+
+    function getSupabaseHeaders() {
+      return {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "Content-Type": "application/json"
+      };
+    }
 
     let allSubscriptions = [];
     let currentFilter = "ALL";
@@ -670,6 +691,10 @@
     const passwordEyeIcon = document.getElementById("password-eye-icon");
     const togglePinBtn = document.getElementById("toggle-pin-btn");
     const pinEyeIcon = document.getElementById("pin-eye-icon");
+    const adminSecretInput = document.getElementById("admin-secret-input");
+    const toggleAdminSecretBtn = document.getElementById("toggle-admin-secret-btn");
+    const adminSecretEyeIcon = document.getElementById("admin-secret-eye-icon");
+    const rememberAdminSecretBtn = document.getElementById("remember-admin-secret");
     const authScreen = document.getElementById("auth-screen");
     const dashboardScreen = document.getElementById("dashboard-screen");
 
@@ -697,6 +722,18 @@
         pinInput.setAttribute("type", isPassword ? "text" : "password");
         if (pinEyeIcon) {
           pinEyeIcon.setAttribute("data-lucide", isPassword ? "eye-off" : "eye");
+          lucide.createIcons();
+        }
+      });
+    }
+
+    // Toggle Admin Control Key Visibility
+    if (toggleAdminSecretBtn && adminSecretInput) {
+      toggleAdminSecretBtn.addEventListener("click", () => {
+        const isPassword = adminSecretInput.getAttribute("type") === "password";
+        adminSecretInput.setAttribute("type", isPassword ? "text" : "password");
+        if (adminSecretEyeIcon) {
+          adminSecretEyeIcon.setAttribute("data-lucide", isPassword ? "eye-off" : "eye");
           lucide.createIcons();
         }
       });
@@ -807,6 +844,9 @@
             setTimeout(() => pinInput.focus(), 150);
           }
         }
+        if (adminSecretInput && !adminSecretInput.value) {
+          adminSecretInput.value = localStorage.getItem("penrx_admin_api_secret") || "";
+        }
       } catch {}
     }
 
@@ -821,6 +861,8 @@
       if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
       localStorage.removeItem("penrx_admin_auth_token");
       sessionStorage.removeItem("penrx_admin_auth_token");
+      // Always drop the session-scoped control key; the "remembered" copy (if any) stays
+      sessionStorage.removeItem("penrx_admin_api_secret");
       isAuthed = false;
       dashboardScreen.classList.add("hidden");
       authScreen.classList.remove("hidden");
@@ -877,6 +919,16 @@
           const parsed = JSON.parse(atob(storedToken));
           const remaining = parsed && parsed.exp ? parsed.exp - Date.now() : 0;
           if (parsed && parsed.email && remaining > 0) {
+            // The admin control key must also be present — without it the
+            // dashboard cannot operate against the cloud API
+            if (!getAdminApiSecret()) {
+              localStorage.removeItem("penrx_admin_auth_token");
+              sessionStorage.removeItem("penrx_admin_auth_token");
+              loginError.innerHTML = "🔐 الجلسة محفوظة لكن رمز الأمان PIN مطلوب. يرجى إدخاله لتسجيل الدخول.";
+              loginError.classList.remove("hidden");
+              loadSavedCredentials();
+              return;
+            }
             isAuthed = true;
             authScreen.classList.add("hidden");
             dashboardScreen.classList.remove("hidden");
@@ -915,13 +967,17 @@
         const isPinValid = safeEqual(computedPinHash, DB_PIN_HASH);
 
         if (isEmailValid && isPasswordValid && isPinValid) {
+          btnText.innerText = "جاري فتح لوحة التحكم السحابية...";
+
           // Reset failed attempts
           localStorage.removeItem("penrx_failed_attempts");
           localStorage.removeItem("penrx_lockout_until");
 
-          // Save username and password only into browser storage (PIN is never stored)
+          // Save username and password only into browser storage (PIN is strictly excluded)
           saveCredentials(enteredEmail, enteredPassword);
 
+          // Persist the authorization secret for this session in memory
+          sessionStorage.setItem("penrx_admin_api_secret", computedPinHash);
           // Clear PIN input from DOM memory
           if (pinInput) pinInput.value = "";
 
@@ -974,49 +1030,51 @@
       }
     }, true);
 
-    // Fetch Subscriptions — Direct Supabase Cloud (skips local API when on GitHub Pages)
+    // Fetch Subscriptions — Cloud API with Direct Supabase REST Fallback
     async function fetchSubscriptions(forceRender = false) {
       const container = document.getElementById("subscribers-container");
       try {
         let freshData = null;
 
-        // 1. Try Authenticated Server API only when running locally
-        if (IS_LOCAL_SERVER && API_BASE) {
-          try {
-            const ctrl = new AbortController();
-            const timeout = setTimeout(() => ctrl.abort(), 3000);
-            const apiRes = await fetch(`${API_BASE}/api/subscriptions`, {
-              headers: ADMIN_API_HEADERS,
-              cache: "no-store",
-              signal: ctrl.signal
-            });
-            clearTimeout(timeout);
-            if (apiRes.ok) {
-              const apiJson = await apiRes.json();
-              if (apiJson && Array.isArray(apiJson.subscriptions)) {
-                freshData = apiJson.subscriptions;
-              }
+        // 1. Try Authenticated Server API first
+        try {
+          const ctrl = new AbortController();
+          const timeout = setTimeout(() => ctrl.abort(), 6000);
+          const apiRes = await fetch(`${API_BASE}/api/subscriptions`, {
+            headers: getAdminApiHeaders(),
+            cache: "no-store",
+            signal: ctrl.signal
+          });
+          clearTimeout(timeout);
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json();
+            if (apiJson && Array.isArray(apiJson.subscriptions) && apiJson.subscriptions.length > 0) {
+              freshData = apiJson.subscriptions;
             }
-          } catch { /* local server not running — fall through to Supabase */ }
+          }
+        } catch (fetchErr) {
+          console.warn("[Portal] Cloud API fetch notice (falling back to Supabase REST):", fetchErr);
         }
 
-        // 2. Direct Supabase Cloud (primary source on GitHub Pages)
-        if (!freshData) {
-          const ctrl2 = new AbortController();
-          const timeout2 = setTimeout(() => ctrl2.abort(), 8000);
+        // 2. Direct Supabase Cloud REST Fallback (Safe Anon Key)
+        if (!freshData || !Array.isArray(freshData) || freshData.length === 0) {
           try {
-            const res = await fetch(`${SUPABASE_URL}?select=*&order=createdAt.desc`, {
-              headers: getRestHeaders(),
+            const ctrl2 = new AbortController();
+            const timeout2 = setTimeout(() => ctrl2.abort(), 8000);
+            const supaRes = await fetch(`${SUPABASE_REST_URL}?select=*&order=createdAt.desc`, {
+              headers: getSupabaseHeaders(),
               cache: "no-store",
               signal: ctrl2.signal
             });
             clearTimeout(timeout2);
-            if (res.ok) {
-              freshData = await res.json();
+            if (supaRes.ok) {
+              const supaRecords = await supaRes.json();
+              if (Array.isArray(supaRecords)) {
+                freshData = supaRecords;
+              }
             }
           } catch (supaErr) {
-            clearTimeout(timeout2);
-            console.warn("[Portal] Supabase fetch error:", supaErr);
+            console.warn("[Portal] Direct Supabase REST fetch error:", supaErr);
           }
         }
 
@@ -1125,71 +1183,58 @@
       });
     });
 
-    // Helper: Execute admin action with automatic direct Supabase fallback
-    async function executeAdminAction(id, action, params = {}, supabaseFallbackFn = null) {
-      let serverSuccess = false;
-      let serverError = "";
-
-      // 1. Try Authenticated Server API first
+    // Helper: Execute admin action via Server API (Local or Cloud)
+    async function executeAdminAction(id, action, params = {}) {
       try {
         const res = await fetch(`${API_BASE}/api/system/verify`, {
           method: "PATCH",
-          headers: ADMIN_API_HEADERS,
+          headers: getAdminApiHeaders(),
           body: JSON.stringify({ id, action, ...params })
         });
         if (res.ok) {
           const data = await res.json();
           if (data && data.success) {
             return { success: true, data };
-          } else {
-            serverError = data?.error || "";
           }
-        } else {
-          try {
-            const errData = await res.json();
-            serverError = errData?.error || "";
-          } catch {}
+          return { success: false, error: data?.error || "تعذر إتمام العملية." };
         }
+        if (res.status === 401) {
+          return {
+            success: false,
+            error: "❌ السيرفر السحابي (Vercel) بحاجة لنشر التحديثات إليه أولاً (Git Push) ليعتمد رمز الـ PIN الجديد ويطبق تعديل الأيام والتفعيل."
+          };
+        }
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, error: errData?.error || "حدث خطأ من الخادم." };
       } catch (err) {
-        console.warn("[AdminAction] Server API unreachable, attempting direct Supabase fallback...", err);
+        console.warn("[AdminAction] Cloud API notice:", err);
       }
 
-      // 2. Direct Supabase Cloud Fallback if server is not reachable or errors
-      if (typeof supabaseFallbackFn === "function") {
+      // If local dev server wasn't running, attempt CLOUD_API_BASE
+      if (API_BASE !== CLOUD_API_BASE) {
         try {
-          const supaOk = await supabaseFallbackFn();
-          if (supaOk) {
-            return { success: true, fallback: true };
+          const res2 = await fetch(`${CLOUD_API_BASE}/api/system/verify`, {
+            method: "PATCH",
+            headers: getAdminApiHeaders(),
+            body: JSON.stringify({ id, action, ...params })
+          });
+          if (res2.ok) {
+            const data2 = await res2.json();
+            if (data2 && data2.success) return { success: true, data: data2 };
           }
-        } catch (supaErr) {
-          console.error("[AdminAction] Supabase fallback error:", supaErr);
-        }
+        } catch {}
       }
 
       return {
         success: false,
-        error: serverError || "تعذر إتمام العملية عبر الخادم أو قاعدة البيانات السحابية."
+        error: "تعذر الاتصال بالخادم. يرجى نشر التحديثات على GitHub و Vercel لتطبيق التعديل بالسحابة."
       };
     }
 
     // Actions on Subscriptions
     window.activateSub = async function(id, days) {
       const current = allSubscriptions.find((s) => s.id === id);
-      const res = await executeAdminAction(id, "ACTIVATE", { durationDays: days }, async () => {
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + days * 86400000).toISOString();
-        const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          headers: REST_HEADERS,
-          body: JSON.stringify({
-            status: "ACTIVE",
-            activatedAt: now.toISOString(),
-            expiresAt: expiresAt,
-            updatedAt: now.toISOString()
-          })
-        });
-        return supaRes.ok;
-      });
+      const res = await executeAdminAction(id, "ACTIVATE", { durationDays: days });
 
       if (res.success) {
         const docName = current ? (current.doctorName || "طبيب جديد") : "المشترك";
@@ -1229,19 +1274,7 @@
       const subCode = item ? (item.subscriberId || "SUB") : id;
       const sign = delta > 0 ? "+" : "";
 
-      const res = await executeAdminAction(id, "ADJUST_DAYS", { daysDelta: delta }, async () => {
-        const baseDate = item && item.expiresAt ? new Date(item.expiresAt) : new Date();
-        const newExpiry = new Date(baseDate.getTime() + delta * 86400000).toISOString();
-        const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          headers: REST_HEADERS,
-          body: JSON.stringify({
-            expiresAt: newExpiry,
-            updatedAt: new Date().toISOString()
-          })
-        });
-        return supaRes.ok;
-      });
+      const res = await executeAdminAction(id, "ADJUST_DAYS", { daysDelta: delta });
 
       if (res.success) {
         showActionNotification({
@@ -1284,17 +1317,7 @@
           </div>
         `,
         onConfirm: async () => {
-          const res = await executeAdminAction(id, "SUSPEND", {}, async () => {
-            const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
-              method: "PATCH",
-              headers: REST_HEADERS,
-              body: JSON.stringify({
-                status: "SUSPENDED",
-                updatedAt: new Date().toISOString()
-              })
-            });
-            return supaRes.ok;
-          });
+          const res = await executeAdminAction(id, "SUSPEND");
 
           if (res.success) {
             showActionNotification({
@@ -1343,30 +1366,24 @@
           let success = false;
           let errorMsg = "";
 
-          // 1. Server delete
+          // Server delete
           try {
             const res = await fetch(`${API_BASE}/api/system/verify?id=${encodeURIComponent(id)}`, {
               method: "DELETE",
-              headers: ADMIN_API_HEADERS
+              headers: getAdminApiHeaders()
             });
             if (res.ok) {
               const data = await res.json();
               if (data && data.success) success = true;
               else errorMsg = data?.error || "";
+            } else if (res.status === 401) {
+              errorMsg = "❌ السيرفر السحابي (Vercel) بحاجة لنشر التحديثات إليه أولاً (Git Push) ليعتمد رمز الـ PIN.";
+            } else {
+              const errData = await res.json().catch(() => ({}));
+              errorMsg = errData?.error || "حدث خطأ من الخادم.";
             }
-          } catch {}
-
-          // 2. Direct Supabase delete
-          if (!success) {
-            try {
-              const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
-                method: "DELETE",
-                headers: REST_HEADERS
-              });
-              if (supaRes.ok) success = true;
-            } catch (supaErr) {
-              console.error("Supabase direct delete error:", supaErr);
-            }
+          } catch (err) {
+            errorMsg = "تعذر الاتصال بالخادم السحابي.";
           }
 
           if (success) {
@@ -1418,18 +1435,7 @@
 
       openDetailsSubIds.add(id);
 
-      const res = await executeAdminAction(id, "ADD_DEVICE", { machineId: newMachineId }, async () => {
-        const updatedList = [...currentAllowed, newMachineId];
-        const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          headers: REST_HEADERS,
-          body: JSON.stringify({
-            allowedMachineIds: updatedList,
-            updatedAt: new Date().toISOString()
-          })
-        });
-        return supaRes.ok;
-      });
+      const res = await executeAdminAction(id, "ADD_DEVICE", { machineId: newMachineId });
 
       if (res.success) {
         const docName = sub.doctorName || "المشترك";
@@ -1515,25 +1521,6 @@
           const res = await executeAdminAction(id, "EDIT_DEVICE", {
             oldMachineId: oldMachineId || "",
             newMachineId: newMachineId
-          }, async () => {
-            const currentAllowed = Array.isArray(sub.allowedMachineIds) && sub.allowedMachineIds.length > 0
-              ? [...sub.allowedMachineIds]
-              : (sub.machineId ? [sub.machineId] : []);
-            const updatedList = currentAllowed.map(m => m === oldMachineId ? newMachineId : m);
-            if (!updatedList.includes(newMachineId)) updatedList.push(newMachineId);
-            const updateBody = {
-              allowedMachineIds: updatedList,
-              updatedAt: new Date().toISOString()
-            };
-            if (sub.machineId === oldMachineId || !sub.machineId) {
-              updateBody.machineId = newMachineId;
-            }
-            const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
-              method: "PATCH",
-              headers: REST_HEADERS,
-              body: JSON.stringify(updateBody)
-            });
-            return supaRes.ok;
           });
 
           if (res.success) {
@@ -1567,17 +1554,7 @@
       const docName = sub.doctorName || "المشترك";
       openDetailsSubIds.add(id);
 
-      const res = await executeAdminAction(id, "SET_PRIMARY_DEVICE", { machineId }, async () => {
-        const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          headers: REST_HEADERS,
-          body: JSON.stringify({
-            machineId: machineId,
-            updatedAt: new Date().toISOString()
-          })
-        });
-        return supaRes.ok;
-      });
+      const res = await executeAdminAction(id, "SET_PRIMARY_DEVICE", { machineId });
 
       if (res.success) {
         showActionNotification({
@@ -1633,20 +1610,7 @@
         `,
         onConfirm: async () => {
           openDetailsSubIds.add(id);
-          const res = await executeAdminAction(id, "REMOVE_DEVICE", { machineId: deviceToRemove }, async () => {
-            const updatedList = remainingDevices;
-            const newPrimary = (deviceToRemove === sub.machineId) ? (updatedList[0] || "") : sub.machineId;
-            const supaRes = await fetch(`${SUPABASE_URL}?id=eq.${encodeURIComponent(id)}`, {
-              method: "PATCH",
-              headers: REST_HEADERS,
-              body: JSON.stringify({
-                allowedMachineIds: updatedList,
-                machineId: newPrimary,
-                updatedAt: new Date().toISOString()
-              })
-            });
-            return supaRes.ok;
-          });
+          const res = await executeAdminAction(id, "REMOVE_DEVICE", { machineId: deviceToRemove });
 
           if (res.success) {
             showActionNotification({

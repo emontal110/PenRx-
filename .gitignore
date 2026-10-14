@@ -35,8 +35,8 @@ android/.idea/
 *.apk
 *.aab
 *.keystore
-!android/app/penrx-release.keystore
 *.jks
+github-recovery-codes*.txt
 
 # 5. Environment Variables, Secret Keys & Text Files
 .env

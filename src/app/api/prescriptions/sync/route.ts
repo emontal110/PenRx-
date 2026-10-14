@@ -7,18 +7,21 @@ import {
 import {
   getSubscriptionBySubscriberId,
   validateAdminAuthorization,
+  machineOwnsSubscription,
 } from "@/lib/subscriptionManager";
 import {
   savePrescriptionRelational,
   deletePrescriptionRelational,
 } from "@/lib/relationalStorage";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
+import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-// [SECURITY FIX]: No hardcoded Supabase key fallback
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+// RLS on CloudPrescription only admits service_role — anon key writes are silently rejected
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 // High-Speed Server In-Memory Cache (Multi-Tenant, Partitioned by Subscriber ID)
 // Key: subscriberId -> Map<prescriptionId, LeanCloudPrescription>
@@ -62,6 +65,11 @@ function purgeExpiredRecords(): number {
 
 // ===== GET: Retrieve prescriptions for a specific subscriber (Last 365 Days Only) =====
 export async function GET(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/prescriptions/sync");
+  }
+
   // Rate Limit: 30 sync requests per minute per IP
   if (!checkRateLimit(request, { maxRequests: 30, windowMs: 60_000, prefix: "rx-sync-get" })) {
     return rateLimitExceededResponse(60);
@@ -69,6 +77,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const subscriberId = searchParams.get("subscriberId");
+  const machineId = searchParams.get("machineId");
 
   if (!subscriberId) {
     return NextResponse.json(
@@ -93,6 +102,22 @@ export async function GET(request: Request) {
       { error: "الاشتراك معلق أو غير نشط. يرجى تجديد الترخيص للوصول للسجلات السحابية" },
       { status: 403 }
     );
+  }
+
+  // Security Check: the requesting device must own this subscription (admin portal is exempt)
+  if (sub && !isAdmin) {
+    if (!machineId) {
+      return NextResponse.json(
+        { error: "machineId is required to access cloud prescriptions" },
+        { status: 403 }
+      );
+    }
+    if (!machineOwnsSubscription(sub, machineId.trim())) {
+      return NextResponse.json(
+        { error: "هذا الجهاز غير مرتبط بحساب المشترك المطلوب" },
+        { status: 403 }
+      );
+    }
   }
 
   // Periodic automatic purge of expired items
@@ -170,6 +195,11 @@ export async function GET(request: Request) {
 
 // ===== POST: Save, Delete, or Purge Prescriptions =====
 export async function POST(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/prescriptions/sync");
+  }
+
   // Rate Limit: 60 sync operations per minute per IP (save/delete happen often)
   if (!checkRateLimit(request, { maxRequests: 60, windowMs: 60_000, prefix: "rx-sync-post" })) {
     return rateLimitExceededResponse(60);
@@ -177,7 +207,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { action, subscriberId, prescriptionId, data } = body;
+    const { action, subscriberId, prescriptionId, data, machineId } = body;
 
     // 1. Global Purge Action - Admin Only
     if (action === "PURGE_OLD") {
@@ -200,6 +230,14 @@ export async function POST(request: Request) {
     if (!sub || (sub.status !== "ACTIVE" && !sub.isTrial)) {
       return NextResponse.json(
         { error: "لا يمكن مزامنة الروشتات لحساب اشتراك غير مفعل" },
+        { status: 403 }
+      );
+    }
+
+    // Security check: the requesting device must own this subscription
+    if (!machineId || !machineOwnsSubscription(sub, String(machineId).trim())) {
+      return NextResponse.json(
+        { error: "هذا الجهاز غير مرتبط بحساب المشترك المطلوب" },
         { status: 403 }
       );
     }

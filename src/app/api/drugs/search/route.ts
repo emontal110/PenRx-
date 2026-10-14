@@ -9,6 +9,17 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+// CORS: the static mobile page (GitHub Pages / file://) calls this route cross-origin
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 // ── In-Memory LRU Cache for External APIs (1 Hour TTL) ────────────────────────
 const EXTERNAL_CACHE = new Map<string, { timestamp: number; results: DrugRecord[] }>();
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -125,12 +136,15 @@ export async function GET(request: Request) {
 
   if (!query.trim()) {
     const popular = searchComprehensiveDrugs("Panadol", 15);
-    return NextResponse.json({
-      results: popular,
-      totalCatalogSize: getTotalDrugCount(),
-      executionTimeMs: Date.now() - startTime,
-      source: "popular-defaults",
-    });
+    return NextResponse.json(
+      {
+        results: popular,
+        totalCatalogSize: getTotalDrugCount(),
+        executionTimeMs: Date.now() - startTime,
+        source: "popular-defaults",
+      },
+      { headers: CORS_HEADERS }
+    );
   }
 
   const cleanQuery = query.trim();
@@ -276,17 +290,20 @@ export async function GET(request: Request) {
     }
   });
 
-  return NextResponse.json({
-    query: cleanQuery,
-    results: combined.slice(0, limit),
-    totalCatalogSize: getTotalDrugCount() + dbCommunityResults.length,
-    executionTimeMs: Date.now() - startTime,
-    source:
-      externalResults.length > 0
-        ? "hybrid-local-community-external"
-        : dbCommunityResults.length > 0
-        ? "hybrid-local-community"
-        : "local-memory",
-    hasExternalResults: externalResults.length > 0,
-  });
+  return NextResponse.json(
+    {
+      query: cleanQuery,
+      results: combined.slice(0, limit),
+      totalCatalogSize: getTotalDrugCount() + dbCommunityResults.length,
+      executionTimeMs: Date.now() - startTime,
+      source:
+        externalResults.length > 0
+          ? "hybrid-local-community-external"
+          : dbCommunityResults.length > 0
+          ? "hybrid-local-community"
+          : "local-memory",
+      hasExternalResults: externalResults.length > 0,
+    },
+    { headers: CORS_HEADERS }
+  );
 }

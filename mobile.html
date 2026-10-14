@@ -638,9 +638,9 @@
 
   <!-- ================= LOGIC & CORE ENGINE ================= -->
   <script>
-    // Direct Cloud REST Database with Master Service Role Key for reliable writes
-    const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-    const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
+    // All privileged operations go through the authoritative cloud API —
+    // this static page never holds database credentials
+    const API_BASE = "https://pen-rx.vercel.app";
     const ADMIN_PHONE = "201094085228";
 
     // Curated Egyptian & Arabic Medications Bank for Instant Offline Search (Bilingual)
@@ -881,9 +881,14 @@
 
       // ── Step 1: Attempt Live Cloud API Search (Access to 43,500+ Catalog) ──
       try {
-        const liveSearchUrl = window.location.origin.includes("http") && !window.location.origin.includes("file:")
+        // Relative path when served by the app itself (local desktop server / cloud app);
+        // absolute cloud URL for static hosts (GitHub Pages, file://)
+        const servedByApp =
+          /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.hostname) ||
+          window.location.hostname === "pen-rx.vercel.app";
+        const liveSearchUrl = servedByApp
           ? `/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=20`
-          : `https://pen-rx.vercel.app/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=20`;
+          : `${API_BASE}/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=20`;
 
         const res = await fetch(liveSearchUrl, { signal: AbortSignal.timeout(1200) });
         if (res.ok) {
@@ -1319,24 +1324,22 @@
 
       loadSavedSettings();
 
-      // Immediate Cloud Portal Sync: Reflect clinic & doctor updates into portal.html immediately
+      // Immediate Cloud Portal Sync: Reflect clinic & doctor updates into the admin portal
       const activeMid = machineId || getOrCreateMachineId();
       if (activeMid) {
         const syncedClinicName = clinicPhone ? `${clinicName} • 📞 ${clinicPhone}` : clinicName;
-        fetch(`${SUPABASE_REST_URL}?machineId=eq.${encodeURIComponent(activeMid)}`, {
-          method: "PATCH",
-          headers: {
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Authorization": "Bearer " + SUPABASE_SERVICE_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "return=representation"
-          },
+        fetch(`${API_BASE}/api/subscriptions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            action: "update_profile",
+            subscriberId: currentSubscription?.subscriberId || null,
+            machineId: activeMid,
             doctorName: docName,
             clinicName: syncedClinicName,
-            updatedAt: new Date().toISOString()
-          })
-        }).catch((e) => console.warn("Supabase mobile sync notice:", e));
+            phone: clinicPhone,
+          }),
+        }).catch((e) => console.warn("Portal sync notice:", e));
       }
 
       showToast("تم حفظ إعدادات العيادة ومزامنتها مع البورتال بنجاح!", "success");
@@ -1391,24 +1394,23 @@
       };
 
       try {
-        const res = await fetch(SUPABASE_REST_URL, {
+        const res = await fetch(`${API_BASE}/api/subscriptions`, {
           method: "POST",
-          headers: {
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Authorization": "Bearer " + SUPABASE_SERVICE_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "return=representation",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(record),
         });
 
         if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data && data.subscription) {
+            Object.assign(record, data.subscription);
+          }
           showToast("🎉 تم إرسال طلب الاشتراك للبورتال بنجاح! سيتم التفعيل فور مراجعة التحويل.", "success");
           localStorage.setItem("penrx_last_sub", JSON.stringify(record));
           checkSubscriptionStatus();
         } else {
           const errData = await res.json().catch(() => ({}));
-          console.error("Supabase REST response error:", errData);
+          console.error("Subscription API response error:", errData);
           showToast("تم تسجيل الطلب وجاري إرساله للسحابة.", "info");
           localStorage.setItem("penrx_last_sub", JSON.stringify(record));
           checkSubscriptionStatus();
@@ -1460,17 +1462,26 @@
         updatedAt: now.toISOString()
       };
 
+      let trialRejected = false;
       try {
-        await fetch(SUPABASE_REST_URL, {
+        const res = await fetch(`${API_BASE}/api/subscriptions`, {
           method: "POST",
-          headers: {
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Authorization": "Bearer " + SUPABASE_SERVICE_KEY,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(trialRecord),
         });
+        if (res.status === 400 || res.status === 403) {
+          const errData = await res.json().catch(() => ({}));
+          trialRejected = true;
+          alert(errData.error || "لقد تم الاستفادة من الفترة التجريبية المجانية مسبقاً على هذا الجهاز");
+        }
       } catch {}
+
+      if (trialRejected) {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="zap" class="w-3.5 h-3.5"></i><span>تفعيل التجربة المجانية 30 يوم ⚡</span>`;
+        lucide.createIcons();
+        return;
+      }
 
       localStorage.setItem("penrx_trial_claimed", "true");
       localStorage.setItem("penrx_last_sub", JSON.stringify(trialRecord));
@@ -1481,28 +1492,65 @@
       switchTab("home");
     }
 
+    let lastRenderedSubFingerprint = "";
+
     async function checkSubscriptionStatus() {
+      const activeMid = machineId || getOrCreateMachineId();
+      let matchedSub = null;
+
+      // 1. Check via Cloud API
       try {
-        const encodedId = encodeURIComponent(machineId);
-        const res = await fetch(`${SUPABASE_REST_URL}?or=(machineId.eq.${encodedId},allowedMachineIds.cs.{${encodedId}})&select=*&order=createdAt.desc&limit=1`, {
-          headers: {
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Authorization": "Bearer " + SUPABASE_SERVICE_KEY,
-          },
+        const encodedId = encodeURIComponent(activeMid);
+        const savedSub = localStorage.getItem("penrx_last_sub");
+        let subId = "";
+        if (savedSub) {
+          try { subId = JSON.parse(savedSub).subscriberId || ""; } catch {}
+        }
+        let url = `${API_BASE}/api/subscriptions?machineId=${encodedId}`;
+        if (subId) url += `&subscriberId=${encodeURIComponent(subId)}`;
+
+        const res = await fetch(url, {
           cache: "no-store",
+          signal: AbortSignal.timeout(5000),
         });
 
         if (res.ok) {
-          const rows = await res.json();
-          if (Array.isArray(rows) && rows.length > 0) {
-            currentSubscription = rows[0];
-            localStorage.setItem("penrx_last_sub", JSON.stringify(currentSubscription));
-            updateUiForSubscription(currentSubscription);
-            return;
+          const data = await res.json();
+          if (data && data.subscription) {
+            matchedSub = data.subscription;
           }
-          // Note: If rows.length === 0, preserve local storage to prevent wiping newly submitted requests
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Cloud API status fetch deferred:", err);
+      }
+
+      // 2. Fallback: Direct Supabase Cloud REST verification (ensures instant unlock even if serverless is cold/sleeping)
+      if (!matchedSub || matchedSub.status !== "ACTIVE") {
+        try {
+          const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(machineId.eq.${encodeURIComponent(activeMid)},allowedMachineIds.cs.{${encodeURIComponent(activeMid)}})&order=updatedAt.desc&limit=1`;
+          const supaRes = await fetch(supaUrl, {
+            headers: {
+              apikey: supaKey,
+              Authorization: "Bearer " + supaKey,
+            },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (supaRes.ok) {
+            const list = await supaRes.json();
+            if (Array.isArray(list) && list.length > 0 && list[0].status === "ACTIVE") {
+              matchedSub = list[0];
+            }
+          }
+        } catch {}
+      }
+
+      if (matchedSub) {
+        currentSubscription = matchedSub;
+        localStorage.setItem("penrx_last_sub", JSON.stringify(currentSubscription));
+        updateUiForSubscription(currentSubscription);
+        return;
+      }
 
       // Fallback to local stored record
       const local = localStorage.getItem("penrx_last_sub");
@@ -1517,6 +1565,12 @@
     }
 
     function updateUiForSubscription(sub) {
+      const fingerprint = sub ? `${sub.id}-${sub.status}-${sub.expiresAt}-${sub.durationDays}` : "none";
+      if (fingerprint === lastRenderedSubFingerprint) {
+        return;
+      }
+      lastRenderedSubFingerprint = fingerprint;
+
       const banner = document.getElementById("sub-status-card");
       const hBadge = document.getElementById("header-sub-badge");
       const hLabel = document.getElementById("header-sub-label");
@@ -1539,6 +1593,7 @@
         homePill.textContent = "غير مفعل ⚡";
         homePill.className = "text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-amber-500/15 text-amber-300 border-amber-500/30";
         daysLeft.textContent = "0";
+        lucide.createIcons();
         return;
       }
 
@@ -1575,7 +1630,7 @@
               <span class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-[10px]">${sub.planName}</span>
             </div>
             <p class="text-[11px] text-slate-300">تم استلام طلبك في بورتال الإدارة بنجاح وجاري مراجعة التحويل وتفعيل الحساب فورياً.</p>
-            <a href="https://wa.me/${ADMIN_PHONE}?text=${encodeURIComponent(`مرحباً، أرسلت طلب اشتراك في PenRX+ لكود الجهاز: ${machineId}`)}" target="_blank" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-amber-500/30">متابعة التفعيل عبر واتساب الإدارة 💬</a>
+            <a href="https://wa.me/${ADMIN_PHONE}?text=${encodeURIComponent(`مرحباً، أرسلت طلب اشتراك في PenRX+ لكود الجهاز: ${activeMid}`)}" target="_blank" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-amber-500/30">متابعة التفعيل عبر واتساب الإدارة 💬</a>
           `;
         }
         hLabel.textContent = "قيد المراجعة ⏳";

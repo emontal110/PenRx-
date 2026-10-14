@@ -1,22 +1,8 @@
 import comprehensiveCatalog from "@/data/comprehensive-drugs.json";
 import extendedSpecialtyCatalog from "@/data/extended-specialty-drugs.json";
 
-export interface DrugRecord {
-  id: string;
-  name: string;
-  nameAr?: string;
-  activeIngredient: string;
-  activeIngredientAr?: string;
-  company?: string;
-  price?: number;
-  dosageForm?: string;
-  category?: string;
-  isControlled?: boolean;
-  sourceOrigin?: "Egyptian Bank" | "International / Imported" | "Cosmetics & Aesthetics" | "Dental Care" | "Vitamins & Supplements" | "Doctor Community";
-  isCrowdSourced?: boolean;
-  doctorContributor?: string;
-  isEssential?: boolean;
-}
+import type { DrugRecord } from "@/types/drug";
+export type { DrugRecord } from "@/types/drug";
 
 interface IndexedDrugRecord extends DrugRecord {
   normNameEng: string;
@@ -408,73 +394,26 @@ function registerPrefixIndices(itemIndex: number) {
   }
 }
 
-function buildPrefixIndices() {
+let indicesBuilt = false;
+function ensureIndicesBuilt() {
+  if (indicesBuilt) return;
+  indicesBuilt = true;
   for (let i = 0; i < INDEXED_DRUGS.length; i++) {
     registerPrefixIndices(i);
   }
-
-  // Pre-sort every prefix bucket alphabetically once at startup
-  const sortArabicBucket = (list: number[]) => {
-    list.sort((aIdx, bIdx) => {
-      const a = INDEXED_DRUGS[aIdx];
-      const b = INDEXED_DRUGS[bIdx];
-      const aEss = !!a.isEssential;
-      const bEss = !!b.isEssential;
-      if (aEss !== bEss) return aEss ? -1 : 1;
-      const nameA = a.nameAr || a.name;
-      const nameB = b.nameAr || b.name;
-      return nameA.localeCompare(nameB, "ar", { sensitivity: "base" });
-    });
-  };
-
-  const sortEnglishBucket = (list: number[]) => {
-    list.sort((aIdx, bIdx) => {
-      const a = INDEXED_DRUGS[aIdx];
-      const b = INDEXED_DRUGS[bIdx];
-      const aEss = !!a.isEssential;
-      const bEss = !!b.isEssential;
-      if (aEss !== bEss) return aEss ? -1 : 1;
-      return a.name.localeCompare(b.name, "en", { sensitivity: "base" });
-    });
-  };
-
-  for (const list of AR_PREFIX_INDEX.values()) {
-    sortArabicBucket(list);
-  }
-  for (const list of EN_PREFIX_INDEX.values()) {
-    sortEnglishBucket(list);
-  }
 }
-
-// Build index on module import
-buildPrefixIndices();
 
 export interface SearchOptions {
   searchActiveIngredient?: boolean;
 }
 
 // ── Self-Evolving Adaptive Intelligence: Prescription Frequency Tracker ──
-const DRUG_USAGE_FREQUENCY = new Map<string, number>();
-
-export function recordDrugPrescribed(drugName: string): void {
-  if (!drugName) return;
-  const key = drugName.toLowerCase().trim();
-  const current = DRUG_USAGE_FREQUENCY.get(key) || 0;
-  DRUG_USAGE_FREQUENCY.set(key, current + 1);
-}
-
-export function getDrugUsageScore(drugName: string): number {
-  if (!drugName) return 0;
-  return DRUG_USAGE_FREQUENCY.get(drugName.toLowerCase().trim()) || 0;
-}
+export { recordDrugPrescribed, getDrugUsageScore } from "@/lib/drugTracker";
+import { getDrugUsageScore } from "@/lib/drugTracker";
 
 /**
  * Supercharged Sub-Millisecond Search Engine
  * Prioritizes STRICT PREFIX MATCHING on Brand Names (Arabic & English) in ALPHABETICAL ORDER.
- * Typing 'ب' instantly retrieves all medications starting with 'ب' in < 0.05ms.
- * Typing 'بن' instantly retrieves all medications starting with 'بن' in < 0.05ms.
- * Typing 'p' instantly retrieves all medications starting with 'p' in < 0.05ms.
- * Typing 'pa' instantly retrieves all medications starting with 'pa' in < 0.05ms.
  */
 export function searchComprehensiveDrugs(
   query: string,
@@ -483,6 +422,8 @@ export function searchComprehensiveDrugs(
 ): DrugRecord[] {
   const cleanQ = query.trim();
   if (!cleanQ) return [];
+
+  ensureIndicesBuilt();
 
   const searchActiveIngredient = !!options.searchActiveIngredient;
   const isAr = /[\u0600-\u06FF]/.test(cleanQ);

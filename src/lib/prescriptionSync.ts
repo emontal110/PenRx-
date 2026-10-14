@@ -12,6 +12,7 @@
  */
 
 import { SavedPrescription, PrescriptionItem } from "@/store/usePrescriptionStore";
+import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 
 export const RETENTION_DAYS = 365; // 1 full year retention
 export const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -210,12 +211,14 @@ export async function processSyncQueue(): Promise<void> {
 
   try {
     const item = queue[0];
+    const machineId = useSubscriptionStore.getState().machineId;
     const res = await fetch("/api/prescriptions/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: item.action,
         subscriberId: item.subscriberId,
+        machineId,
         prescriptionId: item.prescriptionId,
         data: item.data,
       }),
@@ -263,8 +266,9 @@ export async function pullCloudPrescriptions(
   if (!subscriberId || typeof window === "undefined") return null;
 
   try {
+    const machineId = useSubscriptionStore.getState().machineId;
     const res = await fetch(
-      `/api/prescriptions/sync?subscriberId=${encodeURIComponent(subscriberId)}`,
+      `/api/prescriptions/sync?subscriberId=${encodeURIComponent(subscriberId)}&machineId=${encodeURIComponent(machineId || "")}`,
       { cache: "no-store" }
     );
 

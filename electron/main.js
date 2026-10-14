@@ -266,11 +266,38 @@ ipcMain.handle("quit-and-install-update", async () => {
   return false;
 });
 
+// Only official GitHub release artifacts may be downloaded and executed.
+// Blocks compromised update metadata from pointing the installer at arbitrary hosts.
+const ALLOWED_UPDATE_HOSTS = new Set([
+  "github.com",
+  "objects.githubusercontent.com",
+  "release-assets.githubusercontent.com",
+  "codeload.github.com",
+]);
+
+function isAllowedUpdateUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:") return false;
+    if (!ALLOWED_UPDATE_HOSTS.has(parsed.hostname)) return false;
+    if (parsed.hostname === "github.com" || parsed.hostname === "codeload.github.com") {
+      return /^\/emontal110\/PenRx-\//.test(parsed.pathname);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Stream file download with 301/302/307 redirect support
 function downloadFileWithRedirects(url, destPath, onProgress, maxRedirects = 6) {
   return new Promise((resolve, reject) => {
     if (maxRedirects <= 0) {
       return reject(new Error("تم تجاوز الحد الأقصى لإعادة التوجيه (Too many redirects)"));
+    }
+
+    if (!isAllowedUpdateUrl(url)) {
+      return reject(new Error("رابط التحديث مرفوض أمنياً: يُسمح فقط بروابط الإصدارات الرسمية على GitHub"));
     }
 
     const isHttps = url.startsWith("https://");
@@ -288,7 +315,11 @@ function downloadFileWithRedirects(url, destPath, onProgress, maxRedirects = 6) 
         // Handle 3xx Redirects
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume(); // consume response data to free up memory
-          return downloadFileWithRedirects(res.headers.location, destPath, onProgress, maxRedirects - 1)
+          const redirectUrl = new URL(res.headers.location, url).toString();
+          if (!isAllowedUpdateUrl(redirectUrl)) {
+            return reject(new Error("رابط إعادة التوجيه للتحديث مرفوض أمنياً"));
+          }
+          return downloadFileWithRedirects(redirectUrl, destPath, onProgress, maxRedirects - 1)
             .then(resolve)
             .catch(reject);
         }
@@ -348,6 +379,15 @@ function downloadFileWithRedirects(url, destPath, onProgress, maxRedirects = 6) 
 ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
   const targetUrl =
     downloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
+
+  if (!isAllowedUpdateUrl(targetUrl)) {
+    console.error("[PenRX+ AutoUpdate] Blocked disallowed download URL:", targetUrl);
+    return {
+      success: false,
+      error: "رابط التحديث مرفوض أمنياً: يُسمح فقط بروابط الإصدارات الرسمية على GitHub",
+    };
+  }
+
   const tempPath = path.join(app.getPath("temp"), "PenRX+-Setup-Latest.exe");
 
   try {
@@ -438,11 +478,15 @@ async function ensureServerRunning() {
     return activeServerUrl;
   }
 
-  // 1. Check if localhost:3000 is already active
-  const is3000Up = await pingUrl("http://localhost:3000");
-  if (is3000Up) {
-    activeServerUrl = "http://localhost:3000";
-    return activeServerUrl;
+  // 1. Check if localhost:3000 is already active (development convenience only —
+  // the packaged app must never adopt an unrelated server that happens to listen
+  // on port 3000)
+  if (!app.isPackaged) {
+    const is3000Up = await pingUrl("http://localhost:3000");
+    if (is3000Up) {
+      activeServerUrl = "http://localhost:3000";
+      return activeServerUrl;
+    }
   }
 
   // 2. Spawn the embedded server

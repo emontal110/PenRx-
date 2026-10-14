@@ -321,15 +321,8 @@ export async function authenticateWithBiometrics(
       return true;
     }
 
-    // Fallback: re-register if get didn't match
-    return await registerBiometricCredential(username);
+    return false;
   } catch (err: any) {
-    // If get failed because credential was not found or re-enrollment required, attempt registration
-    if (err?.name === "NotAllowedError" || err?.name === "InvalidStateError") {
-      try {
-        return await registerBiometricCredential(username);
-      } catch {}
-    }
     console.warn("[Biometrics] Verification error:", err?.message || err);
     return false;
   }

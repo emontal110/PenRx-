@@ -16,6 +16,7 @@ import {
   validateAdminAuthorization,
 } from "@/lib/subscriptionManager";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
+import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
@@ -39,26 +40,31 @@ function jsonResponse(data: any, init?: { status?: number }) {
   });
 }
 
+function safeSignedToken(
+  machineId: string,
+  expiresAt: string,
+  subscriberId: string
+): string | undefined {
+  try {
+    return generateSignedToken(machineId, expiresAt, subscriberId);
+  } catch {
+    return undefined;
+  }
+}
+
 // ===== GET: Verify subscription status for a machine =====
 export async function GET(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/system/verify");
+  }
+
   // Rate Limit: 20 verify requests per minute per IP (prevent brute-force on machineId)
   if (!checkRateLimit(request, { maxRequests: 20, windowMs: 60_000, prefix: "verify-get" })) {
     return rateLimitExceededResponse(60);
   }
 
   const { searchParams } = new URL(request.url);
-  const action = searchParams.get("action");
-
-  // Securely provide SUPABASE_SERVICE_ROLE_KEY to authenticated admin portal from local .env
-  if (action === "GET_SERVICE_KEY") {
-    if (!validateAdminAuthorization(request)) {
-      return jsonResponse({ error: "Unauthorized: Master Administrative Secret required" }, { status: 401 });
-    }
-    return jsonResponse({
-      success: true,
-      serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-    });
-  }
 
   const machineId = searchParams.get("machineId");
   const subscriberId = searchParams.get("subscriberId");
@@ -95,7 +101,7 @@ export async function GET(request: Request) {
         0,
         Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       );
-      const token = generateSignedToken(machineId, sub.expiresAt!, sub.subscriberId);
+      const token = safeSignedToken(machineId, sub.expiresAt!, sub.subscriberId);
       return jsonResponse({
         success: true,
         status: "active",
@@ -116,7 +122,8 @@ export async function GET(request: Request) {
     console.error("[SystemVerify GET] Database query failed:", err.message);
 
     // Fallback: If DB is unreachable, check client-provided offlineToken
-    const offlineToken = searchParams.get("token");
+    // Accept both param names — newer clients send "offlineToken", legacy clients send "token"
+    const offlineToken = searchParams.get("offlineToken") || searchParams.get("token");
     if (offlineToken) {
       const parsed = verifySignedToken(offlineToken);
       if (
@@ -152,6 +159,11 @@ export async function GET(request: Request) {
 
 // ===== PATCH: Admin actions (activate, suspend, adjust days, device management) =====
 export async function PATCH(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward admin action to the cloud API
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/system/verify");
+  }
+
   // Rate Limit: 60 admin operations per minute
   if (!checkRateLimit(request, { maxRequests: 60, windowMs: 60_000, prefix: "verify-patch" })) {
     return rateLimitExceededResponse(60);
@@ -181,7 +193,7 @@ export async function PATCH(request: Request) {
           return jsonResponse({ error: "Subscription not found" }, { status: 404 });
         }
         // Generate signed token upon activation bound to subscriber
-        const token = generateSignedToken(updated.machineId, updated.expiresAt!, updated.subscriberId);
+        const token = safeSignedToken(updated.machineId, updated.expiresAt!, updated.subscriberId);
         return jsonResponse({ success: true, subscription: { ...updated, signatureToken: token } });
       }
 
@@ -202,7 +214,7 @@ export async function PATCH(request: Request) {
         if (!updated) {
           return jsonResponse({ error: "Subscription not found" }, { status: 404 });
         }
-        const token = generateSignedToken(updated.machineId, updated.expiresAt!, updated.subscriberId);
+        const token = safeSignedToken(updated.machineId, updated.expiresAt!, updated.subscriberId);
         return jsonResponse({ success: true, subscription: { ...updated, signatureToken: token } });
       }
 
@@ -262,6 +274,11 @@ export async function PATCH(request: Request) {
 
 // ===== DELETE: Remove subscription =====
 export async function DELETE(request: Request) {
+  // Packaged desktop runtime holds no cloud credentials — forward admin action to the cloud API
+  if (!hasCloudCredentials()) {
+    return proxyToCloud(request, "/api/system/verify");
+  }
+
   // Rate Limit: 10 deletes per minute per IP
   if (!checkRateLimit(request, { maxRequests: 10, windowMs: 60_000, prefix: "verify-delete" })) {
     return rateLimitExceededResponse(60);
