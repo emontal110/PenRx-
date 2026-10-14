@@ -65,15 +65,19 @@ function getMotherboardSerial() {
       return isGeneric ? "" : clean;
     }
 
-    exec("wmic baseboard get serialnumber", (e, out) => {
+    exec("wmic baseboard get serialnumber", { windowsHide: true }, (e, out) => {
       const serial = sanitize(out);
       if (serial) return resolve(serial);
 
       // Windows 11 fallback when wmic is deprecated/removed
-      exec('powershell -NoProfile -Command "(Get-CimInstance Win32_BaseBoard).SerialNumber"', (e2, out2) => {
-        const psSerial = sanitize(out2);
-        resolve(psSerial);
-      });
+      exec(
+        'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "(Get-CimInstance Win32_BaseBoard).SerialNumber"',
+        { windowsHide: true },
+        (e2, out2) => {
+          const psSerial = sanitize(out2);
+          resolve(psSerial);
+        }
+      );
     });
   });
 }
@@ -83,6 +87,7 @@ function getWindowsGuid() {
     if (process.platform !== "win32") return resolve("");
     exec(
       "reg query HKLM\\Software\\Microsoft\\Cryptography /v MachineGuid",
+      { windowsHide: true },
       (e, out) => {
         if (out) {
           const match = out.match(/MachineGuid\s+REG_SZ\s+(\S+)/i);
@@ -414,29 +419,11 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
 
     console.log(`[PenRX+ AutoUpdate] Download completed to ${tempPath}. Preparing silent installation & auto-restart...`);
 
-    const currentExe = process.execPath;
-    const runnerPath = path.join(app.getPath("temp"), "penrx-update-runner.bat");
-
-    // Batch runner that waits for file locks to clear, installs silently via /S, and relaunches the app
-    const runnerScript = `@echo off
-chcp 65001 >nul
-timeout /t 2 /nobreak >nul
-start /wait "" "${tempPath}" /S
-timeout /t 1 /nobreak >nul
-if exist "${currentExe}" (
-    start "" "${currentExe}"
-)
-del "${tempPath}" 2>nul
-(goto) 2>nul & del "%~f0"
-`;
-
-    fs.writeFileSync(runnerPath, runnerScript, "utf8");
-
     // Kill background next server process immediately so port 3000 and all file locks are released
     if (serverProcess && serverProcess.pid) {
       try {
         if (process.platform === "win32") {
-          exec(`taskkill /pid ${serverProcess.pid} /T /F`);
+          exec(`taskkill /pid ${serverProcess.pid} /T /F`, { windowsHide: true });
         } else {
           serverProcess.kill("SIGKILL");
         }
@@ -444,13 +431,20 @@ del "${tempPath}" 2>nul
       serverProcess = null;
     }
 
-    // Launch runner detached in background
+    // Launch updater silently using PowerShell with WindowStyle Hidden & windowsHide: true
+    // This executes completely invisibly without any batch files or CMD black console flashes!
     const { spawn } = require("child_process");
-    const runner = spawn("cmd.exe", ["/c", runnerPath], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
+    const updateCmd = `Start-Sleep -Milliseconds 800; Start-Process -FilePath '${tempPath}' -ArgumentList '/S' -Wait; Remove-Item -Path '${tempPath}' -Force -ErrorAction SilentlyContinue`;
+
+    const runner = spawn(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", updateCmd],
+      {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      }
+    );
     runner.unref();
 
     // Exit Electron cleanly to release all files for the installer
@@ -513,6 +507,7 @@ async function ensureServerRunning() {
         ELECTRON_RUN_AS_NODE: "1",
       },
       stdio: ["ignore", "pipe", "pipe", "ipc"],
+      windowsHide: true,
     });
 
     serverProcess.on("error", (err) => {
@@ -803,7 +798,7 @@ app.on("before-quit", () => {
   if (serverProcess && serverProcess.pid) {
     try {
       if (process.platform === "win32") {
-        exec(`taskkill /pid ${serverProcess.pid} /T /F`);
+        exec(`taskkill /pid ${serverProcess.pid} /T /F`, { windowsHide: true });
       } else {
         serverProcess.kill("SIGKILL");
       }
