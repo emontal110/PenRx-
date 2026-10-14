@@ -1623,6 +1623,7 @@
         homePill.className = "text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
       } else if (sub.status === "PENDING") {
         if (banner) {
+          const devId = (sub && sub.machineId) || (typeof machineId !== "undefined" && machineId) || getOrCreateMachineId();
           banner.className = "p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 space-y-2";
           banner.innerHTML = `
             <div class="flex items-center justify-between text-xs">
@@ -1630,7 +1631,7 @@
               <span class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-[10px]">${sub.planName}</span>
             </div>
             <p class="text-[11px] text-slate-300">تم استلام طلبك في بورتال الإدارة بنجاح وجاري مراجعة التحويل وتفعيل الحساب فورياً.</p>
-            <a href="https://wa.me/${ADMIN_PHONE}?text=${encodeURIComponent(`مرحباً، أرسلت طلب اشتراك في PenRX+ لكود الجهاز: ${activeMid}`)}" target="_blank" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-amber-500/30">متابعة التفعيل عبر واتساب الإدارة 💬</a>
+            <a href="https://wa.me/${ADMIN_PHONE}?text=${encodeURIComponent(`مرحباً، أرسلت طلب اشتراك في PenRX+ لكود الجهاز: ${devId}`)}" target="_blank" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-amber-500/30">متابعة التفعيل عبر واتساب الإدارة 💬</a>
           `;
         }
         hLabel.textContent = "قيد المراجعة ⏳";
