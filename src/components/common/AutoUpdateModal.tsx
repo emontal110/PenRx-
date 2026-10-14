@@ -213,7 +213,10 @@ export function AutoUpdateModal() {
         try {
           const diffRes = await w.penrxDesktop.downloadDifferentialUpdate();
           if (diffRes?.success) return;
-        } catch {}
+          console.warn("[AutoUpdateModal] Differential update failed, falling back to full installer:", diffRes?.error);
+        } catch (e: any) {
+          console.warn("[AutoUpdateModal] Differential update exception, falling back:", e?.message);
+        }
       }
 
       // Fallback: direct download & install

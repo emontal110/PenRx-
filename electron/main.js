@@ -238,9 +238,17 @@ ipcMain.handle("check-differential-update", async () => {
 ipcMain.handle("download-differential-update", async () => {
   if (autoUpdater) {
     try {
+      console.log("[PenRX+ AutoUpdater] Checking for differential updates before download...");
+      const checkRes = await autoUpdater.checkForUpdates();
+      if (!checkRes || !checkRes.updateInfo) {
+        console.warn("[PenRX+ AutoUpdater] No update info returned from checkForUpdates.");
+        return { success: false, error: "لا يوجد تحديث متاح حالياً" };
+      }
+      console.log(`[PenRX+ AutoUpdater] Downloading differential update v${checkRes.updateInfo.version}...`);
       await autoUpdater.downloadUpdate();
-      return { success: true };
+      return { success: true, updateInfo: checkRes.updateInfo };
     } catch (err) {
+      console.error("[PenRX+ AutoUpdater] Differential update failed:", err.message);
       return { success: false, error: err.message };
     }
   }

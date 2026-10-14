@@ -153,17 +153,24 @@ jobs:
               break
             fi
           done
-          # Windows Desktop Installer
+          # Windows Desktop Installer & Differential Update Metadata
           for f in artifacts/windows/*.exe; do
             if [ -f "$f" ]; then
               cp "$f" release-files/PenRX+-Setup.exe
-              cp "$f" release-files/
+              base=$(basename "$f")
+              if [ -f "artifacts/windows/${base}.blockmap" ]; then
+                cp "artifacts/windows/${base}.blockmap" release-files/PenRX+-Setup.exe.blockmap
+              fi
               break
             fi
           done
           # Differential update metadata (.blockmap and latest.yml) for Classico-style delta updates
           cp artifacts/windows/*.blockmap release-files/ 2>/dev/null || true
           cp artifacts/windows/latest.yml release-files/ 2>/dev/null || true
+          # Synchronize latest.yml so url and path point to PenRX+-Setup.exe
+          if [ -f "release-files/latest.yml" ]; then
+            sed -i 's/penrx-plus-setup-[0-9.]*\.exe/PenRX+-Setup.exe/g' release-files/latest.yml
+          fi
           # Dynamic Tag Extraction
           RELEASE_TAG=$(node -p "try { require('./src/config/version.json').version } catch(e) { require('./package.json').version }")
           echo "CURRENT_TAG=v$RELEASE_TAG" >> $GITHUB_ENV

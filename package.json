@@ -88,6 +88,7 @@
         "nsis"
       ],
       "icon": "public/icon.ico",
+      "artifactName": "PenRX+-Setup.${ext}",
       "publisherName": "PenRX+ Medical Systems",
       "legalTrademarks": "PenRX+ Medical Systems"
     },
