@@ -32,6 +32,7 @@ import { DrugRecord } from "@/types/drug";
 import { recordDrugPrescribed } from "@/lib/drugTracker";
 import { PrescriptionItem, usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { showGlobalToast } from "@/components/common/GlobalToast";
+import { getSmartDrugDosage, getCleanEnglishDrugName } from "@/lib/smartDrugDosage";
 
 interface SuperDrugSearchProps {
   onAddItem: (item: Omit<PrescriptionItem, "id">) => void;
@@ -256,60 +257,79 @@ export function SuperDrugSearch({
   }, []);
 
   const handleSelectDrug = (drug: DrugRecord) => {
-    const finalForm = drug.dosageForm || doseForm || "Tablet (قرص)";
+    // 1. Clinical Smart Auto-Fill for Dosages, Frequencies, Durations, and Instructions
+    const smart = getSmartDrugDosage(drug);
+    const englishName = getCleanEnglishDrugName(drug.name, drug.nameAr);
+
+    // Reflect directly into UI state so doctor can view/edit in the form fields
+    setDoseQuantity(smart.doseQuantity);
+    setDoseForm(smart.doseForm);
+    setFrequency(smart.frequency);
+    setDuration(smart.duration);
+    setInstructions(smart.instructions);
+
+    // 2. Add to prescription strictly with pure English name and smart clinical defaults
     onAddItem({
       drugId: drug.id,
-      drugName: drug.name,
+      drugName: englishName,
       activeIngredient: drug.activeIngredient,
-      doseQuantity: doseQuantity || "1",
-      doseForm: finalForm,
-      frequency: frequency || "كل 8 ساعات بعد الأكل",
-      duration: duration || "لمدة 5 أيام",
-      instructions: instructions.trim() || undefined,
+      doseQuantity: smart.doseQuantity,
+      doseForm: smart.doseForm,
+      frequency: smart.frequency,
+      duration: smart.duration,
+      instructions: smart.instructions || undefined,
       isCustom: false,
     });
-    recordDrugPrescribed(drug.name);
+    recordDrugPrescribed(englishName);
     setQuery("");
     setSelectedDrug(null);
     setAiSuggestions([]);
     setIsDropdownOpen(false);
-    setInstructions("");
-    setCustomSavedToast(`⚡ تم إدراج (${drug.name}) في الروشتة فوراً!`);
+    setCustomSavedToast(`⚡ تم إدراج (${englishName}) وتعبئة الجرعات والمدة ذكياً!`);
     setTimeout(() => setCustomSavedToast(null), 3000);
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   // Auto-save AI suggestion to DB then add to prescription (self-learning)
   const handleSelectAiSuggestion = async (suggestion: any) => {
-    // 1. Add to prescription immediately (doctor-first UX)
+    // 1. Clinical Smart Auto-Fill
+    const smart = getSmartDrugDosage(suggestion);
+    const englishName = getCleanEnglishDrugName(suggestion.name, suggestion.nameAr);
+
+    setDoseQuantity(smart.doseQuantity);
+    setDoseForm(smart.doseForm);
+    setFrequency(suggestion.recommendedDose || smart.frequency);
+    setDuration(smart.duration);
+    setInstructions(smart.instructions);
+
+    // 2. Add to prescription strictly in English
     onAddItem({
-      drugName: suggestion.name,
+      drugName: englishName,
       activeIngredient: suggestion.activeIngredient,
-      doseQuantity: doseQuantity || "1",
-      doseForm: suggestion.dosageForm || doseForm,
-      frequency: suggestion.recommendedDose || frequency,
-      duration: duration,
-      instructions: undefined,
+      doseQuantity: smart.doseQuantity,
+      doseForm: smart.doseForm,
+      frequency: suggestion.recommendedDose || smart.frequency,
+      duration: smart.duration,
+      instructions: smart.instructions || undefined,
       isCustom: true,
     });
-    recordDrugPrescribed(suggestion.name);
+    recordDrugPrescribed(englishName);
     setQuery("");
     setAiSuggestions([]);
-    setInstructions("");
-    setCustomSavedToast(`🤖 تم إدراج (${suggestion.name}) من ترشيحات الذكاء الاصطناعي!`);
+    setCustomSavedToast(`🤖 تم إدراج (${englishName}) من ترشيحات AI بالجرعات الذكية!`);
     setTimeout(() => setCustomSavedToast(null), 3500);
     setTimeout(() => inputRef.current?.focus(), 50);
 
-    // 2. Auto-save to Supabase DB so ALL doctors see it next time (self-learning)
+    // 3. Auto-save to Supabase DB so ALL doctors see it next time (self-learning)
     fetch("/api/drugs/custom", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: suggestion.name,
+        name: englishName,
         nameAr: suggestion.nameAr || suggestion.name,
         activeIngredient: suggestion.activeIngredient,
         activeIngredientAr: suggestion.activeIngredientAr,
-        dosageForm: suggestion.dosageForm,
+        dosageForm: suggestion.dosageForm || smart.doseForm,
         category: suggestion.category,
         doctorContributor: "PenRX+ AI",
       }),
@@ -374,12 +394,13 @@ export function SuperDrugSearch({
 
     if (isManualMode) {
       if (!manualDrugName.trim()) return;
-      finalDrugName = manualDrugName.trim();
+      finalDrugName = getCleanEnglishDrugName(manualDrugName.trim());
       finalActiveIngredient = manualActiveIngredient.trim() || undefined;
       isCustomItem = true;
     } else {
-      finalDrugName = selectedDrug ? selectedDrug.name : query.trim();
-      if (!finalDrugName) return;
+      const baseName = selectedDrug ? selectedDrug.name : query.trim();
+      if (!baseName) return;
+      finalDrugName = getCleanEnglishDrugName(baseName, selectedDrug?.nameAr);
       finalActiveIngredient = selectedDrug?.activeIngredient || aiSuggestions[0]?.activeIngredient;
       isCustomItem = !selectedDrug;
     }
@@ -1013,11 +1034,11 @@ export function SuperDrugSearch({
               <button
                 type="button"
                 onClick={() => setIsCustomDoseForm(!isCustomDoseForm)}
-                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/25 px-2.5 py-0.5 rounded-lg border border-amber-500/30 transition-all flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer"
+                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/25 px-2.5 py-1 rounded-xl border border-amber-500/30 transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer active:scale-95"
                 title="التبديل بين القائمة الجاهزة والكتابة اليدوية"
               >
-                <Edit3 className="w-3 h-3 shrink-0" />
-                <span>{isCustomDoseForm ? "قائمة 📋" : "يدوي ✍️"}</span>
+                <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                <span>{isCustomDoseForm ? "قائمة جاهزة" : "إدخال يدوي"}</span>
               </button>
             </div>
             {isCustomDoseForm ? (
@@ -1050,7 +1071,7 @@ export function SuperDrugSearch({
                   </option>
                 ))}
                 <option value="CUSTOM_MANUAL" className="text-amber-400 font-bold">
-                  ✍️ + كتابة مانيول...
+                  + كتابة مانيول...
                 </option>
               </select>
             )}
@@ -1066,11 +1087,11 @@ export function SuperDrugSearch({
               <button
                 type="button"
                 onClick={() => setIsCustomFrequency(!isCustomFrequency)}
-                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/25 px-2.5 py-0.5 rounded-lg border border-amber-500/30 transition-all flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer"
+                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/25 px-2.5 py-1 rounded-xl border border-amber-500/30 transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer active:scale-95"
                 title="التبديل بين القوائم الجاهزة والكتابة اليدوية"
               >
-                <Edit3 className="w-3 h-3 shrink-0" />
-                <span>{isCustomFrequency ? "قائمة جاهزة 📋" : "يدوي ✍️"}</span>
+                <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                <span>{isCustomFrequency ? "قائمة جاهزة" : "إدخال يدوي"}</span>
               </button>
             </div>
 
@@ -1104,7 +1125,7 @@ export function SuperDrugSearch({
                   </option>
                 ))}
                 <option value="CUSTOM_MANUAL" className="text-amber-400 font-bold">
-                  ✍️ + كتابة مانيول (إدخال حر)...
+                  + كتابة مانيول (إدخال حر)...
                 </option>
               </select>
             )}
@@ -1120,11 +1141,11 @@ export function SuperDrugSearch({
               <button
                 type="button"
                 onClick={() => setIsCustomDuration(!isCustomDuration)}
-                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/25 px-2.5 py-0.5 rounded-lg border border-amber-500/30 transition-all flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer"
+                className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/25 px-2.5 py-1 rounded-xl border border-amber-500/30 transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer active:scale-95"
                 title="التبديل بين المدد الجاهزة والكتابة اليدوية"
               >
-                <Edit3 className="w-3 h-3 shrink-0" />
-                <span>{isCustomDuration ? "مدد جاهزة 📋" : "يدوي ✍️"}</span>
+                <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                <span>{isCustomDuration ? "مدد جاهزة" : "إدخال يدوي"}</span>
               </button>
             </div>
 
@@ -1158,7 +1179,7 @@ export function SuperDrugSearch({
                   </option>
                 ))}
                 <option value="CUSTOM_MANUAL" className="text-amber-400 font-bold">
-                  ✍️ + كتابة مانيول...
+                  + كتابة مانيول...
                 </option>
               </select>
             )}
@@ -1185,7 +1206,7 @@ export function SuperDrugSearch({
           <button
             type="submit"
             disabled={editingItemId ? false : isManualMode ? !manualDrugName.trim() : !query.trim()}
-            className={`flex-1 py-3.5 rounded-2xl font-black text-sm shadow-xl hover:brightness-110 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none ${
+            className={`flex-1 py-3.5 rounded-2xl font-black text-sm shadow-xl hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none ${
               editingItemId
                 ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 shadow-emerald-950/50"
                 : isManualMode
@@ -1196,15 +1217,15 @@ export function SuperDrugSearch({
             {editingItemId ? (
               <>
                 <Check className="w-5 h-5 stroke-[2.5]" />
-                <span>حفظ وتأكيد تعديل الدواء بالروشتة ✓</span>
+                <span>حفظ وتأكيد تعديل الدواء بالروشتة</span>
               </>
             ) : (
               <>
                 <Plus className="w-5 h-5 stroke-[2.5]" />
                 <span>
                   {isManualMode
-                    ? "إضافة هذا الدواء (يدوي مانيول) إلى الروشتة ✍️"
-                    : "إضافة هذا الدواء إلى الروشتة ✍️"}
+                    ? "إضافة هذا الدواء (إدخال يدوي) إلى الروشتة"
+                    : "إضافة هذا الدواء إلى الروشتة"}
                 </span>
               </>
             )}

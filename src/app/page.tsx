@@ -22,6 +22,11 @@ import {
   RotateCcw,
   Filter,
   AlertTriangle,
+  CreditCard,
+  BarChart3,
+  User,
+  Phone,
+  CheckCircle2,
 } from "lucide-react";
 import { usePrescriptionStore, SavedPrescription } from "@/store/usePrescriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
@@ -144,6 +149,81 @@ export default function DashboardPage() {
     return { topDrugName, maxCount };
   }, [filteredPrescriptions]);
 
+  // 1. Weekly Prescription Velocity (Last 7 Days activity)
+  const weeklyActivity = useMemo(() => {
+    const days: { dateStr: string; dayName: string; count: number; isToday: boolean }[] = [];
+    const now = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const dayName = d.toLocaleDateString("ar-EG", { weekday: "short" });
+      const isToday = i === 0;
+
+      const count = savedPrescriptions.filter((rx) => {
+        if (!rx.createdAt) return false;
+        return rx.createdAt.startsWith(dateStr);
+      }).length;
+
+      days.push({ dateStr, dayName, count, isToday });
+    }
+
+    const maxDayCount = Math.max(...days.map((d) => d.count), 1);
+    const totalWeeklyCount = days.reduce((acc, d) => acc + d.count, 0);
+    const peakDay = days.reduce((prev, curr) => (curr.count > prev.count ? curr : prev), days[0]);
+    const dailyAverage = (totalWeeklyCount / 7).toFixed(1);
+
+    return { days, maxDayCount, totalWeeklyCount, peakDay, dailyAverage };
+  }, [savedPrescriptions]);
+
+  // 2. Top Prescribed Drugs Distribution (Top 4 Medications with percentage spectrum)
+  const topMedicationsList = useMemo(() => {
+    const drugMap: Record<string, { count: number; doseForm: string }> = {};
+    filteredPrescriptions.forEach((rx) => {
+      rx.items.forEach((item) => {
+        const name = item.drugName?.trim();
+        if (name) {
+          if (!drugMap[name]) {
+            drugMap[name] = { count: 0, doseForm: item.doseForm || "صنف" };
+          }
+          drugMap[name].count += 1;
+        }
+      });
+    });
+
+    const sorted = Object.entries(drugMap)
+      .map(([drugName, data]) => ({ drugName, count: data.count, doseForm: data.doseForm }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4);
+
+    const totalCount = sorted.reduce((acc, curr) => acc + curr.count, 0) || 1;
+
+    return sorted.map((drug) => ({
+      ...drug,
+      percentage: Math.round((drug.count / totalCount) * 100),
+    }));
+  }, [filteredPrescriptions]);
+
+  // 3. Clinical Efficiency Stats
+  const clinicEfficiency = useMemo(() => {
+    const totalRxs = filteredPrescriptions.length;
+    if (totalRxs === 0) return { avgDrugsPerRx: "0.0", totalDrugsCount: 0, returningPatientsRate: "0%" };
+    const totalDrugsCount = filteredPrescriptions.reduce((acc, rx) => acc + rx.items.length, 0);
+    const avgDrugsPerRx = (totalDrugsCount / totalRxs).toFixed(1);
+
+    const patientRxCount: Record<string, number> = {};
+    filteredPrescriptions.forEach((rx) => {
+      const key = (rx.patient.phone || rx.patient.name).trim();
+      patientRxCount[key] = (patientRxCount[key] || 0) + 1;
+    });
+    const returningCount = Object.values(patientRxCount).filter((c) => c > 1).length;
+    const totalUnique = Object.keys(patientRxCount).length || 1;
+    const returningPatientsRate = Math.round((returningCount / totalUnique) * 100) + "%";
+
+    return { avgDrugsPerRx, totalDrugsCount, returningPatientsRate };
+  }, [filteredPrescriptions]);
+
   const displayPrescriptions = filteredPrescriptions.slice(0, 6);
 
   const handleShareWhatsApp = (rx: SavedPrescription) => {
@@ -219,13 +299,14 @@ export default function DashboardPage() {
 
           <Link
             href="/subscriptions"
-            className={`px-5 py-2.5 rounded-xl font-black text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+            className={`px-5 py-3 rounded-2xl font-black text-xs shadow-xl transition-all flex items-center gap-2.5 cursor-pointer shrink-0 active:scale-95 hover:brightness-110 group ${
               subDetails.daysRemaining <= 3
-                ? "bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/50"
-                : "bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-900/40"
+                ? "bg-rose-600 hover:bg-rose-500 text-white shadow-rose-950/50"
+                : "bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-amber-950/40"
             }`}
           >
-            <span>تجديد الاشتراك الآن 💳</span>
+            <CreditCard className="w-4 h-4 stroke-[2.2] group-hover:scale-110 transition-transform" />
+            <span>تجديد الاشتراك الآن</span>
             <ArrowUpRight className="w-4 h-4" />
           </Link>
         </div>
@@ -251,18 +332,22 @@ export default function DashboardPage() {
             <NewRxGuard>
               <Link
                 href="/prescriptions/new"
-                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2"
+                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2.5 cursor-pointer group hover:-translate-y-0.5"
               >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                <span>كتابة روشتة جديدة ✍️</span>
+                <div className="w-6 h-6 rounded-lg bg-slate-950/20 flex items-center justify-center text-slate-950 group-hover:scale-110 transition-transform">
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                </div>
+                <span>كتابة روشتة جديدة</span>
               </Link>
             </NewRxGuard>
 
             <Link
               href="/history"
-              className="px-5 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs transition-all flex items-center gap-2"
+              className="px-5 py-3.5 rounded-2xl bg-slate-950 border-2 border-slate-700/80 hover:border-emerald-500/50 hover:bg-slate-900 text-slate-200 hover:text-white font-bold text-xs transition-all shadow-md active:scale-95 flex items-center gap-2.5 cursor-pointer group hover:-translate-y-0.5"
             >
-              <Clock className="w-4 h-4 text-emerald-400" />
+              <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
+                <Clock className="w-3.5 h-3.5 stroke-[2.2]" />
+              </div>
               <span>أرشيف الروشتات</span>
             </Link>
           </div>
@@ -292,14 +377,14 @@ export default function DashboardPage() {
           </div>
 
           {/* Quick Presets */}
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => handlePresetSelect("all")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95 ${
                 activePreset === "all"
-                  ? "bg-emerald-500 text-slate-950 font-black shadow-md"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-950/40"
+                  : "bg-slate-950/80 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700"
               }`}
             >
               الكل
@@ -307,10 +392,10 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => handlePresetSelect("today")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95 ${
                 activePreset === "today"
-                  ? "bg-emerald-500 text-slate-950 font-black shadow-md"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-950/40"
+                  : "bg-slate-950/80 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700"
               }`}
             >
               اليوم
@@ -318,10 +403,10 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => handlePresetSelect("week")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95 ${
                 activePreset === "week"
-                  ? "bg-emerald-500 text-slate-950 font-black shadow-md"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-950/40"
+                  : "bg-slate-950/80 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700"
               }`}
             >
               آخر 7 أيام
@@ -329,10 +414,10 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => handlePresetSelect("month")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer active:scale-95 ${
                 activePreset === "month"
-                  ? "bg-emerald-500 text-slate-950 font-black shadow-md"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-950/40"
+                  : "bg-slate-950/80 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700"
               }`}
             >
               هذا الشهر
@@ -413,7 +498,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => handlePresetSelect("all")}
-                className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer active:scale-95"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>إعادة ضبط التصفية</span>
@@ -494,7 +579,7 @@ export default function DashboardPage() {
               <Pill className="w-6 h-6" />
             </div>
             <span className="px-3 py-1 rounded-full bg-amber-950/60 border border-amber-500/30 text-amber-300 font-bold text-xs">
-              +43k بالدليل
+              +200k صنف
             </span>
           </div>
 
@@ -555,7 +640,195 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Prescriptions Table (Filtered in Real Time) */}
+      {/* ============================================================ */}
+      {/* CLINICAL ANALYTICS & CHARTS SECTION (Aesthetic & Clutter-Free) */}
+      {/* ============================================================ */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Chart 1: نشاط كتابة الروشتات (آخر 7 أيام) */}
+        <div className="lg:col-span-7 p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-5 flex flex-col justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-inner">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
+                  <span>نشاط كتابة الروشتات</span>
+                  <span className="text-[10px] text-slate-400 font-normal">(آخر 7 أيام)</span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  معدل النشاط اليومي وتدفق المرضى بالعيادة
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 font-mono">
+              <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-xl border border-emerald-500/20 shadow-xs">
+                {weeklyActivity.totalWeeklyCount} روشتة هذا الأسبوع
+              </span>
+            </div>
+          </div>
+
+          {/* Vertical Bar Visual Spectrum */}
+          <div className="pt-1">
+            <div className="h-40 sm:h-44 flex items-end justify-between gap-2 sm:gap-4 px-2.5 sm:px-4 pt-6 pb-2.5 bg-slate-950/70 rounded-2xl border border-slate-800/90">
+              {weeklyActivity.days.map((day, idx) => {
+                const heightPercent = weeklyActivity.maxDayCount > 0
+                  ? Math.max(Math.round((day.count / weeklyActivity.maxDayCount) * 100), 10)
+                  : 10;
+                const isPeak = day.count > 0 && day.count === weeklyActivity.peakDay.count;
+
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center justify-end h-full gap-2 group relative">
+                    {/* Count badge above bar */}
+                    <span className={`text-[10px] font-mono font-bold transition-all ${
+                      day.count > 0 ? "text-emerald-300 font-black" : "text-slate-600"
+                    }`}>
+                      {day.count}
+                    </span>
+
+                    {/* Bar Pillar */}
+                    <div className="w-full max-w-[38px] bg-slate-900 rounded-xl p-0.5 flex flex-col justify-end h-full border border-slate-800/80">
+                      <div
+                        style={{ height: `${heightPercent}%` }}
+                        className={`w-full rounded-lg transition-all duration-500 ${
+                          isPeak
+                            ? "bg-gradient-to-t from-emerald-500 via-teal-400 to-cyan-400 shadow-md shadow-emerald-500/40"
+                            : day.count > 0
+                            ? "bg-gradient-to-t from-emerald-600/90 to-teal-500/90 group-hover:from-emerald-400 group-hover:to-cyan-400"
+                            : "bg-slate-800/30"
+                        }`}
+                      />
+                    </div>
+
+                    {/* Day Label */}
+                    <div className="text-center">
+                      <span className={`text-[11px] block transition-colors ${
+                        day.isToday
+                          ? "text-cyan-400 font-black"
+                          : "text-slate-400 font-bold"
+                      }`}>
+                        {day.dayName}
+                      </span>
+                      {day.isToday && (
+                        <span className="inline-block w-1 h-1 rounded-full bg-cyan-400 mt-0.5" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Insights Micro-Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-3 text-xs">
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80">
+                <span className="text-[10px] text-slate-500 block">المعدل اليومي:</span>
+                <span className="font-mono font-black text-slate-200 text-xs">
+                  {weeklyActivity.dailyAverage} روشتة/يوم
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80">
+                <span className="text-[10px] text-slate-500 block">اليوم الأكثر نشاطاً:</span>
+                <span className="font-bold text-emerald-400 text-xs truncate block">
+                  {weeklyActivity.peakDay.count > 0 ? `${weeklyActivity.peakDay.dayName} (${weeklyActivity.peakDay.count})` : "لا يوجد بعد"}
+                </span>
+              </div>
+              <div className="col-span-2 sm:col-span-1 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80">
+                <span className="text-[10px] text-slate-500 block">متوسط الأصناف:</span>
+                <span className="font-mono font-black text-cyan-300 text-xs">
+                  {clinicEfficiency.avgDrugsPerRx} دواء/روشتة
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart 2: توزيع أكثر الأدوية تكراراً بالعيادة */}
+        <div className="lg:col-span-5 p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-inner">
+                <Pill className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-100">الأدوية الأكثر تكراراً</h3>
+                <p className="text-[11px] text-slate-400">التوزيع النسبي لأصناف روشتات العيادة</p>
+              </div>
+            </div>
+
+            <span className="text-[10px] text-amber-400 font-mono font-bold bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+              أهم 4 أصناف
+            </span>
+          </div>
+
+          {/* Drugs Spectrum Rows */}
+          <div className="space-y-3.5 flex-1 justify-center flex flex-col">
+            {topMedicationsList.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 space-y-2">
+                <Pill className="w-8 h-8 text-slate-600 mx-auto opacity-40" />
+                <p className="text-xs">لم يتم تسجيل أدوية بعد في الفترة المحددة</p>
+                <p className="text-[10px] text-slate-600">بمجرد كتابة وحفظ الروشتات ستظهر إحصائيات الأدوية هنا تلقائياً</p>
+              </div>
+            ) : (
+              topMedicationsList.map((item, idx) => {
+                const rankGradients = [
+                  "from-emerald-500 to-teal-400",
+                  "from-cyan-500 to-blue-400",
+                  "from-amber-500 to-orange-400",
+                  "from-purple-500 to-indigo-400",
+                ];
+                const barColor = rankGradients[idx] || rankGradients[0];
+
+                return (
+                  <div key={idx} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-5 h-5 rounded-md bg-slate-950 border border-slate-800 text-[10px] font-mono font-bold flex items-center justify-center text-slate-400 shrink-0">
+                          #{idx + 1}
+                        </span>
+                        <span className="font-bold text-slate-200 truncate text-xs" title={item.drugName}>
+                          {item.drugName}
+                        </span>
+                        <span className="text-[10px] text-slate-500 px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800/80 shrink-0 hidden sm:inline">
+                          {item.doseForm}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0">
+                        <span className="font-bold text-slate-200">{item.count} مرة</span>
+                        <span className="text-slate-500 font-sans">({item.percentage}%)</span>
+                      </div>
+                    </div>
+
+                    {/* Spectrum Bar */}
+                    <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                      <div
+                        style={{ width: `${item.percentage}%` }}
+                        className={`h-full rounded-full bg-gradient-to-r ${barColor} transition-all duration-500`}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Quick Efficiency Badge */}
+          <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>إجمالي الأصناف الموصوفة:</span>
+            </span>
+            <span className="font-mono font-black text-emerald-400">
+              {clinicEfficiency.totalDrugsCount} صنف
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* RECENT PRESCRIPTIONS (Responsive: Cards on Mobile, Table on Desktop) */}
+      {/* ============================================================ */}
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -598,79 +871,147 @@ export default function DashboardPage() {
                 <NewRxGuard>
                   <Link
                     href="/prescriptions/new"
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                    className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>كتابة أول روشتة ✍️</span>
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>كتابة أول روشتة</span>
                   </Link>
                 </NewRxGuard>
               ) : (
                 <button
                   type="button"
                   onClick={() => handlePresetSelect("all")}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer border border-slate-700/60"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-950 border-2 border-slate-700/80 hover:border-emerald-500/50 hover:bg-slate-900 text-slate-200 text-xs font-bold transition-all cursor-pointer active:scale-95"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
+                  <RotateCcw className="w-4 h-4 text-emerald-400" />
                   <span>عرض جميع الروشتات</span>
                 </button>
               )}
             </div>
           </div>
         ) : (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-bold">
-                  <tr>
-                    <th className="p-4">رقم الروشتة</th>
-                    <th className="p-4">المريض</th>
-                    <th className="p-4">الهاتف</th>
-                    <th className="p-4">عدد الأدوية</th>
-                    <th className="p-4">التاريخ</th>
-                    <th className="p-4 text-center">إجراءات سريعة</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-medium">
-                  {displayPrescriptions.map((rx) => (
-                    <tr key={rx.id} className="hover:bg-slate-800/50 transition-colors">
-                      <td className="p-4 font-mono font-bold text-emerald-400" dir="ltr">
-                        {rx.prescriptionNo}
-                      </td>
-                      <td className="p-4 font-black text-slate-100">{rx.patient.name}</td>
-                      <td className="p-4 font-mono text-slate-300">{rx.patient.phone || "—"}</td>
-                      <td className="p-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold font-mono">
-                          {rx.items.length} صنف
-                        </span>
-                      </td>
-                      <td className="p-4 text-slate-400 font-mono">
-                        {new Date(rx.createdAt).toLocaleDateString("ar-EG")}
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleShareWhatsApp(rx)}
-                            className="p-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white transition-all cursor-pointer"
-                            title="إرسال عبر الواتساب"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                          </button>
-                          <Link
-                            href="/history"
-                            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all"
-                            title="عرض في السجل"
-                          >
-                            <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                          </Link>
+          <>
+            {/* 1. Mobile Cards View (Hidden on md and above - Eliminates any column squishing or overlap) */}
+            <div className="space-y-3.5 md:hidden">
+              {displayPrescriptions.map((rx) => (
+                <div
+                  key={rx.id}
+                  className="p-4 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-xl space-y-3.5 hover:border-emerald-500/40 transition-all"
+                >
+                  {/* Top Row: Patient Name & Rx # Badge */}
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-black text-slate-100 text-sm truncate">
+                          {rx.patient.name}
+                        </h4>
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400 mt-0.5">
+                          <Phone className="w-3 h-3 text-slate-500 shrink-0" />
+                          <span dir="ltr">{rx.patient.phone || "بدون هاتف"}</span>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    </div>
+
+                    <span className="font-mono text-[11px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-xl shrink-0" dir="ltr">
+                      #{rx.prescriptionNo}
+                    </span>
+                  </div>
+
+                  {/* Middle Row: Meta details */}
+                  <div className="flex items-center justify-between text-xs text-slate-300">
+                    <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-400">
+                      <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span>{new Date(rx.createdAt).toLocaleDateString("ar-EG")}</span>
+                    </div>
+
+                    <span className="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-emerald-300 font-bold font-mono text-[11px] flex items-center gap-1.5">
+                      <Pill className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>{rx.items.length} أصناف دوائية</span>
+                    </span>
+                  </div>
+
+                  {/* Bottom Row: Mobile Ergonomic Action Buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/60">
+                    <button
+                      type="button"
+                      onClick={() => handleShareWhatsApp(rx)}
+                      className="py-2.5 px-3 rounded-2xl bg-emerald-600/15 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-sm"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 stroke-[2.2]" />
+                      <span>واتساب</span>
+                    </button>
+
+                    <Link
+                      href="/history"
+                      className="py-2.5 px-3 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/80 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm text-center"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>عرض بالسجل</span>
+                    </Link>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+
+            {/* 2. Desktop Table View (Only visible on md screens and above - Roomy and crisp) */}
+            <div className="hidden md:block bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 font-bold">
+                    <tr>
+                      <th className="p-4">رقم الروشتة</th>
+                      <th className="p-4">المريض</th>
+                      <th className="p-4">الهاتف</th>
+                      <th className="p-4">عدد الأدوية</th>
+                      <th className="p-4">التاريخ</th>
+                      <th className="p-4 text-center">إجراءات سريعة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-medium">
+                    {displayPrescriptions.map((rx) => (
+                      <tr key={rx.id} className="hover:bg-slate-800/50 transition-colors">
+                        <td className="p-4 font-mono font-bold text-emerald-400" dir="ltr">
+                          #{rx.prescriptionNo}
+                        </td>
+                        <td className="p-4 font-black text-slate-100">{rx.patient.name}</td>
+                        <td className="p-4 font-mono text-slate-300">{rx.patient.phone || "—"}</td>
+                        <td className="p-4">
+                          <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-bold font-mono">
+                            {rx.items.length} صنف
+                          </span>
+                        </td>
+                        <td className="p-4 text-slate-400 font-mono">
+                          {new Date(rx.createdAt).toLocaleDateString("ar-EG")}
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleShareWhatsApp(rx)}
+                              className="p-2.5 rounded-2xl bg-emerald-600/15 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 transition-all cursor-pointer active:scale-95 shadow-sm"
+                              title="إرسال عبر الواتساب"
+                            >
+                              <MessageCircle className="w-4 h-4 stroke-[2.2]" />
+                            </button>
+                            <Link
+                              href="/history"
+                              className="p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-all active:scale-95 shadow-sm"
+                              title="عرض في السجل"
+                            >
+                              <Printer className="w-4 h-4 text-emerald-400" />
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

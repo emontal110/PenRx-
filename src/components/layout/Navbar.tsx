@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   FileText,
   Clock,
@@ -22,6 +22,7 @@ import packageInfo from "../../../package.json";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { subscriptions, machineId, syncWithServer } = useSubscriptionStore();
   const { clinic } = useClinicStore();
   const [mounted, setMounted] = useState(false);
@@ -48,6 +49,18 @@ export function Navbar() {
     subDetails.record?.planId === "trial" ||
     subDetails.record?.planName?.includes("تجريب")
   );
+
+  // Smoothly protect links when subscription is not active:
+  // Prevents screen switching or flashing lock screens and reminds the user cleanly
+  const handleProtectedNav = (e: React.MouseEvent, targetHref: string) => {
+    if (mounted && !subDetails.isActive) {
+      e.preventDefault();
+      if (pathname !== "/subscriptions") {
+        router.push("/subscriptions");
+      }
+      showGlobalToast("🔒 يرجى تفعيل أو تجديد الاشتراك أولاً للوصول إلى هذه الميزة", "info");
+    }
+  };
 
   // Expiry notification when entering/logging in the app
   useEffect(() => {
@@ -101,7 +114,11 @@ export function Navbar() {
             {/* Right: Brand & Clinic */}
             <div className="flex items-center gap-3 shrink-0">
               {/* 1. الشعار على اليمين */}
-              <Link href="/" className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-md shadow-emerald-950/40 hover:border-emerald-400 hover:scale-105 transition-all shrink-0">
+              <Link
+                href="/"
+                onClick={(e) => handleProtectedNav(e, "/")}
+                className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-md shadow-emerald-950/40 hover:border-emerald-400 hover:scale-105 transition-all shrink-0"
+              >
                 <Image
                   src="/logo-penrx.jpg"
                   alt="PenRX+"
@@ -150,7 +167,11 @@ export function Navbar() {
                   )}
 
                   {/* 3. اسم التطبيق PenRX مع + بعد حرف X */}
-                  <Link href="/" className="group inline-flex items-center">
+                  <Link
+                    href="/"
+                    onClick={(e) => handleProtectedNav(e, "/")}
+                    className="group inline-flex items-center"
+                  >
                     <span dir="ltr" className="text-lg sm:text-xl font-black bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent tracking-tight inline-flex items-center">
                       PenRX<span className="text-emerald-400 font-black">+</span>
                     </span>
@@ -161,8 +182,16 @@ export function Navbar() {
                     v{packageInfo.version}
                   </span>
                 </div>
-                <Link href="/" className="text-[11px] font-bold text-slate-400 -mt-0.5 truncate max-w-[140px] sm:max-w-[220px] hover:text-slate-200 transition-colors">
-                  {mounted ? (clinic.nameAr || clinic.name || "العيادة") : ""}
+                <Link
+                  href="/"
+                  onClick={(e) => handleProtectedNav(e, "/")}
+                  className="text-[11px] font-bold text-slate-400 -mt-0.5 truncate max-w-[140px] sm:max-w-[220px] hover:text-slate-200 transition-colors"
+                >
+                  {mounted ? (
+                    subDetails.isActive || subDetails.isPending
+                      ? (clinic.nameAr || clinic.name || "العيادة")
+                      : "العيادة الطبية الذكية"
+                  ) : ""}
                 </Link>
               </div>
             </div>
@@ -178,7 +207,8 @@ export function Navbar() {
                     <Link
                       key={link.href}
                       href={link.href}
-                      className="px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-md shadow-emerald-950/40 hover:brightness-110 active:scale-95"
+                      onClick={(e) => handleProtectedNav(e, link.href)}
+                      className="px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 shadow-md shadow-emerald-950/40 active:scale-95"
                     >
                       <Icon className="w-3.5 h-3.5 shrink-0 stroke-[3]" />
                       <span>{link.label}</span>
@@ -190,6 +220,7 @@ export function Navbar() {
                   <Link
                     key={link.href}
                     href={link.href}
+                    onClick={(e) => handleProtectedNav(e, link.href)}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
                       isActive
                         ? "bg-slate-800 text-emerald-300 border border-emerald-500/30 shadow-sm"
@@ -204,23 +235,32 @@ export function Navbar() {
             </nav>
 
             {/* Left: Subscription Status Pill & Ultra-Modern Quick Reload Button */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <Link
                 href="/subscriptions"
                 suppressHydrationWarning
-                className="px-3 sm:px-3.5 py-1.5 rounded-xl border text-xs font-black flex items-center gap-2 transition-all hover:scale-105 shadow-md shadow-orange-950/50 bg-gradient-to-r from-orange-500/20 via-amber-500/20 to-orange-500/15 border-orange-500/50 hover:border-orange-400 text-orange-300 hover:text-orange-100 cursor-pointer"
+                className="px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-xl border text-xs font-black flex items-center gap-1.5 transition-all hover:scale-105 shadow-sm shadow-emerald-950/40 bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-cyan-500/10 border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 cursor-pointer shrink-0"
                 title="إدارة الباقة والاشتراك والدفع"
               >
-                <Crown className="w-3.5 h-3.5 shrink-0 text-orange-400" />
-                <span suppressHydrationWarning className="font-black">
+                <Crown className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                <span suppressHydrationWarning className="font-black text-[11px] sm:text-xs">
                   {!mounted ? (
-                    <span className="inline-block w-16 h-3 bg-orange-500/20 rounded animate-pulse" />
+                    <span className="inline-block w-8 sm:w-16 h-3 bg-emerald-500/20 rounded animate-pulse" />
                   ) : subDetails.isActive ? (
-                    `نشط (${subDetails.daysRemaining} يوم)`
+                    <>
+                      <span className="sm:hidden">{subDetails.daysRemaining}ي</span>
+                      <span className="hidden sm:inline">نشط ({subDetails.daysRemaining} يوم)</span>
+                    </>
                   ) : subDetails.isPending ? (
-                    "قيد المراجعة ⏳"
+                    <>
+                      <span className="sm:hidden">مراجعة</span>
+                      <span className="hidden sm:inline">قيد المراجعة</span>
+                    </>
                   ) : (
-                    "اشترك الآن ⚡"
+                    <>
+                      <span className="sm:hidden">اشتراك</span>
+                      <span className="hidden sm:inline">اشترك الآن</span>
+                    </>
                   )}
                 </span>
               </Link>
@@ -230,7 +270,7 @@ export function Navbar() {
                 type="button"
                 onClick={handlePageReload}
                 disabled={isReloading}
-                className="p-2 sm:p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 border border-slate-800 hover:border-emerald-500/40 transition-all shadow-md active:scale-90 cursor-pointer flex items-center justify-center shrink-0 group"
+                className="p-1.5 sm:p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 border border-slate-800 hover:border-emerald-500/40 transition-all shadow-md active:scale-90 cursor-pointer flex items-center justify-center shrink-0 group"
                 title="تحديث وإعادة تحميل الصفحة والبيانات"
               >
                 <RotateCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:rotate-180 transition-transform duration-300 ${isReloading ? "animate-spin text-emerald-400" : ""}`} />
@@ -252,6 +292,7 @@ export function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={(e) => handleProtectedNav(e, item.href)}
                   className="-mt-5 p-3 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 shadow-xl shadow-emerald-950/60 border-2 border-slate-950 active:scale-95 transition-transform flex flex-col items-center justify-center"
                 >
                   <Icon className="w-6 h-6 stroke-[2.5]" />
@@ -263,6 +304,7 @@ export function Navbar() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={(e) => handleProtectedNav(e, item.href)}
                 className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
                   isActive
                     ? "text-emerald-400 font-black"

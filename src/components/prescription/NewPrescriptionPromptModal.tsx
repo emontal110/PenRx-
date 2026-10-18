@@ -141,35 +141,37 @@ export function NewPrescriptionPromptModal({
             </div>
 
             {/* Action Buttons for Step 1 */}
-            <div className="space-y-2 pt-1">
+            <div className="space-y-2.5 pt-1">
               {/* Option A: Save and Clear */}
               <button
                 type="button"
                 onClick={handleSaveAndContinue}
-                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:brightness-110 active:scale-[0.99] text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Save className="w-4 h-4" />
-                <span>الحفظ والاستمرار 💾</span>
+                <div className="w-6 h-6 rounded-lg bg-slate-950/15 flex items-center justify-center">
+                  <Save className="w-4 h-4 text-slate-950 stroke-[2.5]" />
+                </div>
+                <span>الحفظ والاستمرار</span>
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 {/* Option B: Continue anyway (triggers Step 2 confirmation) */}
                 <button
                   type="button"
                   onClick={handleProceedToStep2}
-                  className="flex-1 py-3 px-3 rounded-2xl bg-slate-800 hover:bg-rose-950/40 hover:border-rose-500/40 hover:text-rose-300 text-slate-300 border border-slate-700 font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex-1 py-3 px-4 rounded-2xl bg-slate-950/80 hover:bg-rose-950/30 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 border-2 border-slate-800 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>المتابعة على أية حال ⚠️</span>
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                  <span>المتابعة دون حفظ</span>
                 </button>
 
                 {/* Option C: Cancel and keep working */}
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="py-3 px-4 rounded-2xl bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 font-bold text-xs transition-colors cursor-pointer"
+                  className="py-3 px-5 rounded-2xl bg-slate-950/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border-2 border-slate-800 font-bold text-xs transition-all cursor-pointer active:scale-95"
                 >
-                  إلغاء ✕
+                  إلغاء
                 </button>
               </div>
             </div>
@@ -238,17 +240,17 @@ export function NewPrescriptionPromptModal({
               <button
                 type="button"
                 onClick={handleConfirmDiscard}
-                className="flex-1 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:brightness-110 active:scale-[0.99] text-white font-black text-xs sm:text-sm shadow-xl shadow-rose-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="flex-1 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-red-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-xl shadow-rose-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" />
-                <span>نعم، تأكيد الحذف وتفريغ الروشتة 🗑️</span>
+                <Trash2 className="w-4 h-4 stroke-[2.2]" />
+                <span>نعم، تأكيد تفريغ الروشتة</span>
               </button>
 
               {/* Back to Step 1 or Cancel */}
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="py-3.5 px-5 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
                 <span>تراجع</span>
                 <ArrowRight className="w-3.5 h-3.5" />

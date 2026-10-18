@@ -327,9 +327,17 @@ if (fs.existsSync(distElectron)) {
 
   // Copy differential update metadata files (.blockmap, latest.yml) for Classico-style instant delta updates
   for (const f of files) {
-    if (f.endsWith(".blockmap") || f === "latest.yml") {
+    if (f.endsWith(".blockmap")) {
       fs.copyFileSync(path.join(distElectron, f), path.join(releasesDir, f));
-      console.log(`✓ Updated differential update metadata: releases/${f}`);
+      fs.copyFileSync(path.join(distElectron, f), path.join(releasesDir, "PenRX+-Setup.exe.blockmap"));
+      console.log(`✓ Updated differential blockmap: releases/${f} & releases/PenRX+-Setup.exe.blockmap`);
+    } else if (f === "latest.yml") {
+      let ymlContent = fs.readFileSync(path.join(distElectron, f), "utf8");
+      // Ensure latest.yml points accurately to PenRX+-Setup.exe so electron-updater can resolve differential blockmaps
+      ymlContent = ymlContent.replace(/url:\s+[^\r\n]+/g, "url: PenRX+-Setup.exe");
+      ymlContent = ymlContent.replace(/path:\s+[^\r\n]+/g, "path: PenRX+-Setup.exe");
+      fs.writeFileSync(path.join(releasesDir, "latest.yml"), ymlContent, "utf8");
+      console.log(`✓ Updated differential manifest: releases/latest.yml (pointing to PenRX+-Setup.exe)`);
     }
   }
 }

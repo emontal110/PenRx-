@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AlertTriangle, Clock, ArrowUpRight, Sparkles, X, Bell, BellRing, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Clock, ArrowUpRight, Sparkles, X, Bell, BellRing, ShieldCheck, CreditCard } from "lucide-react";
 import { useSubscriptionStore, getSubscriptionDetails } from "@/store/useSubscriptionStore";
 
 export function SubscriptionExpiryBanner() {
@@ -185,13 +185,14 @@ export function SubscriptionExpiryBanner() {
         <div className="flex items-center gap-2 shrink-0 mr-auto sm:mr-0">
           <Link
             href="/subscriptions"
-            className={`px-4 sm:px-5 py-2.5 rounded-xl font-black text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
+            className={`px-4 sm:px-5 py-2.5 rounded-2xl font-black text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               isUrgent
                 ? "bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white shadow-rose-950/60 ring-2 ring-rose-400/40"
                 : "bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 shadow-amber-950/50"
             }`}
           >
-            <span>تجديد الاشتراك الآن 💳</span>
+            <CreditCard className="w-4 h-4 stroke-[2.2]" />
+            <span>تجديد الاشتراك الآن</span>
             <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
           </Link>
 

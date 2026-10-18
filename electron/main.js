@@ -22,6 +22,10 @@ try {
   autoUpdater = require("electron-updater").autoUpdater;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
+  // Explicitly enable differential (delta) downloads so only changes are fetched
+  autoUpdater.disableDifferentialDownload = false;
+  autoUpdater.disableWebInstaller = true;
+  autoUpdater.logger = console;
 } catch (e) {
   console.warn("[PenRX+ AutoUpdater] electron-updater not initialized:", e.message);
 }

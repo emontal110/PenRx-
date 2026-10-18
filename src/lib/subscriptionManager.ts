@@ -857,14 +857,22 @@ export async function suspendSubscription(subscriptionId: string): Promise<Subsc
 }
 
 /**
- * Delete subscription
+ * Delete subscription completely and cascade wipe all subscriber data (prescriptions & backups)
+ * ONLY executed on explicit subscription deletion by admin (NOT on expiration!)
  */
 export async function deleteSubscription(subscriptionId: string): Promise<boolean> {
   await hydrateCache();
+  const sub =
+    globalSubscriptionsCache.get(subscriptionId) ||
+    (await prisma.subscription.findUnique({ where: { id: subscriptionId } }).catch(() => null));
+  const subscriberId = sub?.subscriberId;
+  const machineId = sub?.machineId;
+
   globalSubscriptionsCache.delete(subscriptionId);
 
+  // 1. Delete subscription from Prisma & Supabase
   try {
-    await prisma.subscription.delete({ where: { id: subscriptionId } });
+    await prisma.subscription.deleteMany({ where: { id: subscriptionId } });
   } catch {}
 
   try {
@@ -872,6 +880,49 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
       method: "DELETE",
     });
   } catch {}
+
+  // 2. Cascade delete all prescriptions & backups belonging to this subscriber
+  const SUPABASE_BASE_ROOT = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
+  const supabaseHeaders = {
+    apikey: SUPABASE_KEY,
+    Authorization: "Bearer " + SUPABASE_KEY,
+    "Content-Type": "application/json",
+  };
+
+  if (subscriberId) {
+    // Delete CloudPrescription from Supabase
+    try {
+      await fetch(
+        `${SUPABASE_BASE_ROOT}/CloudPrescription?subscriberId=eq.${encodeURIComponent(subscriberId)}`,
+        { method: "DELETE", headers: supabaseHeaders }
+      );
+    } catch {}
+
+    // Delete CloudBackup from Supabase
+    try {
+      await fetch(
+        `${SUPABASE_BASE_ROOT}/CloudBackup?subscriberId=eq.${encodeURIComponent(subscriberId)}`,
+        { method: "DELETE", headers: supabaseHeaders }
+      );
+    } catch {}
+
+    // Delete relational prescriptions from Prisma
+    try {
+      await prisma.prescription.deleteMany({
+        where: { subscriberId },
+      });
+    } catch {}
+  }
+
+  // Also clean up any extra duplicate subscription records tied to machineId
+  if (machineId) {
+    try {
+      await fetch(
+        `${SUPABASE_BASE_ROOT}/Subscription?machineId=eq.${encodeURIComponent(machineId)}`,
+        { method: "DELETE", headers: supabaseHeaders }
+      );
+    } catch {}
+  }
 
   return true;
 }

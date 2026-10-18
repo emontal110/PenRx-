@@ -112,7 +112,7 @@
               <span class="font-black text-lg sm:text-2xl text-white tracking-tight font-outfit inline-flex items-center select-none" dir="ltr">
                 PenRX<span class="text-emerald-400 font-extrabold leading-none">+</span>
               </span>
-              <span class="app-pkg-version text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-outfit">v1.30</span>
+              <span class="app-pkg-version text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-outfit">v1.31</span>
             </div>
             <p class="text-[10px] sm:text-[11px] text-slate-400 font-semibold hidden md:block truncate">منظومة الروشتة الطبية الذكية وإدارة العيادات</p>
           </div>
@@ -140,7 +140,7 @@
         <!-- Live Status Pill (Linked to package.json version) -->
         <div class="inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] sm:text-xs font-bold mb-5 sm:mb-6 max-w-full">
           <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-ping"></span>
-          <span class="truncate">الإصدار الرسمي <span class="app-pkg-version font-mono font-bold">v1.30</span> متاح الآن للتحميل المباشر</span>
+          <span class="truncate">الإصدار الرسمي <span class="app-pkg-version font-mono font-bold">v1.31</span> متاح الآن للتحميل المباشر</span>
         </div>
 
         <!-- Main Title -->
@@ -167,7 +167,9 @@
               <div>
                 <div class="flex items-center justify-between mb-4">
                   <div class="w-13 h-13 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-950/40">
-                    <i data-lucide="monitor" class="w-7 h-7 stroke-[2]"></i>
+                    <svg class="w-7 h-7 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M0 3.449L9.75 2.1v9.451H0V3.449zm10.949-9.602L24 0v11.4H10.949V2.247zM0 12.6h9.75v9.451L0 20.699V12.6zm10.949 0H24V24l-13.051-1.8V12.6z"/>
+                    </svg>
                   </div>
                   <span class="text-[11px] font-bold px-3 py-1 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
                     كمبيوتر العيادة • Windows
@@ -187,11 +189,11 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400 shrink-0"></i>
-                    <span>يعمل بالكامل بدون إنترنت (Offline Engine)</span>
+                    <span>محرك بحث ذكي مدمج (+200,000 دواء ومستحضر) وتحديث صامت تلقائي</span>
                   </div>
                   <div class="flex items-center gap-2">
                     <i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400 shrink-0"></i>
-                    <span>تثبيت بنقرة واحدة وتحديث تلقائي</span>
+                    <span>تعبئة ذكية للجرعات وتثبيت بنقرة واحدة بدون إنترنت</span>
                   </div>
                 </div>
               </div>
@@ -204,7 +206,9 @@
                   download
                   class="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-black text-sm sm:text-base hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-cyan-950/60 flex items-center justify-center gap-2.5 cursor-pointer group"
                 >
-                  <i data-lucide="download" class="w-5 h-5 stroke-[2.5] group-hover:translate-y-0.5 transition-transform"></i>
+                  <svg class="w-5 h-5 text-slate-950 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M0 3.449L9.75 2.1v9.451H0V3.449zm10.949-9.602L24 0v11.4H10.949V2.247zM0 12.6h9.75v9.451L0 20.699V12.6zm10.949 0H24V24l-13.051-1.8V12.6z"/>
+                  </svg>
                   <span>تحميل مباشر للويندوز (.exe)</span>
                 </a>
                 <p class="text-[11px] text-slate-500 text-center mt-2.5 font-medium">
@@ -221,13 +225,8 @@
               <div>
                 <div class="flex items-center justify-between mb-4">
                   <div class="w-13 h-13 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-950/40">
-                    <svg class="w-7 h-7 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-                      <line x1="6.5" y1="5.5" x2="4.5" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                      <line x1="17.5" y1="5.5" x2="19.5" y2="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                      <path d="M4 16h16c0-4.418-3.582-8-8-8s-8 3.582-8 8z" />
-                      <circle cx="8.5" cy="12.5" r="1.2" fill="#020617" />
-                      <circle cx="15.5" cy="12.5" r="1.2" fill="#020617" />
-                      <rect x="5.5" y="17.5" width="13" height="1.5" rx="0.75" opacity="0.6" />
+                    <svg class="w-7 h-7 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.412 13.8533 8.1 12 8.1s-3.5902.312-5.1368.8497L4.8409 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/>
                     </svg>
                   </div>
                   <span class="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
@@ -248,11 +247,11 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 shrink-0"></i>
-                    <span>مزامنة سحابية فورية مع كمبيوتر العيادة</span>
+                    <span>بنك أدوية فائق السرعة (+200,000 دواء) وتعبئة ذكية للجرعات</span>
                   </div>
                   <div class="flex items-center gap-2">
                     <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 shrink-0"></i>
-                    <span>إرسال الروشتة للمريض PDF عبر واتساب</span>
+                    <span>إرسال الروشتة للمريض PDF عبر واتساب ومزامنة فورية</span>
                   </div>
                 </div>
               </div>
@@ -265,7 +264,9 @@
                   download
                   class="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-slate-950 font-black text-sm sm:text-base hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2.5 cursor-pointer group"
                 >
-                  <i data-lucide="download" class="w-5 h-5 stroke-[2.5] group-hover:translate-y-0.5 transition-transform"></i>
+                  <svg class="w-5 h-5 text-slate-950 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.412 13.8533 8.1 12 8.1s-3.5902.312-5.1368.8497L4.8409 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/>
+                  </svg>
                   <span>تحميل مباشر للأندرويد (.apk)</span>
                 </a>
                 <div class="flex items-center justify-center gap-2 mt-2.5">
@@ -288,10 +289,12 @@
 
               <div>
                 <div class="flex items-center justify-between mb-4">
-                  <div class="w-13 h-13 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-950/40">
-                    <span class="text-2xl font-black">🍏</span>
+                  <div class="w-13 h-13 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-100 shadow-lg shadow-slate-950/40">
+                    <svg class="w-7 h-7 text-slate-100 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.64-.78 1.08-1.86.96-2.95-1 .04-2.18.66-2.83 1.43-.58.67-1.09 1.77-.95 2.83 1.11.09 2.21-.57 2.82-1.31z"/>
+                    </svg>
                   </div>
-                  <span class="text-[11px] font-bold px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  <span class="text-[11px] font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-200 border border-slate-700">
                     هواتف الآيفون • Apple iOS
                   </span>
                 </div>
@@ -329,7 +332,9 @@
                   onclick="toggleIosGuideModal()"
                   class="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 font-black text-sm sm:text-base hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-amber-950/60 flex items-center justify-center gap-2 cursor-pointer group"
                 >
-                  <i data-lucide="smartphone" class="w-5 h-5 stroke-[2.5] group-hover:scale-110 transition-transform"></i>
+                  <svg class="w-5 h-5 text-slate-950 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.64-.78 1.08-1.86.96-2.95-1 .04-2.18.66-2.83 1.43-.58.67-1.09 1.77-.95 2.83 1.11.09 2.21-.57 2.82-1.31z"/>
+                  </svg>
                   <span>دليل تثبيت الآيفون بالصور 📲</span>
                 </button>
                 <div class="flex items-center justify-center gap-2 mt-2.5">
@@ -367,7 +372,7 @@
             </div>
             <h4 class="font-bold text-white text-base mb-1.5">تنزيل وتثبيت البرنامج</h4>
             <p class="text-xs text-slate-400 leading-relaxed">
-              حمّل ملف التثبيت المناسب لجهازك (كمبيوتر أو هاتف) وثبّته بنقرة واحدة.
+              حمّل النسخة المتوافقة مع جهازك (كمبيوتر ويندوز، هاتف أندرويد، أو آيفون) وافتح البرنامج بنقرة واحدة.
             </p>
           </div>
 
@@ -375,9 +380,9 @@
             <div class="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400 font-black font-outfit text-lg flex items-center justify-center mb-4">
               2
             </div>
-            <h4 class="font-bold text-white text-base mb-1.5">نسخ معرّف الجهاز</h4>
+            <h4 class="font-bold text-white text-base mb-1.5">اختيار الباقة وطريقة الدفع</h4>
             <p class="text-xs text-slate-400 leading-relaxed">
-              عند فتح البرنامج لأول مرة، يظهر لك معرّف أمان فريد وخاص بجهازك؛ اضغط "نسخ المعرّف".
+              اختر باقتك المفضلة (أو التجربة المجانية 30 يوماً)، وحوّل المبلغ بسهولة عبر فودافون كاش أو انستاباي إلى الرقم الموضح داخل صفحة الدفع.
             </p>
           </div>
 
@@ -385,9 +390,9 @@
             <div class="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-black font-outfit text-lg flex items-center justify-center mb-4">
               3
             </div>
-            <h4 class="font-bold text-white text-base mb-1.5">إرسال المعرف والتفعيل</h4>
+            <h4 class="font-bold text-white text-base mb-1.5">تأكيد الطلب والتفعيل الفوري</h4>
             <p class="text-xs text-slate-400 leading-relaxed">
-              أرسل المعرف ورقم هاتفك لإدارة المنظومة لتفعيل الترخيص فورياً وبدء عمل عيادتك.
+              اكتب بيانات الطبيب والعيادة ورقم العملية (Ref ID) لتأكيد الاشتراك؛ يتم ربط جهازك وتفعيل اشتراكك فوراً لتبدأ العمل بكامل مميزات الذكاء الاصطناعي.
             </p>
           </div>
 
@@ -583,16 +588,6 @@
         <p class="text-[11px] text-slate-500">
           تطوير وإشراف هندسي طبي مخصص لدعم الأطباء والمراكز التخصصية
         </p>
-        <div class="pt-2">
-          <a
-            href="portal.html"
-            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/60 hover:bg-slate-800 text-[11px] text-slate-500 hover:text-emerald-400 border border-slate-800 transition-colors"
-            title="بورتال الإدارة والتحكم السري بالمشتركين"
-          >
-            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
-            <span>بورتال إدارة وتراخيص الأطباء 🔒</span>
-          </a>
-        </div>
       </div>
     </footer>
 
@@ -649,8 +644,10 @@
         <i data-lucide="x" class="w-4 h-4"></i>
       </button>
 
-      <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-1">
-        <span class="text-2xl">🍏</span>
+      <div class="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 text-slate-100 flex items-center justify-center mx-auto mb-1">
+        <svg class="w-6 h-6 text-slate-100 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.64-.78 1.08-1.86.96-2.95-1 .04-2.18.66-2.83 1.43-.58.67-1.09 1.77-.95 2.83 1.11.09 2.21-.57 2.82-1.31z"/>
+        </svg>
       </div>
 
       <div class="text-center">

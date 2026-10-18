@@ -85,10 +85,10 @@ export function getSubscriptionDetails(subscriptions: SubscriptionRecord[], curr
       (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(currentMachineId))
   );
 
-  // Prioritize ACTIVE, then PENDING, then most recent record
-  const activeSub = matchingSubs.find((s) => s.status === "ACTIVE") || subscriptions.find((s) => s.status === "ACTIVE");
-  const pendingSub = matchingSubs.find((s) => s.status === "PENDING") || subscriptions.find((s) => s.status === "PENDING");
-  const sub = activeSub || pendingSub || matchingSubs[0] || subscriptions[0] || null;
+  // Strictly evaluate subscriptions belonging to this machine ID
+  const activeSub = matchingSubs.find((s) => s.status === "ACTIVE");
+  const pendingSub = matchingSubs.find((s) => s.status === "PENDING");
+  const sub = activeSub || pendingSub || matchingSubs[0] || null;
 
   if (!sub) {
     return {
@@ -551,7 +551,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           return;
         }
 
-        // If cloud database explicitly confirmed that no subscription exists (deleted or revoked)
+        // If cloud database explicitly confirmed that no subscription exists (deleted or revoked by admin)
         if ((supaResponded && supaReportedNoSub) || (serverResponded && serverReportedNoSub)) {
           set({
             subscriptions: [],
@@ -562,8 +562,21 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           if (typeof window !== "undefined") {
             try {
               localStorage.removeItem("penrx_last_sub");
+              localStorage.removeItem("penrx_clinic_storage");
+              localStorage.removeItem("penrx_prescription_storage");
+              localStorage.removeItem("penrx_was_pending");
+              localStorage.removeItem("penrx_trial_claimed");
             } catch {}
           }
+          // Reset clinic profile & prescriptions locally so stale names/records disappear
+          try {
+            const { useClinicStore } = await import("./useClinicStore");
+            useClinicStore.getState().resetClinic();
+          } catch {}
+          try {
+            const { usePrescriptionStore } = await import("./usePrescriptionStore");
+            usePrescriptionStore.getState().clearAllPrescriptions();
+          } catch {}
         }
       },
     }),

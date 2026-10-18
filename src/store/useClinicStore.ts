@@ -74,6 +74,7 @@ interface ClinicStoreState {
   deleteBranch: (id: string) => void;
   setActiveBranchId: (id: string) => void;
   setDefaultBranch: (id: string) => void;
+  resetClinic: () => void;
 }
 
 const DEFAULT_CLINIC: ClinicSettings = {
@@ -240,6 +241,13 @@ export const useClinicStore = create<ClinicStoreState>()(
             isDefault: b.id === id,
           })),
         })),
+
+      resetClinic: () =>
+        set({
+          clinic: { ...DEFAULT_CLINIC },
+          branches: [],
+          activeBranchId: "",
+        }),
     }),
     {
       name: "penrx_clinic_storage",

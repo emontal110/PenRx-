@@ -74,8 +74,7 @@ export default function SubscriptionsPage() {
   const { clinic } = useClinicStore();
 
   const [mounted, setMounted] = useState(false);
-  const [selectedPaidPlanId, setSelectedPaidPlanId] = useState<string>("annual_vip");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>("trial");
 
   // Modal & Flow states
   const [activePlanForCheckout, setActivePlanForCheckout] = useState<{
@@ -86,6 +85,13 @@ export default function SubscriptionsPage() {
     price: number;
     isTrial?: boolean;
   } | null>(null);
+
+  // Smoothly scroll to top when opening checkout
+  useEffect(() => {
+    if (activePlanForCheckout) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [activePlanForCheckout]);
 
   const [showOverwriteWarning, setShowOverwriteWarning] = useState(false);
   const [pendingPlanToConfirm, setPendingPlanToConfirm] = useState<{
@@ -114,22 +120,9 @@ export default function SubscriptionsPage() {
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [showIosGuideModal, setShowIosGuideModal] = useState(false);
 
-  // Sync clinic profile defaults when modal opens
-  useEffect(() => {
-    if (activePlanForCheckout) {
-      if (!checkoutDoctorName && clinic.doctorName) {
-        setCheckoutDoctorName(clinic.doctorName);
-      }
-      if (!checkoutClinicName && (clinic.nameAr || clinic.name)) {
-        setCheckoutClinicName(clinic.nameAr || clinic.name || "");
-      }
-    }
-  }, [activePlanForCheckout, clinic.doctorName, clinic.nameAr, clinic.name, checkoutDoctorName, checkoutClinicName]);
-
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const TRANSFER_NUMBER = "01094085228";
 
-  // Fast polling sync (every 2.5 seconds) for instant unlock upon portal action
+  // Fast polling sync (every 8 seconds) for instant unlock upon portal action
   useEffect(() => {
     setMounted(true);
     initHardwareId().catch(() => {});
@@ -137,23 +130,6 @@ export default function SubscriptionsPage() {
     const interval = setInterval(syncWithServer, 8000);
     return () => clearInterval(interval);
   }, [syncWithServer, initHardwareId]);
-
-  // Close dropdown on outside click with touch support & DOM detachment safety
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent | TouchEvent) {
-      const target = event.target as Node | null;
-      if (!target || !document.contains(target)) return;
-      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
-        setIsDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("touchstart", handleClickOutside, { passive: true });
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("touchstart", handleClickOutside);
-    };
-  }, []);
 
   const subDetails = getSubscriptionDetails(subscriptions, machineId);
   const currentSub = subDetails.record || null;
@@ -220,8 +196,8 @@ export default function SubscriptionsPage() {
     features: [
       "تجربة مجانية بالكامل لمدة شهر (30 يوماً)",
       "🧠 مساعد الذكاء الاصطناعي لفحص وتنبيه تعارض وتداخل الأدوية (AI Drug Interactions) لحظياً",
-      "وصول كامل لبنك الأدوية المصري والعربي (43,500+ دواء)",
-      "محرك البحث الفوري فائق السرعة مع إمكانية الكتابة المانيول الحرة للروشتات",
+      "وصول كامل لبنك الأدوية الشامل (+200,000 دواء ومستحضر)",
+      "التعبئة التلقائية الذكية للجرعات والمواعيد والمدة حسب العائلة الدوائية",
       "طباعة الروشتات بجودة عالية وتصدير PDF ومشاركة واتساب مباشرة",
       "تخصيص لوجو العيادة وبيانات الطبيب بالكامل",
     ],
@@ -239,7 +215,8 @@ export default function SubscriptionsPage() {
       features: [
         "تجديد شهري مرن بقيمة 150 جنيه شهرياً",
         "🧠 مساعد الذكاء الاصطناعي لكشف تعارض وتداخل الأدوية والجرعات اللحظي لحماية المريض",
-        "وصول غير محدود لبنك الأدوية المحدث (43,500+ دواء) مع الإدخال المانيول الحر",
+        "وصول غير محدود لبنك الأدوية المحدث (+200,000 دواء ومستحضر) مع التعبئة الذكية للجرعات",
+        "تحديث صامت وتلقائي لقاعدة الأدوية والأسعار بشكل دوري دون تدخل يدوي",
         "طباعة روشتات ومشاركة واتساب مباشرة غير محدودة للمرضى",
         "تحديثات سحابية مستمرة ودعم فني سريع",
       ],
@@ -300,9 +277,53 @@ export default function SubscriptionsPage() {
       ],
     },
   ];
+ 
+  // Unified plans array for the modern vertical stacked cards (Free Trial FIRST!)
+  const ALL_PLANS = [
+    {
+      ...TRIAL_PLAN,
+      periodMonths: "تجربة 30 يوماً",
+      discountBadge: "مجانية بالكامل 🎁",
+      discountBadgeColor: "bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 font-black",
+      isTrial: true,
+      popular: false,
+    },
+    {
+      ...PAID_PLANS[3], // annual_vip
+      periodMonths: "12 شهر (VIP)",
+      discountBadge: "خصم 20% 🔥",
+      discountBadgeColor: "bg-gradient-to-r from-teal-400 via-emerald-400 to-cyan-400 text-slate-950 font-black",
+      popular: true,
+      isTrial: false,
+    },
+    {
+      ...PAID_PLANS[2], // semi_annual
+      periodMonths: "6 شهور",
+      discountBadge: "وفر 100 ج.م",
+      discountBadgeColor: "bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30",
+      isTrial: false,
+    },
+    {
+      ...PAID_PLANS[1], // quarterly
+      periodMonths: "3 شهور",
+      discountBadge: "وفر 50 ج.م",
+      discountBadgeColor: "bg-teal-500/20 text-teal-300 font-bold border border-teal-500/30",
+      isTrial: false,
+    },
+    {
+      ...PAID_PLANS[0], // monthly
+      periodMonths: "شهر واحد",
+      discountBadge: "تجديد مرن",
+      discountBadgeColor: "bg-slate-800 text-slate-300 font-bold border border-slate-700",
+      isTrial: false,
+    },
+  ];
+
+  const selectedPlan =
+    ALL_PLANS.find((p) => p.id === selectedPlanId) || ALL_PLANS[0];
 
   const selectedPaidPlan =
-    PAID_PLANS.find((p) => p.id === selectedPaidPlanId) || PAID_PLANS[3];
+    PAID_PLANS.find((p) => p.id === selectedPlanId) || PAID_PLANS[3];
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -332,13 +353,21 @@ export default function SubscriptionsPage() {
       return;
     }
 
-    // 3. Otherwise proceed to checkout modal directly
+    // 3. Otherwise proceed to checkout full page directly (always start with blank fields)
+    setCheckoutDoctorName("");
+    setCheckoutClinicName("");
+    setSenderPhone("");
+    setTransactionRef("");
     setActivePlanForCheckout(plan);
   };
 
   const handleConfirmOverwrite = () => {
     setShowOverwriteWarning(false);
     if (pendingPlanToConfirm) {
+      setCheckoutDoctorName("");
+      setCheckoutClinicName("");
+      setSenderPhone("");
+      setTransactionRef("");
       setActivePlanForCheckout(pendingPlanToConfirm);
       setPendingPlanToConfirm(null);
     }
@@ -348,14 +377,23 @@ export default function SubscriptionsPage() {
     e.preventDefault();
     if (!activePlanForCheckout) return;
 
+    if (!checkoutDoctorName.trim()) {
+      alert("يرجى إدخال اسم الطبيب الكامل.");
+      return;
+    }
+    if (!checkoutClinicName.trim()) {
+      alert("يرجى إدخال اسم العيادة / المركز الطبي.");
+      return;
+    }
+
     const isTrialPlan = activePlanForCheckout.price === 0;
     if (!isTrialPlan && (!senderPhone.trim() || !transactionRef.trim())) {
       alert("يرجى إدخال رقم هاتف المحول ورقم العملية المرجعي.");
       return;
     }
 
-    const finalDocName = checkoutDoctorName.trim() || clinic.doctorName?.trim() || "طبيب العيادة";
-    const finalClinicName = checkoutClinicName.trim() || (clinic.nameAr || clinic.name)?.trim() || "العيادة الذكية";
+    const finalDocName = checkoutDoctorName.trim();
+    const finalClinicName = checkoutClinicName.trim();
 
     setIsSubmitting(true);
     try {
@@ -386,8 +424,10 @@ export default function SubscriptionsPage() {
         }
       }
 
-      // Close checkout modal - page will cleanly show waiting screen
+      // Close checkout full page and reset fields
       setActivePlanForCheckout(null);
+      setCheckoutDoctorName("");
+      setCheckoutClinicName("");
       setSenderPhone("");
       setTransactionRef("");
     } finally {
@@ -409,8 +449,362 @@ export default function SubscriptionsPage() {
     }
   };
 
+  // ============================================================
+  // DEDICATED FULL-PAGE CHECKOUT & PAYMENT SCREEN (صفحة الدفع الكاملة والمنفصلة)
+  // ============================================================
+  if (activePlanForCheckout) {
+    return (
+      <div className="space-y-6 pb-12 max-w-4xl mx-auto px-3.5 sm:px-6 transition-all duration-300" dir="rtl">
+        <div className="max-w-xl mx-auto space-y-5 text-right">
+          {/* Navigation Bar / Header */}
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setActivePlanForCheckout(null);
+                setCheckoutDoctorName("");
+                setCheckoutClinicName("");
+              }}
+              className="inline-flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 text-xs sm:text-sm font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4 text-emerald-400" />
+              <span>العودة لاختيار باقة أخرى</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 sm:py-2 rounded-xl border border-emerald-500/20">
+              <ShieldCheck className="w-4 h-4" />
+              <span>دفع آمن ومشفّر</span>
+            </div>
+          </div>
+
+        {/* Clean, Seamless Single-Column Vertical Flow */}
+        <div className="space-y-5">
+          
+          {/* Order Summary Card */}
+          <div className="space-y-4">
+            <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/95 border-2 border-emerald-500/40 shadow-2xl space-y-5 backdrop-blur-xl relative overflow-hidden">
+              <div className="absolute -top-20 -left-20 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
+                  <Crown className="w-4 h-4 text-amber-400" />
+                  <span>تفاصيل الباقة المختارة</span>
+                </span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  {activePlanForCheckout.durationLabel}
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-xl sm:text-2xl font-black text-white">
+                  {activePlanForCheckout.nameAr}
+                </h2>
+                <div className="pt-2 flex items-baseline gap-2">
+                  <span className="text-3xl sm:text-4xl font-black text-emerald-400 font-mono">
+                    {activePlanForCheckout.price === 0 ? "0" : activePlanForCheckout.price}
+                  </span>
+                  <span className="text-sm font-bold text-slate-300">
+                    {activePlanForCheckout.price === 0 ? "مجاناً بالكامل (0 ج.م)" : "جنيه مصري"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Included Benefits */}
+              <div className="space-y-2.5 pt-3 border-t border-slate-800 text-xs">
+                <span className="text-[11px] font-bold text-slate-400 block mb-1">
+                  المميزات المضمنة في الباقة:
+                </span>
+                <div className="flex items-center gap-2 text-slate-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>تفعيل فوري لربط البورتال السحابي والروشتات</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>مساعد الذكاء الاصطناعي لفحص تعارض وتداخل الأدوية</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>تحديثات مستمرة وقاعدة بيانات الأدوية المصرية</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>دعم فني وحفظ بيانات المرضى ومزامنة سحابية</span>
+                </div>
+              </div>
+
+              {/* Machine ID Badge */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-slate-400 font-bold">
+                  <span className="text-[11px]">معرّف جهازك الحالي (Machine ID):</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(machineId, "checkout-mid")}
+                    className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-bold text-[10px] cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{copySuccess === "checkout-mid" ? "تم النسخ" : "نسخ الكود"}</span>
+                  </button>
+                </div>
+                <span className="font-mono font-bold text-emerald-400 text-xs block truncate" dir="ltr">
+                  {machineId}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Payment Methods & Inputs Form Card */}
+          <div className="p-5 sm:p-7 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-6">
+              
+              {/* If Paid Plan: Show Payment Methods & Direct Number */}
+              {activePlanForCheckout.price > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs sm:text-sm font-black text-slate-200">
+                      اختر وسيلة التحويل:
+                    </label>
+                    <span className="text-[11px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                      تحويل فوري ومباشر ⚡
+                    </span>
+                  </div>
+
+                  {/* Payment Methods Grid - Transparent, Crisp & High Contrast (NO WHITE BOXES!) */}
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    
+                    {/* Vodafone Cash Card */}
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("vodafone")}
+                      className={`group p-3 sm:p-4 rounded-2xl border-2 flex flex-col items-center justify-between gap-3 transition-all cursor-pointer relative overflow-hidden ${
+                        paymentMethod === "vodafone"
+                          ? "bg-rose-500/15 border-rose-500 text-rose-200 shadow-xl shadow-rose-950/40 ring-2 ring-rose-500/30 scale-[1.02]"
+                          : "bg-slate-950/80 border-slate-800/90 text-slate-400 hover:border-slate-700 hover:text-white hover:bg-slate-900/90"
+                      }`}
+                    >
+                      {paymentMethod === "vodafone" && (
+                        <div className="absolute top-2.5 left-2.5 z-10">
+                          <CheckCircle2 className="w-4 h-4 text-rose-400 fill-rose-500/20" />
+                        </div>
+                      )}
+                      
+                      {/* Transparent Logo Container with subtle glass tint & vivid glow */}
+                      <div className="w-full h-14 sm:h-16 flex items-center justify-center p-1.5 rounded-xl bg-white/[0.04] border border-white/5 backdrop-blur-sm group-hover:bg-white/[0.08] transition-all">
+                        <img
+                          src="/vodafone-cash.png"
+                          alt="فودافون كاش - Vodafone Cash"
+                          loading="eager"
+                          decoding="sync"
+                          className="h-10 sm:h-12 w-auto max-w-full object-contain filter drop-shadow-[0_0_12px_rgba(239,68,68,0.5)] brightness-110 transform transition-transform group-hover:scale-105"
+                        />
+                      </div>
+
+                      <div className="text-center space-y-0.5">
+                        <span className="text-xs sm:text-sm font-black block text-slate-100">فودافون كاش</span>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-rose-400 block">محفظة إلكترونية</span>
+                      </div>
+                    </button>
+
+                    {/* InstaPay Card */}
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("instapay")}
+                      className={`group p-3 sm:p-4 rounded-2xl border-2 flex flex-col items-center justify-between gap-3 transition-all cursor-pointer relative overflow-hidden ${
+                        paymentMethod === "instapay"
+                          ? "bg-purple-500/15 border-purple-500 text-purple-200 shadow-xl shadow-purple-950/40 ring-2 ring-purple-500/30 scale-[1.02]"
+                          : "bg-slate-950/80 border-slate-800/90 text-slate-400 hover:border-slate-700 hover:text-white hover:bg-slate-900/90"
+                      }`}
+                    >
+                      {paymentMethod === "instapay" && (
+                        <div className="absolute top-2.5 left-2.5 z-10">
+                          <CheckCircle2 className="w-4 h-4 text-purple-400 fill-purple-500/20" />
+                        </div>
+                      )}
+
+                      {/* Transparent Logo Container with subtle glass tint & vivid glow */}
+                      <div className="w-full h-14 sm:h-16 flex items-center justify-center p-1.5 rounded-xl bg-white/[0.04] border border-white/5 backdrop-blur-sm group-hover:bg-white/[0.08] transition-all">
+                        <img
+                          src="/instapay.png"
+                          alt="إنستا باي - InstaPay"
+                          loading="eager"
+                          decoding="sync"
+                          className="h-10 sm:h-12 w-auto max-w-full object-contain filter drop-shadow-[0_0_14px_rgba(168,85,247,0.5)] brightness-110 contrast-125 transform transition-transform group-hover:scale-105"
+                        />
+                      </div>
+
+                      <div className="text-center space-y-0.5">
+                        <span className="text-xs sm:text-sm font-black block text-slate-100">إنستا باي (InstaPay)</span>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-purple-400 block">تحويل بنكي لحظي</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Transfer Number Card */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                    <span className="text-slate-400 font-bold text-xs block">
+                      رقم التحويل المعتمد ({paymentMethod === "vodafone" ? "محفظة فودافون كاش" : "إنستاباي"}):
+                    </span>
+                    <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-slate-900 border border-slate-800">
+                      <span className="text-lg sm:text-xl font-mono font-black text-emerald-400 tracking-widest" dir="ltr">
+                        {TRANSFER_NUMBER}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(TRANSFER_NUMBER, "page-transfer")}
+                        className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>{copySuccess === "page-transfer" ? "تم النسخ ✅" : "نسخ الرقم"}</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      حول مبلغ <span className="text-emerald-400 font-black font-mono">{activePlanForCheckout.price} ج.م</span> إلى هذا الرقم، ثم اكتب رقم العملية بالأسفل.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmation Form */}
+              <form onSubmit={handleConfirmSubmit} className="space-y-4" autoComplete="off">
+                <div className="space-y-1 pb-1 border-b border-slate-800/80">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-200">
+                    بيانات التأكيد والتفعيل السحابي:
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    يرجى كتابة الاسم والعيادة بدقة كما تريد ظهورهما بالروشتة والبورتال
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Doctor Name - ALWAYS EMPTY & NEVER OVERWRITTEN */}
+                  <div className="space-y-1.5">
+                    <label htmlFor="checkout_doctor_name_input" className="font-bold text-slate-300 text-xs block">
+                      اسم الطبيب بالكامل ( الذى سيظهر بالروشته ): <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      id="checkout_doctor_name_input"
+                      name="checkout_doc_name_custom"
+                      type="text"
+                      required
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="words"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-form-type="other"
+                      value={checkoutDoctorName}
+                      onChange={(e) => setCheckoutDoctorName(e.target.value)}
+                      placeholder="د. اكتب اسمك هنا..."
+                      className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Clinic Name - ALWAYS EMPTY & NEVER OVERWRITTEN */}
+                  <div className="space-y-1.5">
+                    <label htmlFor="checkout_clinic_name_input" className="font-bold text-slate-300 text-xs block">
+                      اسم العيادة / المركز الطبي: <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      id="checkout_clinic_name_input"
+                      name="checkout_clinic_name_custom"
+                      type="text"
+                      required
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-form-type="other"
+                      value={checkoutClinicName}
+                      onChange={(e) => setCheckoutClinicName(e.target.value)}
+                      placeholder="اكتب اسم العيادة هنا..."
+                      className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Sender Phone & Transaction Ref (for Paid Plans) */}
+                {activePlanForCheckout.price > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <label htmlFor="checkout_sender_phone_input" className="font-bold text-slate-300 text-xs block">
+                        رقم الهاتف المحول منه: <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        id="checkout_sender_phone_input"
+                        name="checkout_sender_phone"
+                        type="tel"
+                        required
+                        autoComplete="off"
+                        value={senderPhone}
+                        onChange={(e) => setSenderPhone(e.target.value)}
+                        placeholder="010XXXXXXXX"
+                        dir="ltr"
+                        className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-950 border border-slate-700 font-mono font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-right sm:text-left"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label htmlFor="checkout_tx_ref_input" className="font-bold text-slate-300 text-xs block">
+                        رقم العملية المرجعي (Ref ID): <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        id="checkout_tx_ref_input"
+                        name="checkout_tx_ref"
+                        type="text"
+                        required
+                        autoComplete="off"
+                        value={transactionRef}
+                        onChange={(e) => setTransactionRef(e.target.value)}
+                        placeholder="رقم مرجع الإيصال..."
+                        className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-950 border border-slate-700 font-mono font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit Action Button */}
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-sm sm:text-base shadow-xl shadow-emerald-950/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Crown className="w-5 h-5 shrink-0" />
+                    <span>
+                      {isSubmitting
+                        ? "جاري إرسال الطلب للبورتال السحابي..."
+                        : activePlanForCheckout.price === 0
+                        ? "تأكيد وتفعيل الاشتراك التجريبي فوراً (30 يوم)"
+                        : `تأكيد وإرسال طلب تفعيل ${activePlanForCheckout.nameAr} (${activePlanForCheckout.price} ج.م)`}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Instant Support Notice */}
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+              <div className="space-y-0.5">
+                <span className="font-bold text-slate-200 block">تحتاج مساعدة فورية في التفعيل؟</span>
+                <span className="text-[11px] text-slate-400 block">فريق الدعم متاح عبر الواتساب طوال اليوم</span>
+              </div>
+              <a
+                href="https://wa.me/201094085228"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>واتساب</span>
+              </a>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 sm:space-y-8 pb-6 max-w-6xl mx-auto px-3.5 sm:px-6">
+    <div className="space-y-6 sm:space-y-8 pb-10 max-w-4xl mx-auto px-3.5 sm:px-6 transition-all duration-300">
       {/* ============================================================ */}
       {/* QUICK DOWNLOAD BAR: كمبيوتر • أندرويد • آيفون */}
       {/* ============================================================ */}
@@ -421,38 +815,44 @@ export default function SubscriptionsPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 w-full sm:w-auto">
-          {/* Windows PC */}
+          {/* Windows PC - Classic Universal Windows Desktop Icon */}
           <a
             href="https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe"
             download
             target="_blank"
             rel="noreferrer"
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-cyan-400 border border-slate-700 hover:border-cyan-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-cyan-400 border border-slate-700 hover:border-cyan-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center group"
           >
-            <Laptop className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span>تنزيل نسخه الكمبيوتر</span>
+            <svg className="w-4 h-4 text-cyan-400 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M0 3.449L9.75 2.1v9.451H0V3.449zm10.949-9.602L24 0v11.4H10.949V2.247zM0 12.6h9.75v9.451L0 20.699V12.6zm10.949 0H24V24l-13.051-1.8V12.6z"/>
+            </svg>
+            <span>تنزيل نسخة الكمبيوتر</span>
           </a>
 
-          {/* Android Mobile */}
+          {/* Android Mobile - Classic Universal Android Robot Head Icon */}
           <a
             href="https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
             download
             target="_blank"
             rel="noreferrer"
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 border border-slate-700 hover:border-emerald-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 border border-slate-700 hover:border-emerald-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center group"
           >
-            <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>تنزيل نسخه اندرويد</span>
+            <svg className="w-4 h-4 text-emerald-400 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.412 13.8533 8.1 12 8.1s-3.5902.312-5.1368.8497L4.8409 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/>
+            </svg>
+            <span>تنزيل نسخة أندرويد</span>
           </a>
 
-          {/* Apple iPhone */}
+          {/* Apple iPhone - Classic Universal Apple Icon */}
           <button
             type="button"
             onClick={() => setShowIosGuideModal(true)}
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-400 border border-slate-700 hover:border-amber-500/40 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 hover:border-slate-500 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer text-center group"
           >
-            <Smartphone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>تنزيل نسخه الايفون</span>
+            <svg className="w-4 h-4 text-slate-100 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.64-.78 1.08-1.86.96-2.95-1 .04-2.18.66-2.83 1.43-.58.67-1.09 1.77-.95 2.83 1.11.09 2.21-.57 2.82-1.31z"/>
+            </svg>
+            <span>تثبيت نسخة الآيفون</span>
           </button>
         </div>
       </div>
@@ -573,10 +973,10 @@ export default function SubscriptionsPage() {
                 )}`}
                 target="_blank"
                 rel="noreferrer"
-                className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer text-center"
+                className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer text-center"
               >
-                <MessageCircle className="w-5 h-5 shrink-0" />
-                <span>إرسال إيصال التحويل عبر الواتساب لتسريع التفعيل الفوري (01094085228) 💬</span>
+                <MessageCircle className="w-5 h-5 shrink-0 stroke-[2.2]" />
+                <span>إرسال إيصال التحويل عبر الواتساب لتسريع التفعيل (01094085228)</span>
               </a>
 
               <div className="text-center">
@@ -587,7 +987,7 @@ export default function SubscriptionsPage() {
                   className="text-xs text-slate-400 hover:text-amber-400 hover:underline font-bold transition-colors cursor-pointer py-1 inline-flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>تعديل البيانات أو اختيار باقة أخرى ↩</span>
+                  <span>تعديل البيانات أو اختيار باقة أخرى</span>
                 </button>
               </div>
             </div>
@@ -676,10 +1076,10 @@ export default function SubscriptionsPage() {
               {/* Direct Link to Prescriptions New without NewRxGuard interception */}
               <Link
                 href="/prescriptions/new"
-                className="flex-1 sm:flex-initial justify-center px-5 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-950/50 hover:shadow-emerald-900/60 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                className="flex-1 sm:flex-initial justify-center px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
               >
-                <span>الدخول للروشتات 🚀</span>
-                <ArrowRight className="w-4 h-4 rotate-180" />
+                <span>الدخول للروشتات</span>
+                <ArrowRight className="w-4 h-4 rotate-180 stroke-[2.5]" />
               </Link>
             </div>
           </div>
@@ -700,10 +1100,10 @@ export default function SubscriptionsPage() {
               <button
                 type="button"
                 onClick={() => handleCopy(machineId, "active-machine")}
-                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-sm"
               >
                 <Copy className="w-3.5 h-3.5" />
-                <span>{copySuccess === "active-machine" ? "✓ تم النسخ" : "نسخ المعرّف"}</span>
+                <span>{copySuccess === "active-machine" ? "تم النسخ" : "نسخ المعرّف"}</span>
               </button>
 
               <a
@@ -713,10 +1113,10 @@ export default function SubscriptionsPage() {
                 )}`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-bold border border-emerald-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-2xl bg-emerald-600/15 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 text-xs font-bold border border-emerald-500/30 hover:border-emerald-400 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-sm"
               >
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>ربط جهاز إضافي 📲</span>
+                <MessageCircle className="w-3.5 h-3.5 stroke-[2.2]" />
+                <span>ربط جهاز إضافي</span>
               </a>
             </div>
           </div>
@@ -770,352 +1170,182 @@ export default function SubscriptionsPage() {
       )}
 
       {/* ============================================================ */}
-      {/* EXACTLY TWO SUBSCRIPTION CARDS (CARD 1: FREE TRIAL | CARD 2: DYNAMIC PAID) */}
+      {/* MODERN COMPACT SUBSCRIPTION CARDS STACK (REPLACES DUAL CARDS) */}
       {/* ============================================================ */}
       {!subDetails.isPending && (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-xl mx-auto">
           {/* Section Header */}
-          <div className="text-center space-y-2 max-w-2xl mx-auto pt-2">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-black">
-              <Crown className="w-3.5 h-3.5" />
-              <span>خطط وباقات أسعار PenRX+</span>
+          <div className="text-right space-y-1.5 pt-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-100">
+                اختر باقتك
+              </h2>
+              <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 text-xs font-bold">
+                {subDetails.isActive ? "تجديد أو ترقية 👑" : "تفعيل فوري وآمن ⚡"}
+              </span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black bg-gradient-to-r from-emerald-300 via-teal-200 to-cyan-300 bg-clip-text text-transparent">
-              {subDetails.isActive ? "تجديد أو ترقية باقة الاشتراك" : "اختر الخطة المناسبة لعيادتك وابدأ فوراً"}
-            </h2>
             <p className="text-slate-400 text-xs sm:text-sm">
-              تجربة مجانية كاملة للمشتركين الجدد، أو باقات مدفوعة مرنة تناسب جميع الأطباء والعيادات.
+              اختر الخطة المناسبة لعيادتك واستمتع بكامل أدوات الذكاء الاصطناعي وبنك الأدوية.
             </p>
           </div>
 
-          {/* TWO CARDS GRID */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch max-w-5xl mx-auto">
-            {/* ============================================================ */}
-            {/* CARD 1: FREE TRIAL (30 DAYS FULL ACCESS - ONE-TIME ONLY) */}
-            {/* ============================================================ */}
-            <div
-              className={`relative rounded-3xl p-5 sm:p-8 pt-7 sm:pt-8 flex flex-col justify-between transition-all duration-200 border ${
-                trialClaimed
-                  ? "bg-slate-900/60 border-slate-800 opacity-90"
-                  : "bg-slate-900/90 border-2 border-emerald-500/50 shadow-2xl shadow-emerald-950/40 hover:border-emerald-400"
-              }`}
-            >
-              {/* Badge */}
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 shrink-0 whitespace-nowrap z-10">
-                <span
-                  className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wide border shadow-xl flex items-center gap-1.5 ${
-                    trialClaimed
-                      ? "bg-slate-800 text-slate-400 border-slate-700"
-                      : TRIAL_PLAN.badgeColor
+          {/* VERTICAL STACK OF COMPACT RECTANGULAR CARDS */}
+          <div className="space-y-3">
+            {ALL_PLANS.map((plan) => {
+              const isSelected = selectedPlanId === plan.id;
+              const isTrial = plan.isTrial;
+              const isTrialLocked = isTrial && trialClaimed;
+
+              return (
+                <div
+                  key={plan.id}
+                  onClick={() => {
+                    if (isTrialLocked) return;
+                    setSelectedPlanId(plan.id);
+                  }}
+                  className={`relative rounded-2xl sm:rounded-3xl p-4 sm:p-5 transition-all duration-200 cursor-pointer select-none flex items-center justify-between gap-3 border ${
+                    isTrialLocked
+                      ? "bg-slate-900/40 border-slate-800 opacity-60 cursor-not-allowed"
+                      : isSelected
+                      ? "bg-gradient-to-r from-emerald-500/15 via-slate-900 to-teal-500/15 border-2 border-emerald-400 shadow-xl shadow-emerald-950/60 ring-2 ring-emerald-400/25 scale-[1.01]"
+                      : "bg-slate-900/80 hover:bg-slate-900 border-slate-800 hover:border-slate-700 shadow-md"
                   }`}
                 >
-                  {trialClaimed ? (
-                    <>
-                      <Lock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>تم الاستفادة من التجربة مسبقاً 🔒</span>
-                    </>
-                  ) : (
-                    <>
-                      <Gift className="w-4 h-4 text-slate-950 stroke-[2.5]" />
-                      <span>{TRIAL_PLAN.badge}</span>
-                    </>
-                  )}
-                </span>
-              </div>
-
-              <div className="space-y-5">
-                <div className="text-center pt-2 pb-5 border-b border-slate-800 space-y-2">
-                  <h3 className="text-xl font-black text-slate-100 flex items-center justify-center gap-2">
-                    <Sparkles className="w-5 h-5 text-emerald-400" />
-                    <span>{TRIAL_PLAN.nameAr}</span>
-                  </h3>
-                  <span className="text-xs text-slate-400 font-semibold block">
-                    {TRIAL_PLAN.durationLabel}
-                  </span>
-
-                  <div className="pt-2 flex items-baseline justify-center gap-1.5">
-                    <span className="text-4xl font-black text-emerald-400">مجاناً</span>
-                    <span className="text-sm font-bold text-slate-400">(0 ج.م)</span>
-                  </div>
-
-                  <span className="inline-block text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                    كامل الصلاحيات والميزات لمدة 30 يوماً
-                  </span>
-                </div>
-
-                {/* If trial already claimed notice */}
-                {trialClaimed ? (
-                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1.5 text-right">
-                    <div className="flex items-center gap-2 font-black">
-                      <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
-                      <span>التجربة المجانية متاحة لمرة واحدة فقط</span>
+                  {/* Right Side: Duration & Big Price (Matching user screenshot) */}
+                  <div className="flex-1 text-right space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-base sm:text-lg font-black ${isSelected ? "text-white" : "text-slate-100"}`}>
+                        {plan.periodMonths}
+                      </span>
+                      {plan.popular && (
+                        <span className="px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-300 text-[10px] font-black border border-teal-500/30">
+                          الأكثر طلباً ⭐
+                        </span>
+                      )}
+                      <span className="text-[11px] text-slate-400 font-semibold hidden sm:inline">
+                        • {plan.nameAr}
+                      </span>
                     </div>
-                    <p className="text-[11px] text-slate-300 leading-relaxed">
-                      لقد تم تفعيل واستخدام الفترة التجريبية (30 يوماً) لهذا الجهاز مسبقاً. للاستمرار في استخدام المنظومة دون انقطاع، يمكنك اختيار إحدى الباقات المدفوعة في الكارت المجاور.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span className="text-[11px] leading-relaxed">
-                      لا تتطلب أي مصاريف تفعيل - ابدأ كتابة الروشتات الآن واستمتع بكافة أدوات الذكاء الاصطناعي مجاناً!
-                    </span>
-                  </div>
-                )}
 
-                {/* Features list */}
-                <div className="space-y-2.5 py-1 text-xs">
-                  <span className="text-[11px] font-black text-slate-400 block pb-1">
-                    المميزات المشمولة في الباقة التجريبية:
-                  </span>
-                  {TRIAL_PLAN.features.map((feat, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5 text-slate-300">
-                      <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3 h-3 stroke-[3]" />
-                      </div>
-                      <span className="leading-snug text-xs">{feat}</span>
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                      {plan.price === 0 ? (
+                        <div className="flex items-baseline gap-1.5">
+                          <span
+                            className="text-2xl sm:text-3xl font-black text-emerald-400"
+                            style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}
+                          >
+                            مجاناً
+                          </span>
+                          <span
+                            className="text-xs sm:text-sm font-bold text-slate-400"
+                            style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}
+                          >
+                            (0 جنيه مصري)
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <span className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${isSelected ? "text-emerald-300" : "text-slate-100"}`}>
+                            {plan.price}
+                          </span>
+                          <span
+                            className="text-xs sm:text-sm font-bold text-slate-400"
+                            style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}
+                          >
+                            جنيه مصري
+                          </span>
+                        </>
+                      )}
+
+                      {plan.originalPrice && (
+                        <span className="text-xs text-slate-500 line-through font-mono mr-1.5">
+                          {plan.originalPrice} ج.م
+                        </span>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              <div className="pt-6">
-                <button
-                  type="button"
-                  disabled={trialClaimed}
-                  onClick={() => handleInitiatePlan(TRIAL_PLAN)}
-                  className={`w-full py-4 rounded-2xl font-black text-xs sm:text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
-                    trialClaimed
-                      ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
-                      : "bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-950/50 hover:brightness-110"
-                  }`}
-                >
-                  {trialClaimed ? (
-                    <>
-                      <Lock className="w-4 h-4" />
-                      <span>تم الاستفادة من التجربة المجانية سابقاً 🔒</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4" />
-                      <span>تفعيل التجربة المجانية الآن (30 يوم مجاناً) 🚀</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+                  {/* Left Side: Radio Selector + Distinctive Pill Badge */}
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <div
+                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                        isTrialLocked
+                          ? "border-slate-700 bg-slate-800"
+                          : isSelected
+                          ? "border-emerald-400 bg-emerald-400 text-slate-950 shadow-md shadow-emerald-950/40"
+                          : "border-slate-600 bg-slate-800"
+                      }`}
+                    >
+                      {isTrialLocked ? (
+                        <Lock className="w-3.5 h-3.5 text-slate-500" />
+                      ) : isSelected ? (
+                        <div className="w-2.5 h-2.5 rounded-full bg-slate-950" />
+                      ) : null}
+                    </div>
 
-            {/* ============================================================ */}
-            {/* CARD 2: DYNAMIC PAID PLAN CARD (WITH INTEGRATED ELEGANT DROPDOWN) */}
-            {/* ============================================================ */}
-            <div className="relative rounded-3xl p-5 sm:p-8 pt-7 sm:pt-8 flex flex-col justify-between transition-all duration-200 bg-slate-900 border-2 border-emerald-500 shadow-2xl shadow-emerald-950/60 ring-4 ring-emerald-500/20">
-              {/* Dynamic Badge */}
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 shrink-0 whitespace-nowrap z-10">
-                <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wide border shadow-xl flex items-center gap-1.5 ${selectedPaidPlan.badgeColor || "bg-emerald-400 text-slate-950 font-black border-emerald-300 shadow-lg"}`}>
-                  <Crown className="w-3.5 h-3.5 text-slate-950 stroke-[2.5]" />
-                  <span>{selectedPaidPlan.badge || "الباقة المختارة"}</span>
-                </span>
-              </div>
-
-              <div className="space-y-5">
-                {/* Header & Dynamic Price Display */}
-                <div className="text-center pt-2 pb-4 border-b border-slate-800 space-y-2">
-                  <h3 className="text-xl font-black text-slate-100 flex items-center justify-center gap-2">
-                    <Crown className="w-5 h-5 text-amber-400" />
-                    <span>الباقات والاشتراكات الرسمية</span>
-                  </h3>
-                  <span className="text-xs text-slate-400 font-semibold block">
-                    اختر خطة التجديد المناسبة لعيادتك من القائمة
-                  </span>
-
-                  {/* Big Dynamic Price */}
-                  <div className="pt-2 flex items-baseline justify-center gap-2">
-                    <span className="text-4xl sm:text-5xl font-black text-slate-100 font-mono transition-all">
-                      {selectedPaidPlan.price}
-                    </span>
-                    <span className="text-sm font-bold text-emerald-400">جنيه مصري</span>
-                    {selectedPaidPlan.originalPrice && (
-                      <span className="text-sm text-slate-500 line-through mr-1.5 font-mono">
-                        {selectedPaidPlan.originalPrice} ج.م
+                    {plan.discountBadge && (
+                      <span
+                        className={`text-[10px] sm:text-[11px] font-black px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm ${
+                          isTrialLocked
+                            ? "bg-slate-800 text-slate-500"
+                            : isSelected
+                            ? "bg-gradient-to-r from-emerald-400 to-teal-300 text-slate-950 font-black shadow-sm"
+                            : plan.discountBadgeColor || "bg-slate-800 text-emerald-300 border border-emerald-500/20"
+                        }`}
+                      >
+                        {plan.discountBadge}
                       </span>
                     )}
                   </div>
-
-                  {selectedPaidPlan.discountText && (
-                    <span className="inline-block text-xs font-bold text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 animate-pulse">
-                      {selectedPaidPlan.discountText}
-                    </span>
-                  )}
                 </div>
+              );
+            })}
+          </div>
 
-                {/* ELEGANT INTEGRATED DROPDOWN MENU & 1-CLICK SELECTOR */}
-                <div className="space-y-2.5" ref={dropdownRef}>
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
-                    <span>اختر نوع الباقة المرغوبة:</span>
-                    <button
-                      type="button"
-                      onClick={() => setIsDropdownOpen((prev) => !prev)}
-                      className="text-[10px] text-emerald-300 font-bold bg-emerald-500/15 hover:bg-emerald-500/25 px-2.5 py-1 rounded-full border border-emerald-500/30 transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm"
-                    >
-                      <span>{isDropdownOpen ? "إغلاق الخيارات ⬆" : "اضغط لتغيير الباقة ⬇"}</span>
-                    </button>
-                  </div>
+          {/* Primary Action Button (PenRX+ Signature Emerald/Teal/Cyan Gradient) */}
+          <div className="pt-3 space-y-2 text-center max-w-sm sm:max-w-md mx-auto">
+            <button
+              type="button"
+              disabled={selectedPlan.isTrial && trialClaimed}
+              onClick={() => handleInitiatePlan(selectedPlan)}
+              className={`w-full py-4 px-6 rounded-2xl font-black text-sm sm:text-base shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+                selectedPlan.isTrial && trialClaimed
+                  ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
+                  : "bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 shadow-emerald-950/60"
+              }`}
+            >
+              {selectedPlan.isTrial ? (
+                trialClaimed ? (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    <span>تم الاستفادة من التجربة المجانية</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 fill-slate-950" />
+                    <span>تفعيل التجربة المجانية الآن (30 يوم)</span>
+                  </>
+                )
+              ) : (
+                <>
+                  <Crown className="w-4 h-4 fill-slate-950" />
+                  <span>اشترك الآن</span>
+                </>
+              )}
+            </button>
 
-                  {/* DIRECT 1-CLICK PLAN PILLS (Instant selection without waiting) */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
-                    {PAID_PLANS.map((plan) => {
-                      const isSelected = plan.id === selectedPaidPlanId;
-                      return (
-                        <button
-                          key={plan.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedPaidPlanId(plan.id);
-                            setIsDropdownOpen(false);
-                          }}
-                          className={`p-2 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
-                            isSelected
-                              ? "bg-emerald-500/25 border-emerald-400 text-white shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400/50"
-                              : "bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700"
-                          }`}
-                        >
-                          <span className="text-[11px] font-black leading-tight truncate w-full">
-                            {plan.id === "annual_vip" ? "السنوي VIP ⭐" : plan.nameAr.replace(" (ربع سنوي)", "").replace(" (نصف سنوي)", "")}
-                          </span>
-                          <span className={`text-[10px] font-mono font-bold ${isSelected ? "text-emerald-300" : "text-emerald-400"}`}>
-                            {plan.price} ج.م
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="relative">
-                    <button
-                      type="button"
-                      id="plan-dropdown-btn"
-                      onClick={() => setIsDropdownOpen((prev) => !prev)}
-                      className="w-full p-3 sm:p-3.5 rounded-2xl bg-slate-950 border-2 border-slate-700 hover:border-emerald-500/60 text-slate-100 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-inner gap-2 active:scale-[0.99]"
-                    >
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
-                          <Crown className="w-4 h-4" />
-                        </div>
-                        <div className="text-right min-w-0">
-                          <span className="text-xs sm:text-sm font-black text-slate-100 block truncate">
-                            {selectedPaidPlan.nameAr}
-                          </span>
-                          <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium block truncate">
-                            {selectedPaidPlan.durationLabel}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="px-2.5 py-1 rounded-xl bg-slate-900 text-emerald-400 font-mono font-black text-xs border border-slate-800">
-                          {selectedPaidPlan.price} ج.م
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isDropdownOpen ? "rotate-180 text-emerald-400" : ""}`} />
-                      </div>
-                    </button>
-
-                    {/* Responsive Inline Dropdown Options (Never covers content, perfectly sized for modern phones) */}
-                    {isDropdownOpen && (
-                      <div className="relative mt-2.5 w-full bg-slate-950/95 border-2 border-emerald-500/40 rounded-2xl p-2 sm:p-2.5 shadow-2xl space-y-2 backdrop-blur-2xl animate-in fade-in duration-150">
-                        {PAID_PLANS.map((plan) => {
-                          const isSelected = plan.id === selectedPaidPlanId;
-
-                          return (
-                            <button
-                              key={plan.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedPaidPlanId(plan.id);
-                                setIsDropdownOpen(false);
-                              }}
-                              className={`w-full p-2.5 sm:p-3 rounded-xl text-right transition-all cursor-pointer flex flex-col gap-1.5 ${
-                                isSelected
-                                  ? "bg-emerald-500/20 text-emerald-200 border-2 border-emerald-500/50 shadow-md"
-                                  : "bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800"
-                              }`}
-                            >
-                              {/* Top Line: Selection Radio + Plan Name + Badges (Right), Price (Left) */}
-                              <div className="w-full flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                  <div
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                      isSelected
-                                        ? "border-emerald-400 bg-emerald-500 text-slate-950"
-                                        : "border-slate-600 bg-slate-800"
-                                    }`}
-                                  >
-                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                                  </div>
-                                  <span className="text-xs sm:text-sm font-black text-slate-100">
-                                    {plan.nameAr}
-                                  </span>
-                                  {plan.popular && (
-                                    <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[9px] font-black border border-amber-500/30 whitespace-nowrap">
-                                      الأفضل ⭐
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="shrink-0 text-left font-mono">
-                                  <span className="px-2 py-0.5 rounded-lg bg-slate-950 text-xs sm:text-sm font-black text-emerald-400 border border-slate-800 inline-block">
-                                    {plan.price} ج.م
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Bottom Line: Duration Label + Discount badge (if any) */}
-                              <div className="w-full flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60 text-[10px] sm:text-[11px]">
-                                <span className="text-slate-400 font-medium truncate">
-                                  {plan.durationLabel}
-                                </span>
-                                {plan.discountText && (
-                                  <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 whitespace-nowrap shrink-0">
-                                    {plan.discountText}
-                                  </span>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Features list of the selected paid plan */}
-                <div className="space-y-2.5 py-1 text-xs">
-                  <span className="text-[11px] font-black text-slate-400 block pb-1">
-                    مميزات {selectedPaidPlan.nameAr}:
-                  </span>
-                  {selectedPaidPlan.features.map((feat, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5 text-slate-300">
-                      <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3 h-3 stroke-[3]" />
-                      </div>
-                      <span className="leading-snug text-xs">{feat}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <div className="pt-6">
-                <button
-                  type="button"
-                  onClick={() => handleInitiatePlan(selectedPaidPlan)}
-                  className="w-full py-4 px-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 hover:brightness-110 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 text-center leading-snug"
-                >
-                  <Crown className="w-4 h-4 shrink-0" />
-                  <span className="break-words">
-                    اشترك الآن في {selectedPaidPlan.nameAr} ({selectedPaidPlan.price} ج.م) ⚡
-                  </span>
-                </button>
-              </div>
+            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-1">
+              <span className="font-medium">تطبق الشروط والأحكام</span>
+              <span className="text-slate-600">•</span>
+              <a
+                href="https://wa.me/201094085228"
+                target="_blank"
+                rel="noreferrer"
+                className="text-emerald-400 hover:underline font-bold inline-flex items-center gap-1"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>دعم وتفعيل فوري واتساب</span>
+              </a>
             </div>
           </div>
         </div>
@@ -1432,214 +1662,6 @@ export default function SubscriptionsPage() {
         </div>
       )}
 
-      {/* ============================================================ */}
-      {/* CHECKOUT MODAL: PAYMENT DETAILS SUBMISSION */}
-      {/* ============================================================ */}
-      {activePlanForCheckout && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-150">
-            {/* Close Button */}
-            <button
-              onClick={() => setActivePlanForCheckout(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            {/* Header */}
-            <div className="space-y-1 text-right border-b border-slate-800 pb-3">
-              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                <Crown className="w-4 h-4" />
-                <span>طلب تفعيل: {activePlanForCheckout.nameAr}</span>
-              </span>
-              <h3 className="text-xl font-black text-slate-100">
-                القيمة: {activePlanForCheckout.price === 0 ? "مجاناً (0 ج.م)" : `${activePlanForCheckout.price} ج.م`}
-              </h3>
-              <span className="text-[11px] text-slate-400 block">
-                {activePlanForCheckout.durationLabel}
-              </span>
-            </div>
-
-            {/* Payment Method Selector */}
-            {activePlanForCheckout.price > 0 && (
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-300">اختر وسيلة التحويل:</label>
-                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                    تحويل فوري ومباشر ⚡
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3.5">
-                  {/* Vodafone Cash Button */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("vodafone")}
-                    className={`group p-3 sm:p-3.5 rounded-2xl border-2 flex flex-col items-center justify-between gap-2.5 transition-all cursor-pointer relative overflow-hidden ${
-                      paymentMethod === "vodafone"
-                        ? "bg-rose-500/15 border-rose-500 text-rose-200 shadow-xl shadow-rose-950/40 ring-2 ring-rose-500/30 scale-[1.02]"
-                        : "bg-slate-950/90 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white hover:bg-slate-900"
-                    }`}
-                  >
-                    {paymentMethod === "vodafone" && (
-                      <div className="absolute top-2 left-2 z-10">
-                        <CheckCircle2 className="w-4 h-4 text-rose-400 fill-rose-500/20" />
-                      </div>
-                    )}
-                    <div className="w-full h-14 sm:h-16 bg-white rounded-xl p-2 flex items-center justify-center shadow-md shadow-black/30 group-hover:shadow-lg transition-transform">
-                      <img
-                        src="/vodafone-cash.png"
-                        alt="فودافون كاش - Vodafone Cash"
-                        loading="eager"
-                        decoding="sync"
-                        className="h-10 sm:h-11 w-auto max-w-full object-contain transform transition-transform group-hover:scale-105"
-                      />
-                    </div>
-                    <div className="text-center">
-                      <span className="text-xs font-black block text-slate-100">فودافون كاش</span>
-                      <span className="text-[10px] font-bold text-rose-400 block">محفظة إلكترونية</span>
-                    </div>
-                  </button>
-
-                  {/* InstaPay Button */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("instapay")}
-                    className={`group p-3 sm:p-3.5 rounded-2xl border-2 flex flex-col items-center justify-between gap-2.5 transition-all cursor-pointer relative overflow-hidden ${
-                      paymentMethod === "instapay"
-                        ? "bg-purple-500/15 border-purple-500 text-purple-200 shadow-xl shadow-purple-950/40 ring-2 ring-purple-500/30 scale-[1.02]"
-                        : "bg-slate-950/90 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white hover:bg-slate-900"
-                    }`}
-                  >
-                    {paymentMethod === "instapay" && (
-                      <div className="absolute top-2 left-2 z-10">
-                        <CheckCircle2 className="w-4 h-4 text-purple-400 fill-purple-500/20" />
-                      </div>
-                    )}
-                    <div className="w-full h-14 sm:h-16 bg-white rounded-xl p-2 flex items-center justify-center shadow-md shadow-black/30 group-hover:shadow-lg transition-transform">
-                      <img
-                        src="/instapay.png"
-                        alt="إنستا باي - InstaPay"
-                        loading="eager"
-                        decoding="sync"
-                        className="h-10 sm:h-11 w-auto max-w-full object-contain transform transition-transform group-hover:scale-105"
-                      />
-                    </div>
-                    <div className="text-center">
-                      <span className="text-xs font-black block text-slate-100">إنستا باي (InstaPay)</span>
-                      <span className="text-[10px] font-bold text-purple-400 block">تحويل بنكي لحظي</span>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Transfer Number Card */}
-            {activePlanForCheckout.price > 0 && (
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
-                <span className="text-slate-400 font-bold block">
-                  رقم التحويل المباشر ({paymentMethod === "vodafone" ? "فودافون كاش" : "إنستاباي"}):
-                </span>
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-base font-mono font-black text-emerald-400 tracking-widest" dir="ltr">
-                    {TRANSFER_NUMBER}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(TRANSFER_NUMBER, "modal-transfer")}
-                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>{copySuccess === "modal-transfer" ? "تم النسخ" : "نسخ الرقم"}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Confirmation Form */}
-            <form onSubmit={handleConfirmSubmit} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-300 block">اسم الطبيب الكامل (يظهر بالبورتال والروشتة):</label>
-                  <input
-                    type="text"
-                    required
-                    value={checkoutDoctorName}
-                    onChange={(e) => setCheckoutDoctorName(e.target.value)}
-                    placeholder="د. الاسم الكامل..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-300 block">اسم العيادة / المركز الطبي:</label>
-                  <input
-                    type="text"
-                    required
-                    value={checkoutClinicName}
-                    onChange={(e) => setCheckoutClinicName(e.target.value)}
-                    placeholder="اسم العيادة..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              {activePlanForCheckout.price > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-300 block">رقم الهاتف المحول منه:</label>
-                    <input
-                      type="text"
-                      required
-                      value={senderPhone}
-                      onChange={(e) => setSenderPhone(e.target.value)}
-                      placeholder="010..."
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-mono font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                      dir="ltr"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-300 block">رقم العملية المرجعي (Ref ID):</label>
-                    <input
-                      type="text"
-                      required
-                      value={transactionRef}
-                      onChange={(e) => setTransactionRef(e.target.value)}
-                      placeholder="رقم مرجع الإيصال..."
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-mono font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Machine ID info in Modal */}
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
-                <span>معرّف جهازك الحالي:</span>
-                <span className="font-mono font-bold text-emerald-400 truncate max-w-[200px]" dir="ltr">
-                  {machineId}
-                </span>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <Crown className="w-4 h-4" />
-                  <span>
-                    {isSubmitting
-                      ? "جاري إرسال الطلب..."
-                      : activePlanForCheckout.price === 0
-                      ? "تأكيد الاشتراك المجاني فوراً 🚀"
-                      : "تأكيد وإرسال طلب التفعيل 🚀"}
-                  </span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Modern Cancel Confirmation Modal (هل تريد إلغاء طلب التفعيل الحالي واختيار باقة أخرى؟) */}
       {isCancelConfirmOpen && (
@@ -1725,8 +1747,10 @@ export default function SubscriptionsPage() {
           <div className="w-full max-w-sm bg-slate-900 border border-amber-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 text-right relative overflow-hidden" dir="rtl">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
-                  <Smartphone className="w-5 h-5 text-amber-400" />
+                <div className="w-10 h-10 rounded-2xl bg-slate-800 border border-slate-700 text-slate-100 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5 text-slate-100" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.64-.78 1.08-1.86.96-2.95-1 .04-2.18.66-2.83 1.43-.58.67-1.09 1.77-.95 2.83 1.11.09 2.21-.57 2.82-1.31z"/>
+                  </svg>
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-slate-100">تثبيت نسخة الآيفون 🍏</h3>

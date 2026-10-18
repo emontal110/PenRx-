@@ -164,12 +164,18 @@ jobs:
               break
             fi
           done
-          # Differential update metadata (.blockmap and latest.yml) for Classico-style delta updates
+          # Differential update metadata (.blockmap and latest.yml) for delta updates
           cp artifacts/windows/*.blockmap release-files/ 2>/dev/null || true
+          for b in artifacts/windows/*.blockmap; do
+            if [ -f "$b" ]; then
+              cp "$b" release-files/PenRX+-Setup.exe.blockmap
+              break
+            fi
+          done
           cp artifacts/windows/latest.yml release-files/ 2>/dev/null || true
           # Synchronize latest.yml so url and path point to PenRX+-Setup.exe
           if [ -f "release-files/latest.yml" ]; then
-            sed -i 's/penrx-plus-setup-[0-9.]*\.exe/PenRX+-Setup.exe/g' release-files/latest.yml
+            sed -i -E 's/(url|path): .*\.exe/\1: PenRX+-Setup.exe/g' release-files/latest.yml
           fi
           # Dynamic Tag Extraction
           RELEASE_TAG=$(node -p "try { require('./src/config/version.json').version } catch(e) { require('./package.json').version }")

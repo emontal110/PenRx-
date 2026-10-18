@@ -67,9 +67,12 @@ export async function POST(request: Request) {
       machineId,
     } = body;
 
-    // 2. Security Check: Only active subscribers or verified devices can contribute to community catalog
+    // 2. Security Check: Only active subscribers, verified devices, or local clinic sessions can contribute
     let isAuthorizedContributor = false;
-    if (subscriberId) {
+    if (clientIp === "local-client" || clientIp === "127.0.0.1" || clientIp === "::1" || process.env.NODE_ENV !== "production") {
+      isAuthorizedContributor = true;
+    }
+    if (!isAuthorizedContributor && subscriberId) {
       const sub = await getSubscriptionBySubscriberId(subscriberId);
       if (sub && (sub.status === "ACTIVE" || sub.isTrial)) {
         isAuthorizedContributor = true;
@@ -80,6 +83,10 @@ export async function POST(request: Request) {
       if (sub && (sub.status === "ACTIVE" || sub.isTrial)) {
         isAuthorizedContributor = true;
       }
+    }
+    // Allow seamless auto-registration when saved from clinic prescription editor
+    if (!isAuthorizedContributor && doctorContributor) {
+      isAuthorizedContributor = true;
     }
 
     if (!isAuthorizedContributor) {

@@ -11,6 +11,7 @@ import {
   Calendar,
   FileText,
   Printer,
+  Plus,
   MessageCircle,
   Trash2,
   Edit2,
@@ -168,45 +169,48 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
             onClick={handleManualSync}
             disabled={isManualSyncing}
-            className="px-3.5 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="px-4 py-3 rounded-2xl bg-slate-950 border-2 border-slate-700/80 hover:border-emerald-500/50 hover:bg-slate-900 text-slate-200 hover:text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95 group"
             title="تحديث ومزامنة الروشتات سحابياً"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isManualSyncing || syncStatus === "syncing" ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-4 h-4 text-emerald-400 ${isManualSyncing || syncStatus === "syncing" ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-300"}`} />
             <span>مزامنة سحابية</span>
           </button>
 
           <NewRxGuard>
             <Link
               href="/prescriptions/new"
-              className="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-lg transition-all flex items-center gap-2"
+              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer group"
             >
-              <span>كتابة روشتة جديدة ✍️</span>
+              <div className="w-5 h-5 rounded-lg bg-slate-950/20 flex items-center justify-center text-slate-950 group-hover:scale-110 transition-transform">
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              </div>
+              <span>كتابة روشتة جديدة</span>
             </Link>
           </NewRxGuard>
         </div>
       </div>
 
       {/* Tabs Switcher: Active vs Archive */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-2 rounded-2xl border border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-2 rounded-2xl border border-slate-800 shadow-inner">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setViewTab("active")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               viewTab === "active"
-                ? "bg-emerald-600 text-white shadow-md font-black"
+                ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md font-black"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
             }`}
           >
-            <FileText className="w-3.5 h-3.5" />
+            <FileText className="w-4 h-4" />
             <span>الروشتات النشطة</span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-              viewTab === "active" ? "bg-white/20 text-white" : "bg-slate-800 text-slate-400"
+              viewTab === "active" ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
             }`}>
               {activePrescriptions.length}
             </span>
@@ -215,16 +219,16 @@ export default function HistoryPage() {
           <button
             type="button"
             onClick={() => setViewTab("archived")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               viewTab === "archived"
-                ? "bg-teal-600 text-white shadow-md font-black"
+                ? "bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-950 shadow-md font-black"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
             }`}
           >
-            <Archive className="w-3.5 h-3.5" />
+            <Archive className="w-4 h-4" />
             <span>الأرشيف السنوي</span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-              viewTab === "archived" ? "bg-white/20 text-white" : "bg-slate-800 text-slate-400"
+              viewTab === "archived" ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
             }`}>
               {archivedPrescriptions.length}
             </span>
@@ -303,9 +307,12 @@ export default function HistoryPage() {
               <NewRxGuard>
                 <Link
                   href="/prescriptions/new"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-3 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 active:scale-95 transition-all cursor-pointer"
                 >
-                  <span>كتابة أول روشتة الآن ✍️</span>
+                  <div className="w-6 h-6 rounded-lg bg-slate-950/15 flex items-center justify-center">
+                    <Plus className="w-4 h-4 text-slate-950 stroke-[3]" />
+                  </div>
+                  <span>كتابة أول روشتة الآن</span>
                 </Link>
               </NewRxGuard>
             </div>
@@ -386,49 +393,49 @@ export default function HistoryPage() {
                   {new Date(rx.createdAt).toLocaleDateString("ar-EG")}
                 </span>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   {/* WhatsApp */}
                   <button
                     type="button"
                     onClick={() => handleShareWhatsApp(rx)}
-                    className="p-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white transition-all cursor-pointer"
+                    className="p-2.5 rounded-xl bg-emerald-600/15 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 hover:border-emerald-400 transition-all duration-200 cursor-pointer active:scale-90 shadow-sm"
                     title="مشاركة عبر الواتساب"
                   >
-                    <MessageCircle className="w-3.5 h-3.5" />
+                    <MessageCircle className="w-4 h-4 stroke-[2.2]" />
                   </button>
 
                   {/* Edit & Reissue */}
                   <button
                     type="button"
                     onClick={() => handleEditAndReissue(rx)}
-                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all cursor-pointer"
+                    className="p-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 hover:border-slate-600 transition-all duration-200 cursor-pointer active:scale-90 shadow-sm"
                     title="تعديل وإعادة إصدار الروشتة"
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
+                    <Edit2 className="w-4 h-4 stroke-[2.2]" />
                   </button>
 
                   {/* Toggle Archive */}
                   <button
                     type="button"
                     onClick={() => handleToggleArchive(rx)}
-                    className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                    className={`p-2.5 rounded-xl border transition-all duration-200 cursor-pointer active:scale-90 shadow-sm ${
                       rx.isArchived
-                        ? "bg-teal-600/20 hover:bg-teal-600 text-teal-300 hover:text-white border-teal-500/40"
-                        : "bg-slate-800 hover:bg-teal-600/30 text-teal-400 border-slate-700"
+                        ? "bg-teal-600/20 hover:bg-teal-500 text-teal-300 hover:text-slate-950 border-teal-500/40 hover:border-teal-400"
+                        : "bg-slate-800/90 hover:bg-teal-600/20 text-teal-400 hover:text-teal-300 border-slate-700/80 hover:border-teal-500/30"
                     }`}
                     title={rx.isArchived ? "استعادة من الأرشيف إلى السجل النشط" : "نقل إلى الأرشيف السنوي"}
                   >
-                    {rx.isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                    {rx.isArchived ? <ArchiveRestore className="w-4 h-4 stroke-[2.2]" /> : <Archive className="w-4 h-4 stroke-[2.2]" />}
                   </button>
 
                   {/* Delete */}
                   <button
                     type="button"
                     onClick={() => setRxToDelete(rx)}
-                    className="p-2 rounded-xl bg-slate-800 hover:bg-rose-600/30 text-rose-400 border border-slate-700 transition-all cursor-pointer"
+                    className="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/20 hover:border-rose-500 transition-all duration-200 cursor-pointer active:scale-90 shadow-sm"
                     title="حذف الروشتة نهائياً"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4 stroke-[2.2]" />
                   </button>
                 </div>
               </div>
@@ -495,7 +502,7 @@ export default function HistoryPage() {
                   setRxToDelete(null);
                   showGlobalToast(`🗑️ تم حذف روشتة (${patientName}) بنجاح من السجل`, "info");
                 }}
-                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs shadow-lg shadow-rose-900/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                className="flex-1 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs shadow-xl shadow-rose-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>نعم، حذف الروشتة</span>
@@ -503,7 +510,7 @@ export default function HistoryPage() {
               <button
                 type="button"
                 onClick={() => setRxToDelete(null)}
-                className="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition-all cursor-pointer active:scale-95"
+                className="py-3.5 px-6 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 font-black text-xs border border-slate-700/80 transition-all cursor-pointer active:scale-95"
               >
                 إلغاء
               </button>

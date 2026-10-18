@@ -99,6 +99,7 @@ interface PrescriptionStoreState {
   toggleArchivePrescription: (id: string) => void;
   archivePrescriptionsForYear: (year: number) => number;
   getUnifiedPatients: () => UnifiedPatientRecord[];
+  clearAllPrescriptions: () => void;
 }
 
 function generatePrescriptionNo(): string {
@@ -446,6 +447,15 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
         const state = get();
         return extractUnifiedPatients(state.savedPatients, state.savedPrescriptions);
       },
+
+      clearAllPrescriptions: () =>
+        set({
+          savedPrescriptions: [],
+          savedPatients: [],
+          items: [],
+          diagnosis: "",
+          notes: "",
+        }),
     }),
     {
       name: "penrx_prescription_storage",

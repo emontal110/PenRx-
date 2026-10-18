@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertCircle, FileX2, Plus, X, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { AlertCircle, FileX2, Plus, X, ArrowLeft, CheckCircle2, Edit3 } from "lucide-react";
 
 interface PrintValidationModalProps {
   isOpen: boolean;
@@ -97,15 +97,16 @@ export function PrintValidationModal({
                 onFocusPatientName();
               }
             }}
-            className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 font-black text-xs shadow-lg shadow-amber-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="flex-1 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 font-black text-xs shadow-xl shadow-amber-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
-            <span>استكمال البيانات أولاً ✍️</span>
+            <Edit3 className="w-4 h-4 stroke-[2.2]" />
+            <span>استكمال البيانات أولاً</span>
           </button>
 
           <button
             type="button"
             onClick={onClose}
-            className="py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition-all cursor-pointer"
+            className="py-3.5 px-6 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700/80 transition-all cursor-pointer active:scale-95"
           >
             إغلاق
           </button>

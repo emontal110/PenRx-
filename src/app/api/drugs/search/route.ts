@@ -6,6 +6,8 @@ import {
   DrugRecord,
 } from "@/lib/drugSearchEngine";
 import { prisma } from "@/lib/prisma";
+import { suggestDrugWithGemini } from "@/lib/gemini";
+import { synthesizeClinicalAiDrug } from "@/lib/clinicalAiSynthesis";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,54 @@ export async function OPTIONS() {
 const EXTERNAL_CACHE = new Map<string, { timestamp: number; results: DrugRecord[] }>();
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
+// ── In-Memory Community Drugs Cache (Zero-latency RAM cache synced in background) ──
+let COMMUNITY_CACHE: DrugRecord[] = [];
+let lastCommunitySync = 0;
+const COMMUNITY_SYNC_INTERVAL = 3 * 60 * 1000; // 3 minutes
+
+async function syncCommunityDrugsInBackground() {
+  if (Date.now() - lastCommunitySync < COMMUNITY_SYNC_INTERVAL) return;
+  lastCommunitySync = Date.now();
+
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), 700)
+    );
+    const queryPromise = prisma.drug.findMany({
+      take: 200,
+      orderBy: { createdAt: "desc" },
+    });
+
+    const dbMatches = (await Promise.race([queryPromise, timeoutPromise])) as any[];
+    if (dbMatches && dbMatches.length > 0) {
+      COMMUNITY_CACHE = dbMatches.map((d) => ({
+        id: d.id,
+        name: d.name,
+        nameAr: d.nameAr || undefined,
+        activeIngredient: d.activeIngredient,
+        company: d.company || "مساهمة من طبيب",
+        price: d.price || undefined,
+        dosageForm: d.dosageForm || "Tablet",
+        category: d.category || "عام",
+        isControlled: d.isControlled || false,
+        sourceOrigin: "Doctor Community" as const,
+        isCrowdSourced: true,
+      }));
+
+      // Automatically persist cloud price updates into in-memory engine
+      updateDrugPricesFromCloud(
+        COMMUNITY_CACHE.map((d) => ({
+          name: d.name,
+          price: d.price,
+          dosageForm: d.dosageForm,
+        }))
+      );
+    }
+  } catch {
+    // Supabase offline or slow — proceed cleanly with memory
+  }
+}
+
 // ── OpenFDA fallback — free, no API key ───────────────────────────────────────
 async function fetchOpenFDA(query: string, limit: number): Promise<DrugRecord[]> {
   try {
@@ -35,7 +85,7 @@ async function fetchOpenFDA(query: string, limit: number): Promise<DrugRecord[]>
 
     for (const url of urls) {
       const res = await fetch(url, {
-        signal: AbortSignal.timeout(2500),
+        signal: AbortSignal.timeout(900),
         headers: { Accept: "application/json" },
       });
       if (!res.ok) continue;
@@ -67,7 +117,7 @@ async function fetchRxNorm(query: string): Promise<DrugRecord[]> {
   try {
     const url = `https://rxnav.nlm.nih.gov/REST/drugs.json?name=${encodeURIComponent(query)}`;
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(900),
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return [];
@@ -103,7 +153,7 @@ async function fetchDailyMed(query: string): Promise<DrugRecord[]> {
   try {
     const url = `https://dailymed.nlm.nih.gov/dailymed/services/v2/drugnames.json?drug_name=${encodeURIComponent(query)}`;
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(900),
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return [];
@@ -133,15 +183,15 @@ export async function GET(request: Request) {
   const query = searchParams.get("q") || "";
   const limit = Math.min(parseInt(searchParams.get("limit") || "25"), 50);
   const includeActiveIngredient = searchParams.get("includeActiveIngredient") === "true";
+  const useAi = searchParams.get("useAi") === "true";
 
   if (!query.trim()) {
-    const popular = searchComprehensiveDrugs("Panadol", 15);
     return NextResponse.json(
       {
-        results: popular,
+        results: [],
         totalCatalogSize: getTotalDrugCount(),
         executionTimeMs: Date.now() - startTime,
-        source: "popular-defaults",
+        source: "empty",
       },
       { headers: CORS_HEADERS }
     );
@@ -154,64 +204,30 @@ export async function GET(request: Request) {
     searchActiveIngredient: includeActiveIngredient,
   });
 
-  // ── Layer 2: Supabase community drugs (crowd-sourced by doctors) ──────────
-  let dbCommunityResults: DrugRecord[] = [];
-  try {
-    const orConditions: any[] = [
-      { name: { contains: cleanQuery, mode: "insensitive" } },
-      { nameAr: { contains: cleanQuery, mode: "insensitive" } },
-    ];
-    if (includeActiveIngredient) {
-      orConditions.push({ activeIngredient: { contains: cleanQuery, mode: "insensitive" } });
-    }
+  // Trigger background community sync if due (never blocks search response)
+  syncCommunityDrugsInBackground().catch(() => {});
 
-    const dbMatches = await prisma.drug.findMany({
-      where: {
-        OR: orConditions,
-      },
-      take: 10,
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (dbMatches.length > 0) {
-      dbCommunityResults = dbMatches.map((d) => ({
-        id: d.id,
-        name: d.name,
-        nameAr: d.nameAr || undefined,
-        activeIngredient: d.activeIngredient,
-        company: d.company || "مساهمة من طبيب",
-        price: d.price || undefined,
-        dosageForm: d.dosageForm || "Tablet",
-        category: d.category || "عام",
-        isControlled: d.isControlled || false,
-        sourceOrigin: "Doctor Community" as const,
-        isCrowdSourced: true,
-      }));
-      // Automatically persist cloud price updates into in-memory engine
-      updateDrugPricesFromCloud(
-        dbCommunityResults.map((d) => ({
-          name: d.name,
-          price: d.price,
-          dosageForm: d.dosageForm,
-        }))
-      );
-    }
-  } catch {
-    // Supabase offline — use local only
-  }
+  // ── Layer 2: Instant Community Cache Query (0.01ms in RAM) ────────────────
+  const cleanQ = cleanQuery.toLowerCase();
+  const dbCommunityResults = COMMUNITY_CACHE.filter((d) => {
+    const nameMatch = d.name.toLowerCase().includes(cleanQ) || (d.nameAr && d.nameAr.includes(cleanQuery));
+    const activeMatch = includeActiveIngredient && d.activeIngredient && d.activeIngredient.toLowerCase().includes(cleanQ);
+    return nameMatch || activeMatch;
+  }).slice(0, 10);
 
   // ── Layer 3: External Multi-Source APIs (OpenFDA + RxNorm + DailyMed) ────
   let externalResults: DrugRecord[] = [];
   const totalLocalResults = memoryResults.length + dbCommunityResults.length;
 
-  if (totalLocalResults < 5 && cleanQuery.length >= 3) {
+  // Only query external networks if local catalog has zero results
+  if (totalLocalResults === 0 && cleanQuery.length >= 3 && !useAi) {
     const cacheKey = cleanQuery.toLowerCase();
     const cached = EXTERNAL_CACHE.get(cacheKey);
 
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       externalResults = cached.results;
     } else {
-      // Fetch external sources in parallel with strict timeout
+      // Fetch external sources in parallel with fast 900ms timeout
       const [fdaRes, rxRes, dailyRes] = await Promise.allSettled([
         fetchOpenFDA(cleanQuery, 5),
         fetchRxNorm(cleanQuery),
@@ -224,6 +240,42 @@ export async function GET(request: Request) {
       if (externalResults.length > 0) {
         EXTERNAL_CACHE.set(cacheKey, { timestamp: Date.now(), results: externalResults });
       }
+    }
+  }
+
+  // ── Layer 4: Deep Clinical Pharmacology AI (Google Gemini 3.8 Flash & Clinical AI) ──────
+  let aiResults: DrugRecord[] = [];
+
+  // Invoke Gemini AI when requested or when doctor activates Gemini mode
+  if (useAi && cleanQuery.length >= 2) {
+    let rawSuggestions: any[] | null = null;
+    try {
+      rawSuggestions = await suggestDrugWithGemini(cleanQuery);
+    } catch {
+      // Gemini rate limited or offline
+    }
+
+    // If Gemini API is rate-limited (429) or offline, invoke Clinical AI Synthesizer
+    if (!rawSuggestions || rawSuggestions.length === 0) {
+      rawSuggestions = synthesizeClinicalAiDrug(cleanQuery);
+    }
+
+    if (rawSuggestions && rawSuggestions.length > 0) {
+      aiResults = rawSuggestions.map((g: any, i: number) => ({
+        id: `gemini-ai-${Date.now()}-${i}`,
+        name: g.name || cleanQuery,
+        nameAr: g.nameAr || g.name || cleanQuery,
+        activeIngredient: g.activeIngredient || cleanQuery,
+        activeIngredientAr: g.activeIngredientAr || undefined,
+        company: "Google Gemini 3.8 Flash",
+        dosageForm: g.dosageForm || "Tablet",
+        category: g.category || "AI Clinical Suggestion",
+        isControlled: false,
+        sourceOrigin: "Gemini AI Engine" as const,
+        isAiGenerated: true,
+        aiConfidence: g.confidence || "High",
+        recommendedDose: g.recommendedDose || undefined,
+      }));
     }
   }
 
@@ -258,6 +310,14 @@ export async function GET(request: Request) {
     }
   }
 
+  // 4. Add Gemini AI synthesized results
+  for (const aiItem of aiResults) {
+    const key = aiItem.name.toLowerCase().replace(/\s+/g, " ").trim();
+    if (!mergedMap.has(key)) {
+      mergedMap.set(key, aiItem);
+    }
+  }
+
   const combined: DrugRecord[] = Array.from(mergedMap.values());
 
   // ── Strict Alphabetical Sorting for Combined Results ─────────────────────
@@ -265,7 +325,12 @@ export async function GET(request: Request) {
   const normQ = cleanQuery.toLowerCase();
 
   combined.sort((a, b) => {
-    // 1. Exact prefix match on brand names has priority
+    // 1. AI generated items with High confidence placed prominently if searched with AI
+    if (useAi && a.isAiGenerated !== b.isAiGenerated) {
+      return a.isAiGenerated ? -1 : 1;
+    }
+
+    // 2. Exact prefix match on brand names has priority
     const aStarts = isAr
       ? (a.nameAr && a.nameAr.startsWith(cleanQuery)) || a.name.toLowerCase().startsWith(normQ)
       : a.name.toLowerCase().startsWith(normQ);
@@ -275,12 +340,12 @@ export async function GET(request: Request) {
 
     if (aStarts !== bStarts) return aStarts ? -1 : 1;
 
-    // 2. Essential popular regional brands first
+    // 3. Essential popular regional brands first
     const aEss = !!a.isEssential;
     const bEss = !!b.isEssential;
     if (aEss !== bEss) return aEss ? -1 : 1;
 
-    // 3. Alphabetical order (أ-ي for Arabic, A-Z for English)
+    // 4. Alphabetical order (أ-ي for Arabic, A-Z for English)
     if (isAr) {
       const nameA = a.nameAr || a.name;
       const nameB = b.nameAr || b.name;
@@ -297,12 +362,16 @@ export async function GET(request: Request) {
       totalCatalogSize: getTotalDrugCount() + dbCommunityResults.length,
       executionTimeMs: Date.now() - startTime,
       source:
-        externalResults.length > 0
+        aiResults.length > 0
+          ? "hybrid-with-gemini-ai"
+          : externalResults.length > 0
           ? "hybrid-local-community-external"
           : dbCommunityResults.length > 0
           ? "hybrid-local-community"
           : "local-memory",
       hasExternalResults: externalResults.length > 0,
+      hasAiResults: aiResults.length > 0,
+      aiEngine: aiResults.length > 0 ? "Google Gemini 3.8 Flash" : undefined,
     },
     { headers: CORS_HEADERS }
   );

@@ -405,7 +405,76 @@ function ensureIndicesBuilt() {
 
 export interface SearchOptions {
   searchActiveIngredient?: boolean;
+  searchIndications?: boolean;
 }
+
+// ── Clinical Indication & Symptoms Mapping Dictionary ─────────────────────────
+export const CLINICAL_INDICATION_MAP: Record<string, { labelAr: string; keywords: string[] }> = {
+  "خافض حراره": { labelAr: "خافض حرارة وحمى", keywords: ["paracetamol", "ibuprofen", "panadol", "adol", "cetal", "brufen", "dolphin", "catafly"] },
+  "حراره": { labelAr: "خافض حرارة وحمى", keywords: ["paracetamol", "ibuprofen", "panadol", "adol", "cetal", "brufen"] },
+  "سخونيه": { labelAr: "خافض حرارة وحمى", keywords: ["paracetamol", "ibuprofen", "panadol", "adol", "cetal", "brufen"] },
+  "مسكن": { labelAr: "مسكن للآلام ومضاد للالتهاب", keywords: ["diclofenac", "ibuprofen", "ketoprofen", "cataflam", "voltaren", "brufen", "ketofan", "panadol"] },
+  "صداع": { labelAr: "علاج الصداع والآلام", keywords: ["panadol extra", "adol extra", "cataflam", "brufen", "migranil", "paracetamol"] },
+  "مضاد حيوي": { labelAr: "مضاد حيوي واسع المجال", keywords: ["amoxicillin", "augmentin", "curam", "flumox", "amoxil", "ciprobay", "zithromax"] },
+  "كحه": { labelAr: "علاج الكحة والسعال", keywords: ["toplexil", "bronchopro", "ventolin", "farcolin", "sinecod"] },
+  "سعال": { labelAr: "علاج الكحة والسعال", keywords: ["toplexil", "bronchopro", "ventolin"] },
+  "بلغم": { labelAr: "مذيب وطارد للبلغم", keywords: ["bronchopro", "ambroxol", "acetylcysteine", "mucophylline"] },
+  "حموضه": { labelAr: "علاج الحموضة وارتجاع المريء", keywords: ["esomeprazole", "pantoprazole", "nexium", "pantoloc", "gaviscon", "antodine"] },
+  "ارتجاع": { labelAr: "علاج ارتجاع المريء", keywords: ["nexium", "pantoloc", "gaviscon"] },
+  "قرحه": { labelAr: "علاج قرحة المعدة", keywords: ["nexium", "pantoloc", "controloc"] },
+  "مغص": { labelAr: "علاج المغص والتقلصات", keywords: ["buscopan", "spasmo", "visceralgine", "duspatalin"] },
+  "قولون": { labelAr: "علاج القولون العصبي والانتفاخ", keywords: ["duspatalin", "mebeverine", "librax", "coloverin", "spasmocanulase"] },
+  "اسهال": { labelAr: "علاج الإسهال ومطهر معوي", keywords: ["antinal", "flagyl", "diax", "streptoquin", "smecta"] },
+  "مطهر معوي": { labelAr: "مطهر معوي ومضاد طفيليات", keywords: ["antinal", "flagyl", "nifuroxazide", "metronidazole"] },
+  "امساك": { labelAr: "علاج الإمساك وملين", keywords: ["duphalac", "lactulose", "senna", "picolax", "dulcolax"] },
+  "حساسيه": { labelAr: "علاج الحساسية والارتيكاريا", keywords: ["claritine", "zyrtec", "telfast", "loratadine", "cetirizine", "fexofenadine"] },
+  "رشح": { labelAr: "علاج الرشح ونزلات البرد", keywords: ["congestal", "flutab", "123", "comtrex", "zyrtec", "panadol cold"] },
+  "برد": { labelAr: "علاج نزلات البرد والانفلونزا", keywords: ["congestal", "panadol cold", "flutab", "123", "c-retard"] },
+  "انفلونزا": { labelAr: "علاج نزلات البرد والانفلونزا", keywords: ["congestal", "panadol cold", "tamiflu"] },
+  "ضغط": { labelAr: "علاج ارتفاع ضغط الدم", keywords: ["concor", "capoten", "tritace", "exforge", "norvasc", "natrilix", "co-diovan"] },
+  "سكر": { labelAr: "علاج السكري وخفض السكر", keywords: ["glucophage", "metformin", "januvia", "amaryl", "forxiga", "galvus"] },
+  "كوليسترول": { labelAr: "خفض الكوليسترول والدهون", keywords: ["ator", "lipitor", "crestor", "atorvastatin", "rosuvastatin"] },
+  "دهون": { labelAr: "علاج دهون الدم والكوليسترول", keywords: ["ator", "lipitor", "crestor"] },
+  "دوالي": { labelAr: "علاج الدوالي وضعف الأوردة", keywords: ["daflon", "diosmin", "venoruton"] },
+  "بواسير": { labelAr: "علاج البواسير والشرخ", keywords: ["daflon", "sediproct", "proctosedyl", "faktu"] },
+  "حرقان بول": { labelAr: "علاج التهاب وحرقان المسالك", keywords: ["ciprobay", "ciprofar", "urivin", "rowatinex", "coliurinal"] },
+  "مسالك": { labelAr: "مطهر ومضاد حيوي للمسالك", keywords: ["ciprobay", "ciprofar", "urivin", "rowatinex"] },
+  "ارق": { labelAr: "مساعد على النوم والأرق", keywords: ["panadol night", "dormicum", "night calm"] },
+  "منوم": { labelAr: "مساعد على النوم والأرق", keywords: ["panadol night", "night calm"] },
+  "عضلات": { labelAr: "بسط العضلات والشد العضلي", keywords: ["myofen", "dimra", "mark-fast", "sirdalud"] },
+  "شد عضلي": { labelAr: "بسط العضلات والشد العضلي", keywords: ["myofen", "dimra", "mark-fast"] },
+};
+
+// ── Arabic Phonetic Active Ingredients Mapping ────────────────────────────────
+export const ARABIC_PHONETIC_ING_MAP: Record<string, string> = {
+  "اوميبرازول": "omeprazole",
+  "اميبرازول": "omeprazole",
+  "باراسيتامول": "paracetamol",
+  "اموكسيسيلين": "amoxicillin",
+  "اموكسيلين": "amoxicillin",
+  "ايبوبروفين": "ibuprofen",
+  "بروفين": "ibuprofen",
+  "ميتفورمين": "metformin",
+  "اسبرين": "aspirin",
+  "ديكلوفيناك": "diclofenac",
+  "ازيثروميسين": "azithromycin",
+  "سيبروفلوكساسين": "ciprofloxacin",
+  "كيتوبروفين": "ketoprofen",
+  "ايزوميبرازول": "esomeprazole",
+  "بانتوبرازول": "pantoprazole",
+  "لوراتادين": "loratadine",
+  "سيتريزين": "cetirizine",
+  "فيكسوفينادين": "fexofenadine",
+  "سالبوتامول": "salbutamol",
+  "بيسوبرولول": "bisoprolol",
+  "اتورفاستاتين": "atorvastatin",
+  "روزوفاستاتين": "rosuvastatin",
+  "كلوبيدوجريل": "clopidogrel",
+  "ديوسمين": "diosmin",
+  "ميبفرين": "mebeverine",
+  "ميترونيدازول": "metronidazole",
+  "نيفوروكسازيد": "nifuroxazide",
+};
 
 // ── Self-Evolving Adaptive Intelligence: Prescription Frequency Tracker ──
 export { recordDrugPrescribed, getDrugUsageScore } from "@/lib/drugTracker";
@@ -531,9 +600,14 @@ export function searchComprehensiveDrugs(
     return combined.slice(0, limit).map((r) => r.drug);
   }
 
-  // ── Step 3: Active Ingredient search (ONLY IF ACTIVATED BY DOCTOR) ─────────
+  // ── Step 3: Active Ingredient search (Activated by doctor OR matching phonetic ingredient) ─────────
+  const phoneticIng = isAr ? ARABIC_PHONETIC_ING_MAP[normQAr] : undefined;
+  const shouldSearchActiveIng = searchActiveIngredient || !!phoneticIng;
   const activeIngResults: { drug: DrugRecord; score: number }[] = [];
-  if (searchActiveIngredient && cleanQ.length >= 2) {
+
+  if (shouldSearchActiveIng && cleanQ.length >= 2) {
+    const targetEng = phoneticIng || normQ;
+
     for (let i = 0; i < INDEXED_DRUGS.length; i++) {
       const item = INDEXED_DRUGS[i];
       if (seenIds.has(item.id)) continue;
@@ -542,12 +616,10 @@ export function searchComprehensiveDrugs(
       const ingEn = item.normActiveIngEng;
       const ingAr = item.normActiveIngAr;
 
-      if (isAr) {
-        if (ingAr && ingAr.startsWith(normQAr)) score = 80;
-        else if (ingAr && ingAr.includes(normQAr)) score = 70;
-      } else {
-        if (ingEn.startsWith(normQ)) score = 80;
-        else if (ingEn.includes(normQ)) score = 70;
+      if (ingAr && (ingAr.startsWith(normQAr) || ingAr.includes(normQAr))) {
+        score = ingAr.startsWith(normQAr) ? 85 : 75;
+      } else if (targetEng && (ingEn.startsWith(targetEng) || ingEn.includes(targetEng))) {
+        score = ingEn.startsWith(targetEng) ? 85 : 75;
       }
 
       if (score > 0) {
@@ -564,7 +636,45 @@ export function searchComprehensiveDrugs(
     return combined.slice(0, limit).map((r) => r.drug);
   }
 
-  // ── Step 4: Typo / Fuzzy fallback (ONLY when 0 matches found & query >= 4) ──
+  // ── Step 4: Clinical Indication / Symptom Search ──────────────────────────
+  const searchIndications = options.searchIndications !== false;
+  if (combined.length === 0 && searchIndications && cleanQ.length >= 2) {
+    const indicationEntry = Object.entries(CLINICAL_INDICATION_MAP).find(
+      ([key]) => normQAr === key || normQAr.includes(key) || (normQAr.length >= 3 && key.includes(normQAr))
+    );
+
+    if (indicationEntry) {
+      const [, info] = indicationEntry;
+      const indResults: { drug: DrugRecord; score: number }[] = [];
+
+      for (let i = 0; i < INDEXED_DRUGS.length; i++) {
+        const item = INDEXED_DRUGS[i];
+        if (seenIds.has(item.id)) continue;
+
+        const matchesKw = info.keywords.some(
+          (kw) => item.normNameEng.includes(kw) || item.normActiveIngEng.includes(kw)
+        );
+
+        if (matchesKw) {
+          indResults.push({
+            drug: {
+              ...item,
+              isIndicationMatch: true,
+              matchedIndication: info.labelAr,
+            },
+            score: 75,
+          });
+          seenIds.add(item.id);
+          if (indResults.length >= limit) break;
+        }
+      }
+
+      indResults.sort(sortAlphabetical);
+      combined.push(...indResults);
+    }
+  }
+
+  // ── Step 5: Typo / Fuzzy fallback (ONLY when 0 matches found & query >= 4) ──
   if (combined.length === 0 && cleanQ.length >= 4) {
     const typoResults: { drug: DrugRecord; score: number }[] = [];
     const maxDist = cleanQ.length <= 5 ? 1 : 2;

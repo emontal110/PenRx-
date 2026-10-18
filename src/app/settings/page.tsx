@@ -33,6 +33,7 @@ import {
   Copy,
   Printer,
   HeartPulse,
+  Stethoscope,
   AlertTriangle,
   Download,
   HardDrive,
@@ -155,7 +156,7 @@ function SettingsPrescriptionPreview({
   const templateStyles = getTemplateContainerStyles(templateId, primaryColor);
 
   return (
-    <div className="space-y-3 sticky top-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
         <span className="text-xs font-black text-slate-300 flex items-center gap-1.5">
           <Eye className="w-4 h-4 text-emerald-400" />
@@ -842,23 +843,6 @@ export default function SettingsPage() {
 
   const handleTogglePatientField = (field: keyof typeof visibleFields) => {
     toggleVisibleField(field);
-    const fieldNames: Record<string, string> = {
-      showAge: "السن (العمر)",
-      showGender: "الجنس (النوع)",
-      showHeight: "الطول",
-      showWeight: "الوزن",
-      showBloodType: "فصيلة الدم",
-      showDiagnosis: "التشخيص الطبي",
-      showMedicalHistory: "الأمراض المزمنة والتاريخ الطبي",
-      showAllergies: "تنبيه حساسية الدواء",
-    };
-    const newState = !visibleFields[field];
-    showGlobalToast(
-      newState
-        ? `✅ تم تفعيل حقل "${fieldNames[field]}" وتطبيقه على الروشتة فوراً!`
-        : `ℹ️ تم إخفاء حقل "${fieldNames[field]}" من الروشتة!`,
-      "success"
-    );
   };
 
   const handleApplyPreset = (preset: "standard" | "full" | "pediatric") => {
@@ -907,8 +891,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveClinicSettings = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveClinicSettings = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
     // Mandatory Portal Sync Validation: Doctor name, clinic name, and phone must not be empty!
     if (!doctorName.trim()) {
@@ -1056,11 +1040,14 @@ export default function SettingsPage() {
       {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-black text-slate-100">
               إعدادات المركز وهوية الروشتة المطبوعة
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
+            <span
+              dir="ltr"
+              className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] sm:text-xs font-semibold border border-emerald-500/20 inline-flex items-center justify-center text-center self-start sm:self-auto shrink-0 leading-tight"
+            >
               Settings & Customization
             </span>
           </div>
@@ -1082,42 +1069,84 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Tab Navigation Buttons */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 p-1 rounded-2xl bg-slate-800 border border-slate-700/80 w-full sm:w-auto">
+        {/* Tab Navigation Buttons (Ultra-Modern Segmented Control) */}
+        <div className="grid grid-cols-3 sm:flex sm:items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-slate-950/80 border border-slate-800 shadow-inner w-full sm:w-auto">
+          {/* Tab 1: Clinic Profile & Prescription Design */}
           <button
             type="button"
             onClick={() => setActiveTab("profile")}
-            className={`flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer active:scale-95 group ${
               activeTab === "profile"
-                ? "bg-emerald-600 text-white shadow-md font-black"
-                : "text-slate-400 hover:text-slate-200"
+                ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-lg shadow-emerald-950/50 border border-emerald-400/40 font-black"
+                : "bg-slate-900/60 hover:bg-slate-800/80 text-slate-300 hover:text-white border border-slate-800/80"
             }`}
+            title="إعدادات هوية وتصميم المركز والفروع"
           >
-            هوية وتصميم المركز والفروع 🏥
+            <div
+              className={`p-1.5 rounded-lg shrink-0 transition-colors ${
+                activeTab === "profile"
+                  ? "bg-white/20 text-white"
+                  : "bg-cyan-500/15 text-cyan-300 group-hover:bg-cyan-500/25"
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.2]" />
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1 min-w-0">
+              <span className="truncate text-[11px] sm:text-xs">هوية وتصميم المركز</span>
+              <span className="hidden sm:inline text-xs">والفروع</span>
+            </div>
           </button>
 
+          {/* Tab 2: Patient Fields Settings */}
           <button
             type="button"
             onClick={() => setActiveTab("patientFields")}
-            className={`flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer active:scale-95 group ${
               activeTab === "patientFields"
-                ? "bg-emerald-600 text-white shadow-md font-black"
-                : "text-slate-400 hover:text-slate-200"
+                ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-lg shadow-emerald-950/50 border border-emerald-400/40 font-black"
+                : "bg-slate-900/60 hover:bg-slate-800/80 text-slate-300 hover:text-white border border-slate-800/80"
             }`}
+            title="تخصيص حقول بيانات المريض بالروشتة"
           >
-            حقول بيانات المريض بالروشتة 👤
+            <div
+              className={`p-1.5 rounded-lg shrink-0 transition-colors ${
+                activeTab === "patientFields"
+                  ? "bg-white/20 text-white"
+                  : "bg-emerald-500/15 text-emerald-300 group-hover:bg-emerald-500/25"
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.2]" />
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1 min-w-0">
+              <span className="truncate text-[11px] sm:text-xs">حقول بيانات المريض</span>
+              <span className="hidden sm:inline text-xs">بالروشتة</span>
+            </div>
           </button>
 
+          {/* Tab 3: Backup & Archive */}
           <button
             type="button"
             onClick={() => setActiveTab("backup")}
-            className={`flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer active:scale-95 group ${
               activeTab === "backup"
-                ? "bg-emerald-600 text-white shadow-md font-black"
-                : "text-slate-400 hover:text-slate-200"
+                ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-lg shadow-emerald-950/50 border border-emerald-400/40 font-black"
+                : "bg-slate-900/60 hover:bg-slate-800/80 text-slate-300 hover:text-white border border-slate-800/80"
             }`}
+            title="النسخ الاحتياطي السحابي والمحلي والأرشفة"
           >
-            النسخ الاحتياطي والأرشفة 🔒💾
+            <div
+              className={`p-1.5 rounded-lg shrink-0 transition-colors ${
+                activeTab === "backup"
+                  ? "bg-white/20 text-white"
+                  : "bg-amber-500/15 text-amber-300 group-hover:bg-amber-500/25"
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.2]" />
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1 min-w-0">
+              <span className="truncate text-[11px] sm:text-xs">النسخ الاحتياطي</span>
+              <span className="hidden sm:inline text-xs">والأرشفة</span>
+            </div>
           </button>
         </div>
       </div>
@@ -1131,19 +1160,19 @@ export default function SettingsPage() {
           <div className="lg:col-span-7 space-y-6">
 
             {/* ── Branch Control Bar (حاوية إدارة الفروع والعيادة بتصميم منظم واحترافي) ── */}
-            <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/95 border border-slate-800 space-y-4 shadow-xl">
+            <div className="p-4 sm:p-6 rounded-3xl bg-slate-900/95 border border-slate-800 space-y-4 shadow-xl">
               {/* Header: Title + Branch count badge + Status Pill */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3.5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                    <Building2 className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-xs">
+                    <Building2 className="w-5 h-5 stroke-[2.2]" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-sm sm:text-base font-black text-slate-100">
                         إدارة الفروع والعيادة
                       </h2>
-                      <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
+                      <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-950 text-emerald-400 border border-emerald-500/30">
                         {branches.length} {branches.length === 1 ? "فرع مسجل" : "فروع مسجلة"}
                       </span>
                     </div>
@@ -1155,148 +1184,154 @@ export default function SettingsPage() {
 
                 {/* Edit Mode indicator (only when editing) */}
                 {isEditing && (
-                  <div className="flex items-center gap-2">
-                    <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1.5 animate-pulse">
-                      <Pencil className="w-3.5 h-3.5" />
-                      <span>{isAddingNew ? "وضع إضافة فرع جديد 🏥" : "وضع التعديل مفتوح 🔓"}</span>
+                  <div className="self-start sm:self-auto">
+                    <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-2 shadow-xs animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                      <Pencil className="w-3.5 h-3.5 shrink-0" />
+                      <span>{isAddingNew ? "وضع إضافة فرع جديد" : "وضع التعديل نشط"}</span>
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* 1. السطر الأول: أزرار التحكم في سطر واحد */}
-              <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                {/* زر إضافة فرع جديد */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddingNew(true);
-                    setIsEditing(true);
-                    setBranchAddress("");
-                    setClinicPhone("");
-                    setWorkingHours("يومياً من 4 مساءً حتى 10 مساءً");
-                    showGlobalToast("🏥 اكتب بيانات الفرع الجديد أدناه ثم انقر على حفظ لإضافته إلى قائمة فروعك.", "info");
-                  }}
-                  className="h-11 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-950/40"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>إضافة فرع جديد 🏥</span>
-                </button>
-
-                {/* زر تعديل الفرع / إلغاء التعديل */}
-                {branches.length > 0 && (
-                  !isEditing ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsEditing(true);
-                        setIsAddingNew(false);
-                        showGlobalToast("🔓 تم فتح الحقول للتعديل! يمكنك تعديل بيانات وتصميم الفرع ثم الحفظ.", "info");
-                      }}
-                      className="h-11 px-5 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-cyan-950/40"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                      <span>تعديل الفرع ✏️</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
+              {/* Controls & Selectors */}
+              <div className="space-y-3 pt-1">
+                {/* 1. Branch Selector Row + Star Default Button */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 min-w-0">
+                    <select
+                      value={activeBranchId}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setActiveBranchId(nextId);
                         setIsEditing(false);
                         setIsAddingNew(false);
-                        syncFormFromClinic(clinic, branches);
                       }}
-                      className="h-11 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
+                      disabled={branches.length === 0}
+                      className="w-full h-11 pr-10 pl-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-700/80 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer appearance-none truncate transition-colors shadow-inner"
                     >
-                      <X className="w-4 h-4" />
-                      <span>إلغاء التعديل</span>
-                    </button>
-                  )
-                )}
+                      {branches.length === 0 ? (
+                        <option value="">(لا توجد فروع مسجلة - اكتب البيانات أدناه لحفظ أول فرع)</option>
+                      ) : (
+                        branches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.isDefault ? "⭐ " : ""}{b.nameAr || b.name || "فرع بدون اسم"} {b.address ? `• ${b.address}` : ""}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <Building2 className="w-4 h-4 text-emerald-400 absolute right-3.5 top-3.5 pointer-events-none" />
+                  </div>
 
-                {/* زر حذف الفرع */}
-                {branches.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const branchToDelete = branches.find((b) => b.id === activeBranchId) || branches[0];
-                      if (!branchToDelete) return;
-                      if (confirm(`هل أنت متأكد من حذف فرع "${branchToDelete.nameAr || branchToDelete.name}"؟`)) {
-                        deleteBranch(branchToDelete.id);
-                        showGlobalToast("🗑️ تم حذف الفرع بنجاح.", "info");
-                        if (branches.length <= 1) {
-                          setIsEditing(true);
-                          setIsAddingNew(true);
-                        } else {
-                          setIsEditing(false);
+                  {/* Single Star Button: زر النجمة للتعيين الافتراضي */}
+                  {branches.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeBranchId) {
+                          setDefaultBranch(activeBranchId);
+                          showGlobalToast("⭐ تم تعيين هذا الفرع كفرع افتراضي للروشتات بنجاح!", "success");
                         }
-                      }
-                    }}
-                    className="h-11 px-4 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs font-bold"
-                    title="حذف هذا الفرع"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>حذف الفرع</span>
-                  </button>
-                )}
-              </div>
-
-              {/* 2. السطر الثاني: يلي الأزرار مباشرة وفيه القائمة المنسدلة وبجانبها زر النجمة ⭐ */}
-              <div className="flex items-center gap-2.5">
-                <div className="relative flex-1 min-w-0">
-                  <select
-                    value={activeBranchId}
-                    onChange={(e) => {
-                      const nextId = e.target.value;
-                      setActiveBranchId(nextId);
-                      setIsEditing(false);
-                      setIsAddingNew(false);
-                    }}
-                    disabled={branches.length === 0}
-                    className="w-full h-11 px-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-700 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer appearance-none pl-10 truncate"
-                  >
-                    {branches.length === 0 ? (
-                      <option value="">(لا توجد فروع مسجلة - اكتب البيانات أدناه لحفظ أول فرع)</option>
-                    ) : (
-                      branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.isDefault ? "⭐ " : ""}{b.nameAr || b.name || "فرع بدون اسم"} {b.address ? `• 📍 ${b.address}` : ""}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+                      }}
+                      className={`h-11 w-11 rounded-2xl border transition-all flex items-center justify-center shrink-0 cursor-pointer active:scale-95 ${
+                        activeBranch?.isDefault
+                          ? "bg-amber-500/20 border-amber-500/50 text-amber-400 shadow-md shadow-amber-950/30"
+                          : "bg-slate-950 border-slate-700/80 text-slate-400 hover:text-amber-400 hover:border-amber-400/50 hover:bg-amber-500/10"
+                      }`}
+                      title={activeBranch?.isDefault ? "هذا هو الفرع الافتراضي حالياً للروشتات" : "اضغط هنا لتعيين هذا الفرع كفرع افتراضي"}
+                    >
+                      <Star className={`w-4 h-4 ${activeBranch?.isDefault ? "fill-amber-400 text-amber-400" : ""}`} />
+                    </button>
+                  )}
                 </div>
 
-                {/* Single Star Button: زر النجمة فقط للتعيين الافتراضي */}
-                {branches.length > 0 && (
+                {/* 2. Action Buttons Row (Responsive on Mobile & Desktop) */}
+                <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+                  {/* إضافة فرع جديد */}
                   <button
                     type="button"
                     onClick={() => {
-                      if (activeBranchId) {
-                        setDefaultBranch(activeBranchId);
-                        showGlobalToast("⭐ تم تعيين هذا الفرع كفرع افتراضي للروشتات بنجاح!", "success");
-                      }
+                      setIsAddingNew(true);
+                      setIsEditing(true);
+                      setBranchAddress("");
+                      setClinicPhone("");
+                      setWorkingHours("يومياً من 4 مساءً حتى 10 مساءً");
+                      showGlobalToast("🏥 اكتب بيانات الفرع الجديد أدناه ثم انقر على حفظ لإضافته إلى قائمة فروعك.", "info");
                     }}
-                    className={`h-11 w-11 rounded-2xl border transition-all flex items-center justify-center shrink-0 cursor-pointer ${
-                      activeBranch?.isDefault
-                        ? "bg-amber-500/20 border-amber-500/50 text-amber-400 shadow-md shadow-amber-950/30"
-                        : "bg-slate-950 border-slate-700 text-slate-500 hover:text-amber-400 hover:border-amber-400/50 hover:bg-amber-500/10"
-                    }`}
-                    title={activeBranch?.isDefault ? "هذا هو الفرع الافتراضي حالياً للروشتات ⭐" : "اضغط هنا لتعيين هذا الفرع كفرع افتراضي ⭐"}
+                    className="col-span-2 sm:col-span-1 h-10 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:brightness-110 text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-950/40 active:scale-95"
                   >
-                    <Star className={`w-5 h-5 ${activeBranch?.isDefault ? "fill-amber-400 text-amber-400" : ""}`} />
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
+                    <span>إضافة فرع جديد</span>
                   </button>
-                )}
+
+                  {/* تعديل الفرع / إلغاء التعديل */}
+                  {branches.length > 0 && (
+                    !isEditing ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditing(true);
+                          setIsAddingNew(false);
+                          showGlobalToast("🔓 تم فتح الحقول للتعديل! يمكنك تعديل بيانات وتصميم الفرع ثم الحفظ.", "info");
+                        }}
+                        className="h-10 px-4 rounded-xl bg-slate-800 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>تعديل بيانات الفرع</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditing(false);
+                          setIsAddingNew(false);
+                          syncFormFromClinic(clinic, branches);
+                        }}
+                        className="h-10 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>إلغاء التعديل</span>
+                      </button>
+                    )
+                  )}
+
+                  {/* حذف الفرع */}
+                  {branches.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const branchToDelete = branches.find((b) => b.id === activeBranchId) || branches[0];
+                        if (!branchToDelete) return;
+                        if (confirm(`هل أنت متأكد من حذف فرع "${branchToDelete.nameAr || branchToDelete.name}"؟`)) {
+                          deleteBranch(branchToDelete.id);
+                          showGlobalToast("🗑️ تم حذف الفرع بنجاح.", "info");
+                          if (branches.length <= 1) {
+                            setIsEditing(true);
+                            setIsAddingNew(true);
+                          } else {
+                            setIsEditing(false);
+                          }
+                        }
+                      }}
+                      className="h-10 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      title="حذف هذا الفرع"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>حذف الفرع</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Status info bar when adding new branch */}
+              {/* Status info banner when adding new branch */}
               {isAddingNew && (
-                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300">
-                  <span className="flex items-center gap-2">
+                <div className="p-3 sm:p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-emerald-200 shadow-md shadow-emerald-950/30 animate-in fade-in">
+                  <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>أنت الآن في وضع <strong>إضافة فرع جديد</strong>. عدّل البيانات والتصميم أدناه ثم انقر على زر <strong>حفظ وإضافة الفرع 💾</strong></span>
-                  </span>
+                    <span>
+                      أنت الآن في وضع <strong>إضافة فرع جديد</strong>. عدّل البيانات والتصميم أدناه ثم انقر على زر <strong>حفظ وإضافة الفرع</strong>.
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
@@ -1304,7 +1339,7 @@ export default function SettingsPage() {
                       setIsEditing(false);
                       syncFormFromClinic(clinic, branches);
                     }}
-                    className="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                    className="self-end sm:self-auto px-3.5 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold cursor-pointer active:scale-95 transition-all shrink-0"
                   >
                     إلغاء
                   </button>
@@ -1315,194 +1350,204 @@ export default function SettingsPage() {
             <form onSubmit={handleSaveClinicSettings} className="space-y-6">
               <div className={!isEditing ? "opacity-60 pointer-events-none select-none transition-all duration-300 relative space-y-6" : "transition-all duration-300 relative space-y-6"}>
                 {/* Box 1: Doctor & Clinic Credentials */}
-                <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-5 shadow-xl">
-                  <h3 className="text-sm font-black text-slate-100 flex items-center gap-2 border-b border-slate-800 pb-3">
+                <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/95 border border-slate-800 space-y-4 shadow-xl">
+                  <h3 className="text-sm font-black text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-3">
                     <Building2 className="w-4 h-4 text-emerald-400" />
                     <span>بيانات المركز الطبي والطبيب المعالج:</span>
                   </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-300 flex items-center justify-between">
-                      <span>اسم المركز / العيادة: <span className="text-rose-400 font-black">*</span></span>
-                      <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">إلزامي للبورتال</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={nameAr}
-                      onChange={(e) => setNameAr(e.target.value)}
-                      placeholder="مثال: مجمع عيادات الحياة التخصصي"
-                      className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 font-bold text-slate-100 focus:outline-none transition-all ${
-                        !nameAr.trim() && !name.trim()
-                          ? "border-2 border-amber-500/60 focus:border-amber-400 focus:shadow-[0_0_15px_rgba(245,158,11,0.25)]"
-                          : "border border-slate-700 focus:border-emerald-500"
-                      }`}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-300 block">تخصص العيادة:</label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="مثال: جراحة العظام والمفاصل أو طب الأطفال أو أسنان"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-300 flex items-center justify-between">
-                      <span>اسم الطبيب والمعالج الكامل: <span className="text-rose-400 font-black">*</span></span>
-                      <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">إلزامي للبورتال</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={doctorName}
-                      onChange={(e) => setDoctorName(e.target.value)}
-                      placeholder="مثال: د. أيمن الشريف"
-                      className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 font-bold text-slate-100 focus:outline-none transition-all ${
-                        !doctorName.trim()
-                          ? "border-2 border-amber-500/60 focus:border-amber-400 focus:shadow-[0_0_15px_rgba(245,158,11,0.25)]"
-                          : "border border-slate-700 focus:border-emerald-500"
-                      }`}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-300 block">الدرجة العلمية واللقب المهني:</label>
-                    <input
-                      type="text"
-                      value={doctorTitle}
-                      onChange={(e) => setDoctorTitle(e.target.value)}
-                      placeholder="مثال: استشاري أول ورئيس قسم الباطنة"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-300 block">التخصص الطبي الدقيق:</label>
-                    <input
-                      type="text"
-                      value={specialty}
-                      onChange={(e) => setSpecialty(e.target.value)}
-                      placeholder="مثال: باطنة وجهاز هضمي وكبد"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-300 block">رقم قيد النقابة / ترخيص المزاولة:</label>
-                    <input
-                      type="text"
-                      value={syndicateId}
-                      onChange={(e) => setSyndicateId(e.target.value)}
-                      placeholder="مثال: 124587 / نقابة الأطباء"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-mono font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <label className="font-bold text-slate-300 flex items-center justify-between">
-                      <span>رقم هاتف العيادة / الحجز (مطبوع على الروشتة): <span className="text-rose-400 font-black">*</span></span>
-                      <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">إلزامي للبورتال</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={clinicPhone}
-                      onChange={(e) => setClinicPhone(e.target.value)}
-                      placeholder="01094085228"
-                      className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 font-mono font-bold text-slate-100 focus:outline-none transition-all ${
-                        !clinicPhone.trim()
-                          ? "border-2 border-amber-500/60 focus:border-amber-400 focus:shadow-[0_0_15px_rgba(245,158,11,0.25)]"
-                          : "border border-slate-700 focus:border-emerald-500"
-                      }`}
-                      dir="ltr"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <label className="font-bold text-slate-300 block">عنوان الفرع:</label>
-                    <input
-                      type="text"
-                      value={branchAddress}
-                      onChange={(e) => setBranchAddress(e.target.value)}
-                      placeholder="مثال: شارع التسعين الجنوبي، مجمع عيادات الصفا، الدور الثالث"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Fingerprint & Biometrics Setup - Visible ONLY on Mobile Devices */}
-                {isMobile && hasBiometricsHardware && (
-                  <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/30 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                        <Fingerprint className="w-5 h-5 text-emerald-400" />
-                        <span>تسجيل الدخول ببصمة الأصبع / Touch ID / Face ID:</span>
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                          biometricsEnabled
-                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                            : "bg-slate-800 text-slate-400 border-slate-700"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-300 flex items-center justify-between">
+                        <span>اسم المركز / العيادة: <span className="text-rose-400 font-black">*</span></span>
+                        <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي للبورتال</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={nameAr}
+                        onChange={(e) => setNameAr(e.target.value)}
+                        placeholder="مثال: مجمع عيادات الحياة التخصصي"
+                        className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 font-bold text-slate-100 focus:outline-none transition-all ${
+                          !nameAr.trim() && !name.trim()
+                            ? "border-2 border-amber-500/60 focus:border-amber-400 focus:shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                            : "border border-slate-700/80 focus:border-emerald-500 shadow-inner"
                         }`}
-                      >
-                        {biometricsEnabled ? "البصمة مفعّلة ✅" : "غير مفعّلة 🔒"}
-                      </span>
+                      />
                     </div>
 
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      سجل بصمة إصبعك أو وجهك للفتح السريع والآمن دون الحاجة لكتابة كلمات مرور كل مرة.
-                    </p>
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-300 block">تخصص العيادة:</label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="مثال: جراحة العظام والمفاصل أو طب الأطفال أو أسنان"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 shadow-inner"
+                      />
+                    </div>
 
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={handleTestBiometrics}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Fingerprint className="w-4 h-4" />
-                        <span>{biometricsEnabled ? "إعادة فحص البصمة 🖐️" : "تفعيل وتسجيل البصمة الآن 🖐️"}</span>
-                      </button>
-                      {biometricsEnabled && (
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-300 flex items-center justify-between">
+                        <span>اسم الطبيب والمعالج الكامل: <span className="text-rose-400 font-black">*</span></span>
+                        <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي للبورتال</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={doctorName}
+                        onChange={(e) => setDoctorName(e.target.value)}
+                        placeholder="مثال: د. أيمن الشريف"
+                        className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 font-bold text-slate-100 focus:outline-none transition-all ${
+                          !doctorName.trim()
+                            ? "border-2 border-amber-500/60 focus:border-amber-400 focus:shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                            : "border border-slate-700/80 focus:border-emerald-500 shadow-inner"
+                        }`}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-300 block">الدرجة العلمية واللقب المهني:</label>
+                      <input
+                        type="text"
+                        value={doctorTitle}
+                        onChange={(e) => setDoctorTitle(e.target.value)}
+                        placeholder="مثال: استشاري أول ورئيس قسم الباطنة"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-300 block">التخصص الطبي الدقيق:</label>
+                      <input
+                        type="text"
+                        value={specialty}
+                        onChange={(e) => setSpecialty(e.target.value)}
+                        placeholder="مثال: باطنة وجهاز هضمي وكبد"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-300 block">رقم قيد النقابة / ترخيص المزاولة:</label>
+                      <input
+                        type="text"
+                        value={syndicateId}
+                        onChange={(e) => setSyndicateId(e.target.value)}
+                        placeholder="مثال: 124587 / نقابة الأطباء"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 focus:outline-none focus:border-emerald-500 shadow-inner"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="font-bold text-slate-300 flex items-center justify-between">
+                        <span>رقم هاتف العيادة / الحجز (مطبوع على الروشتة): <span className="text-rose-400 font-black">*</span></span>
+                        <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي للبورتال</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={clinicPhone}
+                        onChange={(e) => setClinicPhone(e.target.value)}
+                        placeholder="01094085228"
+                        className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 font-mono font-bold text-slate-100 focus:outline-none transition-all ${
+                          !clinicPhone.trim()
+                            ? "border-2 border-amber-500/60 focus:border-amber-400 focus:shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                            : "border border-slate-700/80 focus:border-emerald-500 shadow-inner"
+                        }`}
+                        dir="ltr"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="font-bold text-slate-300 block">عنوان الفرع:</label>
+                      <input
+                        type="text"
+                        value={branchAddress}
+                        onChange={(e) => setBranchAddress(e.target.value)}
+                        placeholder="مثال: شارع التسعين الجنوبي، مجمع عيادات الصفا، الدور الثالث"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 shadow-inner"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fingerprint & Biometrics Setup - Visible ONLY on Mobile Devices */}
+                  {isMobile && hasBiometricsHardware && (
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/30 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                          <Fingerprint className="w-5 h-5 text-emerald-400" />
+                          <span>تسجيل الدخول ببصمة الأصبع / Touch ID / Face ID:</span>
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                            biometricsEnabled
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                              : "bg-slate-800 text-slate-400 border-slate-700"
+                          }`}
+                        >
+                          {biometricsEnabled ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>البصمة مفعلة</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="w-3 h-3 text-slate-400" />
+                              <span>غير مفعلة</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        سجل بصمة إصبعك أو وجهك للفتح السريع والآمن دون الحاجة لكتابة كلمات مرور كل مرة.
+                      </p>
+
+                      <div className="flex items-center gap-2 pt-1">
                         <button
                           type="button"
-                          onClick={() => {
-                            setBiometricsEnabled(false);
-                            updateClinic({ biometricsEnabled: false });
-                            if (typeof window !== "undefined") {
-                              localStorage.removeItem("penrx_biometric_enabled");
-                              localStorage.removeItem("penrx_biometric_credential_id");
-                            }
-                          }}
-                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-600/30 text-rose-300 text-xs font-bold transition-all border border-slate-700 cursor-pointer"
+                          onClick={handleTestBiometrics}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
                         >
-                          إلغاء التفعيل
+                          <Fingerprint className="w-4 h-4" />
+                          <span>{biometricsEnabled ? "إعادة فحص البصمة" : "تفعيل وتسجيل البصمة الآن"}</span>
                         </button>
+                        {biometricsEnabled && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBiometricsEnabled(false);
+                              updateClinic({ biometricsEnabled: false });
+                              if (typeof window !== "undefined") {
+                                localStorage.removeItem("penrx_biometric_enabled");
+                                localStorage.removeItem("penrx_biometric_credential_id");
+                              }
+                            }}
+                            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-600/30 text-rose-300 text-xs font-bold transition-all border border-slate-700 cursor-pointer active:scale-95"
+                          >
+                            إلغاء التفعيل
+                          </button>
+                        )}
+                      </div>
+
+                      {biometricFeedback && (
+                        <p className="text-xs font-black text-amber-300 pt-1">{biometricFeedback}</p>
                       )}
                     </div>
-
-                    {biometricFeedback && (
-                      <p className="text-xs font-black text-amber-300 pt-1">{biometricFeedback}</p>
-                    )}
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
               {/* Box 2: Logo Customization */}
-              <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-5 shadow-xl">
-                <h3 className="text-sm font-black text-slate-100 flex items-center gap-2 border-b border-slate-800 pb-3">
+              <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/95 border border-slate-800 space-y-4 shadow-xl">
+                <h3 className="text-sm font-black text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-3">
                   <ImageIcon className="w-4 h-4 text-emerald-400" />
-                  <span>تخصيص لوجو العيادة المطبوع على الروشتة (Clinic Logo):</span>
+                  <span>شعار المركز والعيادة المطبوع على الروشتة (Clinic Logo):</span>
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
                   {/* Logo Preview Box with Fixed Sizing */}
-                  <div className="sm:col-span-4 flex items-center justify-center p-3 rounded-2xl bg-slate-950 border border-slate-800 min-h-[100px] relative group">
+                  <div className="sm:col-span-4 flex items-center justify-center p-3.5 rounded-2xl bg-slate-950 border border-slate-800/90 min-h-[110px] relative group shadow-inner">
                     {logoUrl ? (
                       <div className="relative w-full flex items-center justify-center">
                         <img
@@ -1513,16 +1558,18 @@ export default function SettingsPage() {
                         <button
                           type="button"
                           onClick={() => setLogoUrl("")}
-                          className="absolute -top-2 -right-2 p-1.5 rounded-full bg-rose-600 text-white shadow-lg hover:bg-rose-500 transition-colors cursor-pointer"
+                          className="absolute -top-2 -right-2 p-1.5 rounded-full bg-rose-600 text-white shadow-lg hover:bg-rose-500 transition-all cursor-pointer active:scale-90"
                           title="حذف اللوجو"
                         >
                           <X size={12} />
                         </button>
                       </div>
                     ) : (
-                      <div className="text-center space-y-1 text-slate-500">
-                        <ImageIcon className="w-8 h-8 mx-auto text-slate-600" />
-                        <span className="text-[11px] block font-semibold">بدون لوجو حالياً</span>
+                      <div className="text-center space-y-1.5 text-slate-500">
+                        <div className="w-10 h-10 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-600">
+                          <ImageIcon className="w-5 h-5" />
+                        </div>
+                        <span className="text-[11px] block font-semibold text-slate-400">بدون لوجو حالياً</span>
                       </div>
                     )}
                   </div>
@@ -1530,8 +1577,8 @@ export default function SettingsPage() {
                   {/* File Upload Button & Link Input */}
                   <div className="sm:col-span-8 space-y-3 text-xs">
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md cursor-pointer transition-all">
-                        <Upload className="w-4 h-4" />
+                      <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:brightness-110 text-white font-black text-xs shadow-md shadow-emerald-950/40 cursor-pointer transition-all active:scale-95">
+                        <Upload className="w-4 h-4 stroke-[2.5]" />
                         <span>اختر صورة لوجو من جهازك (Upload File)</span>
                         <input
                           type="file"
@@ -1560,9 +1607,9 @@ export default function SettingsPage() {
                         value={logoUrl}
                         onChange={(e) => setLogoUrl(e.target.value)}
                         placeholder="رابط اللوجو الإلكتروني (https://...)"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 pr-9"
+                        className="w-full pr-10 pl-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500 shadow-inner"
                       />
-                      <LinkIcon className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                      <LinkIcon className="w-3.5 h-3.5 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
                     </div>
 
                     <p className="text-[10px] text-slate-400">
@@ -1573,14 +1620,16 @@ export default function SettingsPage() {
               </div>
 
               {/* Box 3: Header & Footer Toggles & Text */}
-              <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-5 shadow-xl">
-                <h3 className="text-sm font-black text-slate-100 flex items-center gap-2 border-b border-slate-800 pb-3">
+              <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/95 border border-slate-800 space-y-4 shadow-xl">
+                <h3 className="text-sm font-black text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-3">
                   <FileText className="w-4 h-4 text-emerald-400" />
                   <span>ترويسة وتذييل الروشتة المطبوعة (Header & Footer):</span>
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 border border-slate-800 cursor-pointer hover:border-emerald-500/40 transition-all">
+                  <label className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                    showHeader ? "bg-slate-950 border-emerald-500/40 shadow-xs" : "bg-slate-950/70 border-slate-800/80 hover:border-slate-700"
+                  }`}>
                     <div>
                       <span className="font-bold text-slate-200 block">إظهار ترويسة الروشتة (Header)</span>
                       <span className="text-[10px] text-slate-400">طباعة اسم المركز والشعار والبيانات العلوية</span>
@@ -1593,7 +1642,9 @@ export default function SettingsPage() {
                     />
                   </label>
 
-                  <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 border border-slate-800 cursor-pointer hover:border-emerald-500/40 transition-all">
+                  <label className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                    showFooter ? "bg-slate-950 border-emerald-500/40 shadow-xs" : "bg-slate-950/70 border-slate-800/80 hover:border-slate-700"
+                  }`}>
                     <div>
                       <span className="font-bold text-slate-200 block">إظهار تذييل الروشتة (Footer)</span>
                       <span className="text-[10px] text-slate-400">طباعة عنوان الفرع ورقم الهاتف والباركود أسفل الورقة</span>
@@ -1607,7 +1658,7 @@ export default function SettingsPage() {
                   </label>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
                   <div className="space-y-1.5">
                     <label className="font-bold text-slate-300 block">مواعيد العمل بالفرع:</label>
                     <input
@@ -1615,7 +1666,7 @@ export default function SettingsPage() {
                       value={workingHours}
                       onChange={(e) => setWorkingHours(e.target.value)}
                       placeholder="مثال: يومياً من 4 مساءً حتى 10 مساءً عدا الجمعة"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 shadow-inner"
                     />
                   </div>
 
@@ -1626,22 +1677,26 @@ export default function SettingsPage() {
                       value={footerText}
                       onChange={(e) => setFooterText(e.target.value)}
                       placeholder="مثال: نتمنى لكم موفور الصحة والشفاء العاجل"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 shadow-inner"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Box 4: Colors & Typography Customization */}
-              <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-5 shadow-xl">
-                <h3 className="text-sm font-black text-slate-100 flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <Palette className="w-4 h-4 text-emerald-400" />
-                  <span>تخصيص ألوان وخطوط الروشتة (Theme & Typography):</span>
-                </h3>
+              <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-6 shadow-xl backdrop-blur-sm">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 className="text-sm font-black text-slate-100 flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Palette className="w-4 h-4" />
+                    </div>
+                    <span>تخصيص ألوان وخطوط الروشتة (Theme & Typography):</span>
+                  </h3>
+                </div>
 
                 {/* Colors presets */}
-                <div className="space-y-2 text-xs">
-                  <label className="font-bold text-slate-300 block">اختر لون هوية الروشتة المطبوعة:</label>
+                <div className="space-y-3 text-xs">
+                  <label className="font-bold text-slate-300 block">اختر لون هوية الروشتة المطبوعة والأيقونات:</label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {COLOR_PRESETS.map((color) => {
                       const isSelected = primaryColor.toLowerCase() === color.hex.toLowerCase();
@@ -1651,59 +1706,73 @@ export default function SettingsPage() {
                           key={color.hex}
                           type="button"
                           onClick={() => setPrimaryColor(color.hex)}
-                          className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                          className={`p-3 rounded-2xl border flex items-center justify-between gap-2 transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-slate-950 border-emerald-500 ring-2 ring-emerald-500/20 text-white"
-                              : "bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300"
+                              ? "bg-slate-950 border-emerald-500 ring-2 ring-emerald-500/30 text-white shadow-md shadow-emerald-950/30"
+                              : "bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-950 text-slate-300"
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="w-4 h-4 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: color.hex }} />
-                            <span className="text-[11px] font-bold">{color.name}</span>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className="w-4 h-4 rounded-full shrink-0 ring-2 ring-white/10 shadow-sm"
+                              style={{ backgroundColor: color.hex }}
+                            />
+                            <span className="text-xs font-bold truncate">{color.name}</span>
                           </div>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                          {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0 stroke-[2.5]" />}
                         </button>
                       );
                     })}
                   </div>
 
                   {/* Custom Color Picker */}
-                  <div className="pt-2 flex items-center gap-3">
-                    <span className="text-[11px] text-slate-400 font-bold">أو اختر لونك الخاص:</span>
-                    <input
-                      type="color"
-                      value={primaryColor}
-                      onChange={(e) => setPrimaryColor(e.target.value)}
-                      className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
-                    />
-                    <span className="font-mono text-xs font-bold text-slate-300 uppercase">{primaryColor}</span>
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-slate-400 font-bold">أو اختر درجة لون خاصة:</span>
+                    <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 shadow-inner">
+                      <input
+                        type="color"
+                        value={primaryColor}
+                        onChange={(e) => setPrimaryColor(e.target.value)}
+                        className="w-6 h-6 rounded-lg cursor-pointer bg-transparent border-0"
+                      />
+                      <span className="font-mono text-xs font-black text-slate-200 uppercase tracking-wider">{primaryColor}</span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Fonts selection */}
-                <div className="space-y-2 text-xs pt-3 border-t border-slate-800">
-                  <label className="font-bold text-slate-300 flex items-center gap-1.5">
-                    <Type className="w-4 h-4 text-emerald-400" />
-                    <span>اختر نوع الخط العربي للروشتة:</span>
+                <div className="space-y-2.5 text-xs pt-4 border-t border-slate-800/80">
+                  <label className="font-bold text-slate-300 flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Type className="w-3.5 h-3.5" />
+                    </div>
+                    <span>نوع الخط العربي للروشتة المطبوعة:</span>
                   </label>
-                  <select
-                    value={fontFamily}
-                    onChange={(e) => setFontFamily(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                  >
-                    {FONT_PRESETS.map((font) => (
-                      <option key={font.value} value={font.value}>
-                        {font.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={fontFamily}
+                      onChange={(e) => setFontFamily(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 text-xs font-bold text-slate-100 focus:outline-none focus:border-emerald-500 shadow-inner cursor-pointer"
+                    >
+                      {FONT_PRESETS.map((font) => (
+                        <option key={font.value} value={font.value} className="bg-slate-900 py-1 text-slate-100">
+                          {font.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Paper Size Selector (Accurate Dimensions & Live Reflection) */}
-                <div className="space-y-2 text-xs pt-3 border-t border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-300 block">حجم ورق الطباعة الافتراضي للروشتة:</label>
-                    <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                <div className="space-y-3 text-xs pt-4 border-t border-slate-800/80">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <label className="font-bold text-slate-300 flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <Printer className="w-3.5 h-3.5" />
+                      </div>
+                      <span>حجم ورق الطباعة الافتراضي للروشتة:</span>
+                    </label>
+                    <span className="text-[11px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/20 w-fit">
                       {paperSize === "A5"
                         ? "A5: 14.8 × 21 سم (1748 × 2480 px)"
                         : paperSize === "A6"
@@ -1719,91 +1788,96 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => setPaperSize("A5")}
-                      className={`p-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                      className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer relative ${
                         paperSize === "A5"
-                          ? "bg-emerald-600/25 text-white border-emerald-500 ring-2 ring-emerald-500/30 shadow-md"
-                          : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                          ? "bg-slate-950 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-950/40 text-white"
+                          : "bg-slate-950/70 text-slate-400 border-slate-800/80 hover:border-slate-700 hover:text-white hover:bg-slate-950"
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-black text-xs text-emerald-300">A5 (الأساسي والافتراضي) ★</span>
-                        {paperSize === "A5" && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-xs text-emerald-400">A5 (الأساسي والافتراضي)</span>
+                          <Star className="w-3.5 h-3.5 fill-emerald-400 text-emerald-400 shrink-0" />
+                        </div>
+                        {paperSize === "A5" && <Check className="w-4 h-4 text-emerald-400 shrink-0 stroke-[2.5]" />}
                       </div>
-                      <span className="text-[10px] text-slate-300 font-medium block mt-1">14.8 × 21 سم (5.8 × 8.3 بوصة)</span>
-                      <span className="text-[9px] text-slate-500 block mt-0.5">1748 × 2480 px • نصف ورقة A4 القياسية</span>
+                      <span className="text-[11px] text-slate-300 font-semibold block mt-1.5">14.8 × 21 سم (5.8 × 8.3 بوصة)</span>
+                      <span className="text-[9.5px] text-slate-500 block mt-0.5">1748 × 2480 px • نصف ورقة A4 القياسية</span>
                     </button>
 
                     {/* A6 - Compact */}
                     <button
                       type="button"
                       onClick={() => setPaperSize("A6")}
-                      className={`p-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                      className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer relative ${
                         paperSize === "A6"
-                          ? "bg-emerald-600/25 text-white border-emerald-500 ring-2 ring-emerald-500/30 shadow-md"
-                          : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                          ? "bg-slate-950 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-950/40 text-white"
+                          : "bg-slate-950/70 text-slate-400 border-slate-800/80 hover:border-slate-700 hover:text-white hover:bg-slate-950"
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-black text-xs">A6 (المصغر)</span>
-                        {paperSize === "A6" && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-black text-xs text-slate-200">A6 (المصغر)</span>
+                        {paperSize === "A6" && <Check className="w-4 h-4 text-emerald-400 shrink-0 stroke-[2.5]" />}
                       </div>
-                      <span className="text-[10px] text-slate-300 font-medium block mt-1">10.5 × 14.8 سم (4.1 × 5.8 بوصة)</span>
-                      <span className="text-[9px] text-slate-500 block mt-0.5">1240 × 1748 px • ربع ورقة A4 للروشتات السريعة</span>
+                      <span className="text-[11px] text-slate-300 font-semibold block mt-1.5">10.5 × 14.8 سم (4.1 × 5.8 بوصة)</span>
+                      <span className="text-[9.5px] text-slate-500 block mt-0.5">1240 × 1748 px • ربع ورقة للروشتات السريعة</span>
                     </button>
 
                     {/* A4 - Full */}
                     <button
                       type="button"
                       onClick={() => setPaperSize("A4")}
-                      className={`p-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                      className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer relative ${
                         paperSize === "A4"
-                          ? "bg-emerald-600/25 text-white border-emerald-500 ring-2 ring-emerald-500/30 shadow-md"
-                          : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                          ? "bg-slate-950 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-950/40 text-white"
+                          : "bg-slate-950/70 text-slate-400 border-slate-800/80 hover:border-slate-700 hover:text-white hover:bg-slate-950"
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-black text-xs">A4 (كامل)</span>
-                        {paperSize === "A4" && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-black text-xs text-slate-200">A4 (كامل)</span>
+                        {paperSize === "A4" && <Check className="w-4 h-4 text-emerald-400 shrink-0 stroke-[2.5]" />}
                       </div>
-                      <span className="text-[10px] text-slate-300 font-medium block mt-1">21 × 29.7 سم (8.3 × 11.7 بوصة)</span>
-                      <span className="text-[9px] text-slate-500 block mt-0.5">2480 × 3508 px • للمستشفيات والتقارير الطبية</span>
+                      <span className="text-[11px] text-slate-300 font-semibold block mt-1.5">21 × 29.7 سم (8.3 × 11.7 بوصة)</span>
+                      <span className="text-[9.5px] text-slate-500 block mt-0.5">2480 × 3508 px • للمستشفيات والتقارير الطبية</span>
                     </button>
 
                     {/* B5 - Intermediate */}
                     <button
                       type="button"
                       onClick={() => setPaperSize("B5")}
-                      className={`p-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                      className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer relative ${
                         paperSize === "B5"
-                          ? "bg-emerald-600/25 text-white border-emerald-500 ring-2 ring-emerald-500/30 shadow-md"
-                          : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                          ? "bg-slate-950 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-950/40 text-white"
+                          : "bg-slate-950/70 text-slate-400 border-slate-800/80 hover:border-slate-700 hover:text-white hover:bg-slate-950"
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-black text-xs">B5 (وسيط)</span>
-                        {paperSize === "B5" && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-black text-xs text-slate-200">B5 (وسيط)</span>
+                        {paperSize === "B5" && <Check className="w-4 h-4 text-emerald-400 shrink-0 stroke-[2.5]" />}
                       </div>
-                      <span className="text-[10px] text-slate-300 font-medium block mt-1">17.6 × 25 سم (6.9 × 9.8 بوصة)</span>
-                      <span className="text-[9px] text-slate-500 block mt-0.5">مناسب لدفاتر الروشتات الخاصة</span>
+                      <span className="text-[11px] text-slate-300 font-semibold block mt-1.5">17.6 × 25 سم (6.9 × 9.8 بوصة)</span>
+                      <span className="text-[9.5px] text-slate-500 block mt-0.5">مناسب لدفاتر الروشتات الخاصة</span>
                     </button>
                   </div>
                 </div>
               </div>
 
               {/* Box 5: Prescription Templates Customization (قوالب أشكال الروشتة) */}
-              <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-5 shadow-xl">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-400" />
+              <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-5 shadow-xl backdrop-blur-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  <h3 className="text-sm font-black text-slate-100 flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
                     <span>قوالب وتصاميم شكل الروشتة الطبية (Prescription Design Templates):</span>
                   </h3>
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 w-fit">
                     10 قوالب طبية احترافية
                   </span>
                 </div>
 
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  اختر الشكل والإطار الفني للروشتة المطبوعة. يمكنك تجربة أي قالب بالنقر عليه لمعاينته حياً على اليسار فوراً قبل الحفظ:
+                  اختر الشكل والإطار الفني للروشتة المطبوعة. يمكنك تجربة أي قالب بالنقر عليه لمعاينته حياً فوراً في لوحة المعاينة قبل الحفظ:
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
@@ -1934,7 +2008,7 @@ export default function SettingsPage() {
                                 style={{ borderColor: `${primaryColor}40`, backgroundColor: `${primaryColor}08` }}
                               >
                                 <span className="text-[7px] font-mono font-black" style={{ color: primaryColor }}>-/\-</span>
-                                <span className="text-[7px]">🧬</span>
+                                <span className="text-[7px] text-emerald-600 font-bold">🧬</span>
                                 <span className="w-5 h-1 rounded" style={{ backgroundColor: primaryColor }} />
                               </div>
                             ) : (
@@ -2047,7 +2121,7 @@ export default function SettingsPage() {
                             )}
                           </div>
 
-                          <p className="text-[10px] text-slate-400 leading-normal">
+                          <p className="text-[11px] text-slate-400 leading-normal">
                             {tmpl.description}
                           </p>
                         </div>
@@ -2075,36 +2149,18 @@ export default function SettingsPage() {
               {/* End of dimmed fields wrapper */}
               </div>
 
-              {/* Action / Submit Button */}
-              <div className="pt-2">
-                {isEditing ? (
-                  <button
-                    type="submit"
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Save className="w-5 h-5" />
-                    <span>{isAddingNew ? "حفظ وإضافة الفرع الجديد إلى القائمة 💾" : "حفظ التعديلات وتأمين بيانات الفرع 💾"}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditing(true);
-                      setIsAddingNew(false);
-                      showGlobalToast("🔓 تم فتح الحقول للتعديل! يمكنك تعديل بيانات الفرع وشكل الروشتة ثم الحفظ.", "info");
-                    }}
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-sm shadow-xl shadow-cyan-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Edit2 className="w-5 h-5" />
-                    <span>انقر هنا لفتح وتعديل بيانات وتصميم الفرع والروشتة ✏️</span>
-                  </button>
-                )}
+              {/* Form Bottom Indicator */}
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-bold px-1">
+                <span>يمكنك حفظ وتأكيد بيانات الفرع عبر لوحة الإجراءات أسفل المعاينة ↗</span>
+                <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                  {isEditing ? "وضع التعديل نشط" : "عرض للقراءة"}
+                </span>
               </div>
             </form>
           </div>
 
           {/* Right Column: Live Prescription Preview (5 Columns on Desktop) */}
-          <div className="lg:col-span-5 space-y-3 sticky top-4">
+          <div className="lg:col-span-5 space-y-4">
             <SettingsPrescriptionPreview
               doctorName={doctorName}
               doctorTitle={doctorTitle}
@@ -2128,6 +2184,76 @@ export default function SettingsPage() {
               activeBranchId={activeBranchId}
               title="معاينة حية فورية للروشتة المطبوعة:"
             />
+
+            {/* Action Bar below Tab 1 Live Preview */}
+            <div className="mt-2 p-5 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <span className="text-xs font-black text-slate-200 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <span>إجراءات الفرع وتطبيق الروشتة:</span>
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                  {isEditing ? "جاهز للحفظ" : "جاهز للطباعة"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Save Branch / Edit Branch Button */}
+                {isEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveClinicSettings();
+                    }}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-slate-950 border-2 border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900 text-white font-black text-xs transition-all shadow-lg shadow-emerald-950/30 flex items-center justify-center gap-3 cursor-pointer active:scale-95 group hover:-translate-y-0.5"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all shrink-0 shadow-xs">
+                      <Save className="w-4 h-4 stroke-[2.4]" />
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-xs font-black text-slate-100 group-hover:text-emerald-300">
+                        {isAddingNew ? "حفظ وإضافة الفرع" : "حفظ بيانات الفرع"}
+                      </span>
+                      <span className="block text-[10px] font-normal text-slate-400">تأكيد الحفظ والمزامنة السحابية</span>
+                    </div>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(true);
+                      setIsAddingNew(false);
+                      showGlobalToast("تم فتح الحقول لتعديل بيانات وتصميم الفرع والروشتة!", "info");
+                    }}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-slate-950 border-2 border-cyan-500/40 hover:border-cyan-400 hover:bg-slate-900 text-white font-black text-xs transition-all shadow-lg shadow-cyan-950/30 flex items-center justify-center gap-3 cursor-pointer active:scale-95 group hover:-translate-y-0.5"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 transition-all shrink-0 shadow-xs">
+                      <Edit2 className="w-4 h-4 stroke-[2.4]" />
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-xs font-black text-slate-100 group-hover:text-cyan-300">تعديل بيانات الفرع</span>
+                      <span className="block text-[10px] font-normal text-slate-400">فتح الحقول للتعديل</span>
+                    </div>
+                  </button>
+                )}
+
+                {/* Edit Prescription Now Button */}
+                <Link
+                  href="/prescriptions/new"
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition-all shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-3 cursor-pointer active:scale-95 group hover:-translate-y-0.5"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-slate-950/20 border border-slate-950/20 flex items-center justify-center text-slate-950 group-hover:scale-110 transition-transform shrink-0">
+                    <Stethoscope className="w-4 h-4 stroke-[2.6]" />
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-xs font-black text-slate-950">تحرير روشتة الآن</span>
+                    <span className="block text-[10px] font-medium text-slate-900/80">الانتقال للروشتة الطبية</span>
+                  </div>
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2315,40 +2441,16 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Bottom Actions & Confirmation Banner */}
-              <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-[11px] text-emerald-400 font-bold">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>تُحفظ وتُطبَّق هذه الإعدادات تلقائياً وفورياً على صفحة تحرير الروشتة والطباعة.</span>
-                </div>
-
-                <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      updateClinic({ visibleFields });
-                      showGlobalToast("✅ تم حفظ وتأكيد تفضيلات حقول الروشتة في ملف العيادة بنجاح!", "success");
-                    }}
-                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-emerald-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <Save className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>حفظ التفضيلات 💾</span>
-                  </button>
-
-                  <Link
-                    href="/prescriptions/new"
-                    className="flex-1 sm:flex-none px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs transition-all shadow-md hover:brightness-110 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>تحرير روشتة الآن 🩺</span>
-                  </Link>
-                </div>
+              {/* Bottom Confirmation Banner */}
+              <div className="pt-4 border-t border-slate-800 flex items-center gap-2 text-xs text-emerald-400 font-bold">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>تُحفظ وتُطبَّق هذه الإعدادات تلقائياً وفورياً على صفحة تحرير الروشتة والطباعة.</span>
               </div>
             </div>
           </div>
 
           {/* Left Column: Live Prescription Preview reflecting patient fields (5 Cols on Desktop) */}
-          <div className="lg:col-span-5 space-y-3 sticky top-4">
+          <div className="lg:col-span-5 space-y-4">
             <SettingsPrescriptionPreview
               doctorName={doctorName}
               doctorTitle={doctorTitle}
@@ -2372,6 +2474,55 @@ export default function SettingsPage() {
               activeBranchId={activeBranchId}
               title="معاينة حية لانعكاس حقول المريض بالروشتة:"
             />
+
+            {/* Action Bar below Tab 2 Live Preview */}
+            <div className="mt-2 p-5 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <span className="text-xs font-black text-slate-200 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <span>تأكيد الإعدادات وكتابة الروشتة:</span>
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                  تحديث فوري
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Save Preferences Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateClinic({ visibleFields });
+                    showGlobalToast("تم حفظ وتأكيد تفضيلات حقول الروشتة في ملف العيادة بنجاح!", "success");
+                  }}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-slate-950 border-2 border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900 text-white font-black text-xs transition-all shadow-lg shadow-emerald-950/30 flex items-center justify-center gap-3 cursor-pointer active:scale-95 group hover:-translate-y-0.5"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all shrink-0 shadow-xs">
+                    <Save className="w-4 h-4 stroke-[2.4]" />
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-xs font-black text-slate-100 group-hover:text-emerald-300">حفظ التفضيلات</span>
+                    <span className="block text-[10px] font-normal text-slate-400">تأمين حقول الروشتة</span>
+                  </div>
+                </button>
+
+                {/* Edit Prescription Now Button */}
+                <Link
+                  href="/prescriptions/new"
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition-all shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-3 cursor-pointer active:scale-95 group hover:-translate-y-0.5"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-slate-950/20 border border-slate-950/20 flex items-center justify-center text-slate-950 group-hover:scale-110 transition-transform shrink-0">
+                    <Stethoscope className="w-4 h-4 stroke-[2.6]" />
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-xs font-black text-slate-950">تحرير روشتة الآن</span>
+                    <span className="block text-[10px] font-medium text-slate-900/80">الانتقال للروشتة الطبية</span>
+                  </div>
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2449,10 +2600,10 @@ export default function SettingsPage() {
                   }
                 }}
                 disabled={isManualCloudSaving}
-                className="w-full md:w-auto px-5 py-3 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-lg shadow-teal-950/40 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+                className="w-full md:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
               >
                 <CloudUpload className={`w-4 h-4 ${isManualCloudSaving ? "animate-bounce" : ""}`} />
-                <span>{isManualCloudSaving ? "جاري الحفظ السحابي..." : "حفظ نسخة سحابية الآن ☁️"}</span>
+                <span>{isManualCloudSaving ? "جاري الحفظ السحابي..." : "حفظ نسخة سحابية الآن"}</span>
               </button>
             </div>
           </div>
@@ -2530,7 +2681,7 @@ export default function SettingsPage() {
                     }
                   }}
                   disabled={isExporting}
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
                 >
                   <Download className={`w-4 h-4 ${isExporting ? "animate-pulse" : ""}`} />
                   <span>{isExporting ? "جاري تجهيز وتحميل الملف..." : "تحميل النسخة الاحتياطية على جهازك (.penrx)"}</span>
@@ -2597,14 +2748,14 @@ export default function SettingsPage() {
                       setImportSource("file");
                       setImportResult(null);
                     }}
-                    className={`py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    className={`py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
                       importSource === "file"
-                        ? "bg-cyan-600 text-white shadow-md font-black"
+                        ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 shadow-md font-black"
                         : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
                     <HardDrive className="w-4 h-4" />
-                    <span>من هذا الجهاز 💻</span>
+                    <span>من هذا الجهاز</span>
                   </button>
 
                   <button
@@ -2620,14 +2771,14 @@ export default function SettingsPage() {
                           .finally(() => setIsLoadingCloudInfo(false));
                       }
                     }}
-                    className={`py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    className={`py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
                       importSource === "cloud"
-                        ? "bg-teal-600 text-white shadow-md font-black"
+                        ? "bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-md font-black"
                         : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
                     <Cloud className="w-4 h-4" />
-                    <span>من السحابة ☁️</span>
+                    <span>من السحابة</span>
                   </button>
                 </div>
 
@@ -2730,7 +2881,7 @@ export default function SettingsPage() {
                         }
                       }}
                       disabled={isImporting || !selectedBackupFile}
-                      className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-cyan-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-black text-xs shadow-xl shadow-cyan-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
                     >
                       <Unlock className={`w-4 h-4 ${isImporting ? "animate-spin" : ""}`} />
                       <span>{isImporting ? "جاري استعادة البيانات..." : "بدء استعادة النسخة من الملف"}</span>
@@ -2862,10 +3013,10 @@ export default function SettingsPage() {
                         }
                       }}
                       disabled={isImporting || !cloudBackupInfo?.exists}
-                      className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-black text-xs shadow-lg shadow-teal-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-teal-950/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
                     >
                       <CloudDownload className={`w-4 h-4 ${isImporting ? "animate-bounce" : ""}`} />
-                      <span>{isImporting ? "جاري استرجاع النسخة السحابية..." : "استرجاع النسخة السحابية الآن ☁️"}</span>
+                      <span>{isImporting ? "جاري استرجاع النسخة السحابية..." : "استرجاع النسخة السحابية الآن"}</span>
                     </button>
                   </div>
                 )}

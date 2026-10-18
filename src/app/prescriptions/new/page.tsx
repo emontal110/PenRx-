@@ -22,9 +22,8 @@ import {
 } from "lucide-react";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
-import { SuperDrugSearch } from "@/components/prescription/SuperDrugSearch";
-import { AiPrescriptionInteractionAdvisor } from "@/components/prescription/AiPrescriptionInteractionAdvisor";
 import { LivePrescriptionPreview } from "@/components/prescription/LivePrescriptionPreview";
+import { AiInteractionModal, InteractionAlert } from "@/components/prescription/AiInteractionModal";
 import { PrintValidationModal } from "@/components/prescription/PrintValidationModal";
 import { WhatsAppShareModal } from "@/components/prescription/WhatsAppShareModal";
 import { NewPrescriptionPromptModal } from "@/components/prescription/NewPrescriptionPromptModal";
@@ -59,7 +58,6 @@ export default function NewPrescriptionPage() {
     savedPrescriptions,
     visibleFields,
     setVisibleFields,
-    toggleVisibleField,
   } = usePrescriptionStore();
 
   const { branches, clinic } = useClinicStore();
@@ -91,9 +89,65 @@ export default function NewPrescriptionPage() {
   const [isPrintValidationOpen, setIsPrintValidationOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [isNewRxPromptOpen, setIsNewRxPromptOpen] = useState(false);
+  const [isPrescriptionSaved, setIsPrescriptionSaved] = useState(false);
 
-  // AI interaction alert count — shared from AiPrescriptionInteractionAdvisor
-  const [aiAlertCount, setAiAlertCount] = useState(0);
+  // Background AI interaction alerts & modal state (Silent background engine)
+  const [aiAlerts, setAiAlerts] = useState<InteractionAlert[]>([]);
+  const [selectedAiAlert, setSelectedAiAlert] = useState<InteractionAlert | null>(null);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+
+  // Background AI Drug-Drug & Allergy Conflict Checker (Silent until conflict found)
+  useEffect(() => {
+    if (!items || items.length === 0) {
+      setAiAlerts([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/ai/analyze-prescription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: items.map((it) => ({
+              id: it.id,
+              drugName: it.drugName,
+              activeIngredient: it.activeIngredient,
+              doseQuantity: it.doseQuantity,
+              doseForm: it.doseForm,
+              frequency: it.frequency,
+              duration: it.duration,
+              instructions: it.instructions,
+            })),
+            patientAllergies: patient.allergyNotes || "",
+            patientHistory: patient.medicalHistory || "",
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.interactions)) {
+            setAiAlerts(data.interactions);
+          }
+        }
+      } catch (err) {
+        console.error("Background AI conflict check error:", err);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [items, patient.allergyNotes, patient.medicalHistory]);
+
+  const handleRemoveConflictingDrug = (drugName: string) => {
+    const target = items.find(
+      (it) => it.drugName.toLowerCase() === drugName.toLowerCase()
+    );
+    if (target) {
+      removeItem(target.id);
+      showGlobalToast(`🗑️ تم حذف ${drugName} لتفادي التعارض الدوائي`, "info");
+    }
+    setIsAiModalOpen(false);
+  };
 
   // Input ref for focusing patient name on validation failure
   const patientNameInputRef = useRef<HTMLInputElement>(null);
@@ -252,6 +306,11 @@ export default function NewPrescriptionPage() {
     }
   };
 
+  // Reset saved status whenever doctor edits the prescription
+  useEffect(() => {
+    setIsPrescriptionSaved(false);
+  }, [patient.name, patient.phone, items, diagnosis, notes]);
+
   const handleSaveOnly = () => {
     if (!patient.name.trim()) {
       setIsPrintValidationOpen(true);
@@ -259,7 +318,28 @@ export default function NewPrescriptionPage() {
     }
     const branchObj = branches.find((b) => b.id === selectedBranchId);
     savePrescription(branchObj?.nameAr);
+    setIsPrescriptionSaved(true);
     
+    // Silently register any uncatalogued or custom drugs into community database
+    if (typeof window !== "undefined") {
+      items.forEach((it) => {
+        if (it.isCustom || !it.drugId) {
+          fetch("/api/drugs/custom", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: it.drugName,
+              nameAr: it.drugName,
+              activeIngredient: it.activeIngredient || "تركيبة طبية خاصة",
+              dosageForm: it.doseForm || "Tablet",
+              category: "أدوية مساهمة الأطباء",
+              doctorContributor: "طبيب PenRX+",
+            }),
+          }).catch(() => {});
+        }
+      });
+    }
+
     setPatientSuggestions([]);
     setShowSuggestionsDropdown(false);
     
@@ -268,22 +348,19 @@ export default function NewPrescriptionPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const handleSaveAndPrint = () => {
+  // Pure Print action: Does NOT save prescription automatically
+  const handlePrintOnly = () => {
     const hasName = Boolean(patient.name && patient.name.trim().length > 0);
     const hasItems = items.length > 0;
     if (!hasName || !hasItems) {
       setIsPrintValidationOpen(true);
       return;
     }
-    const branchObj = branches.find((b) => b.id === selectedBranchId);
-    savePrescription(branchObj?.nameAr);
-    showGlobalToast("✅ تم حفظ الروشتة بالسجل وجاري الطباعة...");
+    showGlobalToast("🖨️ جاري تجهيز وطباعة الروشتة...");
     window.print();
-
-    // Keep prescription data on screen so doctor can review, print again, or share via WhatsApp
-    showGlobalToast("🖨️ تمت الطباعة وحفظ الروشتة بالسجل بنجاح! يمكنك إرسالها بالواتساب أو النقر على (روشتة جديدة +) للمريض التالي.", "success");
   };
 
+  // Pure WhatsApp action: Does NOT save prescription automatically
   const handleShareWhatsApp = () => {
     const hasName = Boolean(patient.name && patient.name.trim().length > 0);
     const hasItems = items.length > 0;
@@ -294,17 +371,25 @@ export default function NewPrescriptionPage() {
     setIsWhatsAppModalOpen(true);
   };
 
-  // Triggered when doctor clicks "تفريغ الروشتة"
+  // Triggered when doctor clicks "روشتة جديدة"
   const handleRequestNewPrescription = () => {
-    if (hasPrescriptionData) {
+    if (hasPrescriptionData && !isPrescriptionSaved) {
+      // Unsaved data exists -> Show confirmation prompt modal to ask if they want to save or discard
       setIsNewRxPromptOpen(true);
+    } else if (hasPrescriptionData && isPrescriptionSaved) {
+      // Already saved -> Directly reset for new prescription cleanly
+      resetCurrentPrescription();
+      setIsPrescriptionSaved(false);
+      showGlobalToast("✨ تم حفظ الروشتة مسبقاً بالسجل، وتجهيز روشتة فارغة للمريض التالي!", "success");
+      setToast("✨ تم فتح روشتة جديدة للمريض التالي بنجاح");
+      setTimeout(() => setToast(null), 3000);
     } else {
       setToast("ℹ️ الروشتة فارغة بالفعل ولا توجد أي بيانات لتفريغها.");
       setTimeout(() => setToast(null), 3000);
     }
   };
 
-  // Option 1 from Step 1 modal: Save current prescription then reset for a new one
+  // Option 1 from Prompt modal: Save current prescription then reset for a new one
   const handleSaveAndStartNew = () => {
     if (!patient.name.trim()) {
       setToast("⚠️ يرجى كتابة اسم المريض أولاً لحفظ الروشتة بالسجل");
@@ -314,15 +399,38 @@ export default function NewPrescriptionPage() {
     }
     const branchObj = branches.find((b) => b.id === selectedBranchId);
     savePrescription(branchObj?.nameAr);
+
+    // Silently register any custom drugs
+    if (typeof window !== "undefined") {
+      items.forEach((it) => {
+        if (it.isCustom || !it.drugId) {
+          fetch("/api/drugs/custom", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: it.drugName,
+              nameAr: it.drugName,
+              activeIngredient: it.activeIngredient || "تركيبة طبية خاصة",
+              dosageForm: it.doseForm || "Tablet",
+              category: "أدوية مساهمة الأطباء",
+              doctorContributor: "طبيب PenRX+",
+            }),
+          }).catch(() => {});
+        }
+      });
+    }
+
     resetCurrentPrescription();
-    showGlobalToast("✅ تم حفظ الروشتة السابقة وتجهيز روشتة جديدة ✨");
+    setIsPrescriptionSaved(false);
+    showGlobalToast("✅ تم حفظ الروشتة السابقة بالسجل وتجهيز روشتة جديدة ✨", "success");
     setToast("✅ تم حفظ الروشتة السابقة بالسجل وتجهيز روشتة جديدة بنجاح ✨");
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Option 2 from Step 2 modal: Confirm permanent discard and start blank new prescription
+  // Option 2 from Prompt modal: Discard unsaved changes and open a blank new prescription
   const handleConfirmDiscard = () => {
     resetCurrentPrescription();
+    setIsPrescriptionSaved(false);
     setToast("🗑️ تم تفريغ الروشتة الحالية نهائياً وبدء روشتة فارغة جديدة");
     setTimeout(() => setToast(null), 3500);
   };
@@ -362,42 +470,20 @@ export default function NewPrescriptionPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={handleRequestNewPrescription}
-            className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-slate-100 font-bold text-xs border border-slate-700 hover:border-slate-600 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
-            title="بدء روشتة جديدة"
+        <div className="flex items-center gap-2">
+          <Link
+            href="/history"
+            className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-slate-100 font-bold text-xs border border-slate-700 hover:border-slate-600 transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
-            <span>روشتة جديدة +</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSaveOnly}
-            className="px-5 py-2.5 rounded-2xl bg-slate-800 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
-          >
-            <Save className="w-4 h-4" />
-            <span>حفظ بالسجل 💾</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSaveAndPrint}
-            className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/40 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            <span>طباعة مباشرة 🖨️</span>
-          </button>
+            <History className="w-3.5 h-3.5 text-cyan-400" />
+            <span>سجل الروشتات</span>
+          </Link>
         </div>
       </div>
 
-      {/* Main Responsive Grid: Right Column (Inputs) & Left Column (Prescription Preview on Desktop) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Right Column: Inputs, Drug Search, AI Advisor, Notes */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* Patient Information & Branch Selector Box */}
+      {/* Unified Single-Column Flow: Patient & Clinic Box at Top, Interactive Prescription Sheet Directly Below */}
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Patient Information & Branch Selector Box */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <span className="text-xs font-black text-slate-200 flex items-center gap-2">
@@ -447,39 +533,6 @@ export default function NewPrescriptionPage() {
                   <span>إعدادات المريض</span>
                 </Link>
               </div>
-            </div>
-
-            {/* Quick Field Visibility Toggle Bar */}
-            <div className="flex items-center gap-1.5 flex-wrap p-2.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-[11px]">
-              <span className="text-slate-400 font-bold ml-1 flex items-center gap-1 text-[10px] shrink-0">
-                <Settings2 className="w-3 h-3 text-emerald-400" />
-                <span>حقول الروشتة المفعّلة:</span>
-              </span>
-              {[
-                { key: "showAge", label: "السن", active: visibleFields.showAge },
-                { key: "showGender", label: "النوع", active: visibleFields.showGender },
-                { key: "showHeight", label: "الطول", active: visibleFields.showHeight },
-                { key: "showWeight", label: "الوزن", active: visibleFields.showWeight },
-                { key: "showBloodType", label: "الفصيلة", active: visibleFields.showBloodType },
-                { key: "showDiagnosis", label: "التشخيص", active: visibleFields.showDiagnosis },
-                { key: "showMedicalHistory", label: "الأمراض المزمنة", active: visibleFields.showMedicalHistory },
-                { key: "showAllergies", label: "حساسية الدواء", active: visibleFields.showAllergies },
-              ].map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => toggleVisibleField(f.key as any)}
-                  className={`px-2.5 py-1 rounded-xl font-bold transition-all flex items-center gap-1 cursor-pointer text-[10px] ${
-                    f.active
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs"
-                      : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700"
-                  }`}
-                  title={f.active ? `إخفاء حقل ${f.label} من الروشتة` : `إظهار حقل ${f.label} بالروشتة`}
-                >
-                  <span className="font-mono">{f.active ? "✓" : "+"}</span>
-                  <span>{f.label}</span>
-                </button>
-              ))}
             </div>
 
             {/* Patient Fields: Spacious, Elegant 2-Column Responsive Layout */}
@@ -889,52 +942,26 @@ export default function NewPrescriptionPage() {
             </div>
           </div>
 
-          {/* The World-Class Super Drug Search Component */}
-          <SuperDrugSearch
-            onAddItem={addItem}
-            items={items}
-            onRemoveItem={removeItem}
-            onUpdateItem={updateItem}
-            aiAlertCount={aiAlertCount}
-          />
-
-          {/* AI Prescription Interaction Safety Advisor */}
-          <div id="ai-advisor-section">
-            <AiPrescriptionInteractionAdvisor
-              items={items}
-              patient={patient}
-              onAlertsChange={setAiAlertCount}
-            />
-          </div>
-
-          {/* General Notes for Patient */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-2 shadow-lg text-xs">
-            <label className="font-bold text-slate-300 block">
-              تعليمات وإرشادات ختامية للمريض (تطبع أسفل الروشتة):
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع للاطمئنان..."
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-medium text-slate-100 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-        </div>
-
-        {/* Left Column: Live Interactive Prescription Preview Canvas (Sticky on Desktop) */}
-        <div className="lg:col-span-5 lg:sticky lg:top-20 space-y-4">
-          <LivePrescriptionPreview
-            prescriptionNo={prescriptionNo}
-            patient={patient}
-            diagnosis={diagnosis}
-            notes={notes}
-            items={items}
-            onRemoveItem={removeItem}
-            onSaveAndPrint={handleSaveAndPrint}
-            onShareWhatsApp={handleShareWhatsApp}
-          />
-        </div>
+        {/* Live Interactive Prescription Pad with In-Place Drug Writing & Search */}
+        <LivePrescriptionPreview
+          prescriptionNo={prescriptionNo}
+          patient={patient}
+          diagnosis={diagnosis}
+          notes={notes}
+          setNotes={setNotes}
+          items={items}
+          onAddItem={addItem}
+          onRemoveItem={removeItem}
+          onSaveAndPrint={handlePrintOnly}
+          onShareWhatsApp={handleShareWhatsApp}
+          onSaveOnly={handleSaveOnly}
+          onRequestNewPrescription={handleRequestNewPrescription}
+          aiAlerts={aiAlerts}
+          onOpenAiAlert={(alert) => {
+            setSelectedAiAlert(alert);
+            setIsAiModalOpen(true);
+          }}
+        />
       </div>
 
       {/* Modern Print Validation Alert Modal */}
@@ -973,6 +1000,14 @@ export default function NewPrescriptionPage() {
         diagnosis={diagnosis}
         onSaveAndContinue={handleSaveAndStartNew}
         onConfirmDiscard={handleConfirmDiscard}
+      />
+
+      {/* AI Drug Conflict Safety Guidance Modal */}
+      <AiInteractionModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        alert={selectedAiAlert}
+        onRemoveDrug={handleRemoveConflictingDrug}
       />
     </div>
   );

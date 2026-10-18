@@ -20,6 +20,8 @@ import {
   Pencil,
   Check,
   X,
+  Save,
+  Plus,
 } from "lucide-react";
 import { useClinicStore } from "@/store/useClinicStore";
 import { PrescriptionItem, PatientInfo, usePrescriptionStore } from "@/store/usePrescriptionStore";
@@ -28,16 +30,24 @@ import {
   getTemplateContainerStyles,
 } from "./PrescriptionTemplateDecorations";
 import { calculateBmiInfo } from "@/lib/utils";
+import { InlineDrugPadInput } from "./InlineDrugPadInput";
+import { InteractionAlert } from "./AiInteractionModal";
 
 interface LivePrescriptionPreviewProps {
   prescriptionNo: string;
   patient: PatientInfo;
   diagnosis: string;
   notes: string;
+  setNotes?: (notes: string) => void;
   items: PrescriptionItem[];
+  onAddItem?: (item: Omit<PrescriptionItem, "id">) => void;
   onRemoveItem: (id: string) => void;
   onSaveAndPrint: () => void;
   onShareWhatsApp: () => void;
+  onSaveOnly?: () => void;
+  onRequestNewPrescription?: () => void;
+  aiAlerts?: InteractionAlert[];
+  onOpenAiAlert?: (alert: InteractionAlert) => void;
 }
 
 export function LivePrescriptionPreview({
@@ -45,10 +55,16 @@ export function LivePrescriptionPreview({
   patient,
   diagnosis,
   notes,
+  setNotes,
   items,
+  onAddItem,
   onRemoveItem,
   onSaveAndPrint,
   onShareWhatsApp,
+  onSaveOnly,
+  onRequestNewPrescription,
+  aiAlerts = [],
+  onOpenAiAlert,
 }: LivePrescriptionPreviewProps) {
   const { clinic, branches, activeBranchId } = useClinicStore();
   const { visibleFields, updateItem } = usePrescriptionStore();
@@ -117,8 +133,8 @@ export function LivePrescriptionPreview({
           widthMm: 105,
           heightMm: 148,
           desc: "10.5 × 14.8 سم (1240 × 1748 px)",
-          maxW: "max-w-[400px]",
-          minH: "min-h-[580px] sm:min-h-[620px]",
+          maxW: "w-full max-w-2xl",
+          minH: "min-h-[580px] sm:min-h-[640px]",
           cssPage: "105mm 148mm",
         }
       : paperSize === "A4"
@@ -128,8 +144,8 @@ export function LivePrescriptionPreview({
           widthMm: 210,
           heightMm: 297,
           desc: "21.0 × 29.7 سم (2480 × 3508 px)",
-          maxW: "max-w-[620px]",
-          minH: "min-h-[900px] sm:min-h-[960px]",
+          maxW: "w-full max-w-4xl",
+          minH: "min-h-[900px] sm:min-h-[1050px]",
           cssPage: "210mm 297mm",
         }
       : paperSize === "B5"
@@ -139,8 +155,8 @@ export function LivePrescriptionPreview({
           widthMm: 176,
           heightMm: 250,
           desc: "17.6 × 25.0 سم",
-          maxW: "max-w-[500px]",
-          minH: "min-h-[760px] sm:min-h-[800px]",
+          maxW: "w-full max-w-3xl lg:max-w-4xl",
+          minH: "min-h-[760px] sm:min-h-[850px]",
           cssPage: "176mm 250mm",
         }
       : {
@@ -149,8 +165,8 @@ export function LivePrescriptionPreview({
           widthMm: 148,
           heightMm: 210,
           desc: "14.8 × 21.0 سم (1748 × 2480 px)",
-          maxW: "max-w-[480px]",
-          minH: "min-h-[700px] sm:min-h-[750px]",
+          maxW: "w-full max-w-3xl lg:max-w-4xl",
+          minH: "min-h-[700px] sm:min-h-[820px]",
           cssPage: "148mm 210mm",
         };
 
@@ -178,49 +194,20 @@ export function LivePrescriptionPreview({
         }}
       />
 
-      {/* Top Action Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-4 rounded-3xl shadow-lg no-print">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="p-2 rounded-xl text-white shadow-sm shrink-0"
-            style={{ backgroundColor: primaryColor }}
-          >
-            <FileText className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="text-xs font-black text-slate-100">المعاينة الحية للروشتة</h4>
-              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                {paperConfig.label}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <span className="text-[10px] text-slate-400 font-medium">(رقم الروشتة)</span>
-              <span suppressHydrationWarning className="text-[11px] font-mono text-emerald-400 font-bold">
-                {mounted ? prescriptionNo : "..."}
-              </span>
-            </div>
-          </div>
-        </div>
-
+      {/* Live Prescription Sheet Indicator Header */}
+      <div className="flex items-center justify-between px-3 py-1.5 text-xs font-bold text-slate-400 no-print">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onShareWhatsApp}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>إرسال واتساب 💬</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onSaveAndPrint}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Printer className="w-4 h-4 text-emerald-400" />
-            <span>طباعة الروشتة 🖨️</span>
-          </button>
+          <FileText className="w-4 h-4 text-emerald-400" />
+          <span className="text-slate-200">ورقة الروشتة الطبية:</span>
+          <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            {paperConfig.label}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-400">
+          <span>Rx No:</span>
+          <span suppressHydrationWarning className="text-emerald-400 font-bold" dir="ltr">
+            {mounted ? prescriptionNo : "..."}
+          </span>
         </div>
       </div>
 
@@ -716,6 +703,32 @@ export function LivePrescriptionPreview({
                             ({item.activeIngredient})
                           </span>
                         )}
+
+                        {/* AI Interaction Pulsing Badge */}
+                        {(() => {
+                          const itemAlert = aiAlerts?.find((a) =>
+                            a.involvedDrugs?.some(
+                              (d) =>
+                                item.drugName.toLowerCase().includes(d.toLowerCase()) ||
+                                (item.activeIngredient &&
+                                  item.activeIngredient.toLowerCase().includes(d.toLowerCase()))
+                            )
+                          );
+
+                          if (!itemAlert) return null;
+
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => onOpenAiAlert?.(itemAlert)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-500/15 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-300 text-[10px] font-black transition-all cursor-pointer shadow-xs no-print animate-pulse"
+                              title="انقر لعرض تفاصيل التعارض الدوائي بالذكاء الاصطناعي"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping shrink-0" />
+                              <span>⚠️ تعارض دوائي</span>
+                            </button>
+                          );
+                        })()}
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold pr-6"
@@ -737,7 +750,7 @@ export function LivePrescriptionPreview({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity no-print shrink-0">
+                    <div className="flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity no-print shrink-0">
                       <button
                         type="button"
                         onClick={() => startEdit(item)}
@@ -761,8 +774,42 @@ export function LivePrescriptionPreview({
             </div>
           )}
 
+          {/* Embedded In-Place Drug Search & Manual Writing Pad */}
+          {onAddItem && (
+            <InlineDrugPadInput
+              onAddItem={onAddItem}
+              primaryColor={primaryColor}
+              currentItems={items}
+            />
+          )}
+
+          {/* Patient Instructions & Notes directly on Prescription */}
+          <div className="pt-2 text-xs">
+            {setNotes && (
+              <div className="no-print space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 block">
+                  تعليمات وإرشادات ختامية للمريض (تطبع بأسفل الروشتة):
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع للاطمئنان..."
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 font-medium text-slate-800 text-xs focus:outline-none focus:border-emerald-500 shadow-inner"
+                />
+              </div>
+            )}
+
+            {notes && (
+              <div className="pt-2 text-[10.5px] text-slate-800 font-bold border-t border-slate-200">
+                <span className="font-black text-slate-900">تعليمات المريض: </span>
+                <span className="font-medium text-slate-700">{notes}</span>
+              </div>
+            )}
+          </div>
+
           {/* Comfortable natural breathing margin between medications and footer */}
-          <div className="flex-1 min-h-[60px] sm:min-h-[100px]" aria-hidden="true" />
+          <div className="flex-1 min-h-[40px] sm:min-h-[60px]" aria-hidden="true" />
         </div>
 
         {/* Footer: Branches & Clinic Contact & Greeting (Respects showFooter) */}
@@ -881,6 +928,67 @@ export function LivePrescriptionPreview({
             </div>
           );
         })()}
+      </div>
+
+      {/* Primary Action Buttons Bar (Responsive Grid on Mobile, Sleek Bar on Desktop) */}
+      <div className="p-3 sm:p-4 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl no-print w-full transition-all" dir="rtl">
+        <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-between gap-2.5">
+          {/* New Prescription (Desktop: Start side / Mobile: Cell 4) */}
+          {onRequestNewPrescription && (
+            <button
+              type="button"
+              onClick={onRequestNewPrescription}
+              className="order-4 sm:order-1 w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-950/80 hover:bg-slate-900 text-slate-200 hover:text-white font-bold text-xs border-2 border-slate-800 hover:border-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-slate-950/50"
+              title="تفريغ وبدء روشتة جديدة للمريض التالي"
+            >
+              <div className="w-5 h-5 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0">
+                <Plus className="w-3.5 h-3.5 text-cyan-400 stroke-[2.5]" />
+              </div>
+              <span className="truncate">روشتة جديدة</span>
+            </button>
+          )}
+
+          {/* Action Group: Save, WhatsApp, Print */}
+          <div className="contents sm:flex sm:items-center sm:gap-2.5 sm:order-2">
+            {onSaveOnly && (
+              <button
+                type="button"
+                onClick={onSaveOnly}
+                className="order-3 sm:order-1 w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-950/80 hover:bg-slate-900 text-emerald-300 hover:text-emerald-200 border-2 border-emerald-500/40 hover:border-emerald-400 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-emerald-950/40"
+                title="حفظ الروشتة في سجل العيادة"
+              >
+                <div className="w-5 h-5 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+                  <Save className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <span className="truncate">حفظ بالسجل</span>
+              </button>
+            )}
+
+            {onShareWhatsApp && (
+              <button
+                type="button"
+                onClick={onShareWhatsApp}
+                className="order-2 sm:order-2 w-full sm:w-auto px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs border border-emerald-400/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-lg shadow-emerald-950/50"
+                title="إرسال الروشتة للمريض عبر واتساب مباشرة"
+              >
+                <MessageCircle className="w-4 h-4 stroke-[2.2] shrink-0" />
+                <span className="truncate">إرسال واتساب</span>
+              </button>
+            )}
+
+            {onSaveAndPrint && (
+              <button
+                type="button"
+                onClick={onSaveAndPrint}
+                className="order-1 sm:order-3 w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-xl shadow-emerald-950/60"
+                title="حفظ وطباعة الروشتة فوراً"
+              >
+                <Printer className="w-4 h-4 stroke-[2.5] shrink-0" />
+                <span className="truncate">طباعة الروشتة</span>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
