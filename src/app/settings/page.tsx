@@ -53,7 +53,14 @@ import {
 import { useClinicStore, Branch, PrescriptionTemplate } from "@/store/useClinicStore";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
-import { isBiometricAvailable, authenticateWithBiometrics, isMobileDevice } from "@/lib/deviceSecurity";
+import {
+  isBiometricAvailable,
+  authenticateWithBiometrics,
+  isMobileDevice,
+  isNativeAndroidApk,
+  isBiometricLockEnabled,
+  setBiometricLockEnabled,
+} from "@/lib/deviceSecurity";
 import { QRCodeSVG } from "qrcode.react";
 import { showGlobalToast } from "@/components/common/GlobalToast";
 import {
@@ -724,7 +731,12 @@ export default function SettingsPage() {
   const [paperSize, setPaperSize] = useState<"A5" | "A6" | "A4" | "B5">(clinic.paperSize || "A5");
   const [showHeader, setShowHeader] = useState(clinic.showHeader !== false);
   const [showFooter, setShowFooter] = useState(clinic.showFooter !== false);
-  const [biometricsEnabled, setBiometricsEnabled] = useState(clinic.biometricsEnabled || false);
+  const [biometricsEnabled, setBiometricsEnabled] = useState(() => {
+    if (typeof window === "undefined") return clinic.biometricsEnabled || false;
+    const stored = localStorage.getItem("penrx_biometric_enabled");
+    if (stored !== null) return stored === "true";
+    return clinic.biometricsEnabled || false;
+  });
 
   // Biometrics & Save feedbacks (Mobile only)
   const [isMobile, setIsMobile] = useState(false);
@@ -830,15 +842,43 @@ export default function SettingsPage() {
 
   const handleTestBiometrics = async () => {
     setBiometricFeedback("يرجى لمس مستشعر البصمة على جهازك للتحقق...");
-    const success = await authenticateWithBiometrics(doctorName || "Doctor");
-    if (success) {
-      setBiometricFeedback("✅ تم التحقق من البصمة بنجاح! جهازك مهيأ للدخول البيومتري.");
+    const res = await authenticateWithBiometrics(doctorName || "Doctor");
+    if (res.success) {
+      setBiometricFeedback("✅ تم التحقق من البصمة بنجاح! مستشعر البصمة يعمل بدقة.");
       setBiometricsEnabled(true);
+      setBiometricLockEnabled(true);
       updateClinic({ biometricsEnabled: true });
+      showGlobalToast("تم التحقق من البصمة وتأكيد تفعيل القفل بنجاح!", "success");
     } else {
-      setBiometricFeedback("⚠️ لم يتم التحقق أو تم إلغاء البصمة.");
+      setBiometricFeedback(res.error ? `⚠️ ${res.error}` : "⚠️ لم يتم التحقق أو تم إلغاء البصمة.");
     }
     setTimeout(() => setBiometricFeedback(null), 6000);
+  };
+
+  const handleToggleBiometrics = async (enable: boolean) => {
+    if (!enable) {
+      // Disable biometric lock
+      setBiometricsEnabled(false);
+      setBiometricLockEnabled(false);
+      updateClinic({ biometricsEnabled: false });
+      setBiometricFeedback("تم إلغاء تفعيل قفل البصمة. لن يطلب التطبيق البصمة عند الفتح.");
+      showGlobalToast("تم تعطيل قفل البصمة", "info");
+      setTimeout(() => setBiometricFeedback(null), 5000);
+    } else {
+      // Prompt fingerprint before enabling
+      setBiometricFeedback("يرجى لمس مستشعر البصمة للتحقق والتفعيل...");
+      const res = await authenticateWithBiometrics(doctorName || "Doctor");
+      if (res.success) {
+        setBiometricsEnabled(true);
+        setBiometricLockEnabled(true);
+        updateClinic({ biometricsEnabled: true });
+        setBiometricFeedback("✅ تم تفعيل قفل البصمة بنجاح! سيتم قفل التطبيق عند كل فتح.");
+        showGlobalToast("تم تفعيل قفل البصمة بنجاح!", "success");
+      } else {
+        setBiometricFeedback(res.error ? `⚠️ ${res.error}` : "⚠️ لم يتم التحقق من البصمة، لم يتم التفعيل.");
+      }
+      setTimeout(() => setBiometricFeedback(null), 6000);
+    }
   };
 
   const handleTogglePatientField = (field: keyof typeof visibleFields) => {
@@ -1471,68 +1511,65 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* Fingerprint & Biometrics Setup - Visible ONLY on Mobile Devices */}
-                  {isMobile && hasBiometricsHardware && (
-                    <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/30 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                          <Fingerprint className="w-5 h-5 text-emerald-400" />
-                          <span>تسجيل الدخول ببصمة الأصبع / Touch ID / Face ID:</span>
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
-                            biometricsEnabled
-                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                              : "bg-slate-800 text-slate-400 border-slate-700"
+                  {/* Fingerprint & Biometrics Setup - Visible ONLY on Mobile Devices / Android APK */}
+                  {(isMobile || isNativeAndroidApk()) && hasBiometricsHardware && (
+                    <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-emerald-500/30 space-y-4 shadow-lg">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                            <Fingerprint className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-slate-100">
+                              قفل التطبيق ببصمة الإصبع (Android Biometric Lock)
+                            </h4>
+                            <p className="text-[11px] text-slate-400">
+                              {biometricsEnabled
+                                ? "القفل البيومتري نشط - يطلب البصمة لحماية بيانات العيادة عند فتح التطبيق"
+                                : "القفل البيومتري معطل - يفتح التطبيق مباشرة دون طلب البصمة"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Modern Toggle Switch */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleBiometrics(!biometricsEnabled)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            biometricsEnabled ? "bg-emerald-600" : "bg-slate-800"
                           }`}
+                          role="switch"
+                          aria-checked={biometricsEnabled}
+                          title={biometricsEnabled ? "انقر للتعطيل" : "انقر للتفعيل"}
                         >
-                          {biometricsEnabled ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                              <span>البصمة مفعلة</span>
-                            </>
-                          ) : (
-                            <>
-                              <Lock className="w-3 h-3 text-slate-400" />
-                              <span>غير مفعلة</span>
-                            </>
-                          )}
-                        </span>
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              biometricsEnabled ? "-translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
                       </div>
 
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        سجل بصمة إصبعك أو وجهك للفتح السريع والآمن دون الحاجة لكتابة كلمات مرور كل مرة.
-                      </p>
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-900">
+                        <p className="text-[10px] text-slate-400">
+                          يتم تفعيل البصمة تلقائياً مع أول تشغيل لـ APK. يمكنك إيقافها أو إعادة تشغيلها من هنا في أي وقت.
+                        </p>
 
-                      <div className="flex items-center gap-2 pt-1">
                         <button
                           type="button"
                           onClick={handleTestBiometrics}
-                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
+                          className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
                         >
-                          <Fingerprint className="w-4 h-4" />
-                          <span>{biometricsEnabled ? "إعادة فحص البصمة" : "تفعيل وتسجيل البصمة الآن"}</span>
+                          <Fingerprint className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>تجربة البصمة الآن</span>
                         </button>
-                        {biometricsEnabled && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setBiometricsEnabled(false);
-                              updateClinic({ biometricsEnabled: false });
-                              if (typeof window !== "undefined") {
-                                localStorage.removeItem("penrx_biometric_enabled");
-                                localStorage.removeItem("penrx_biometric_credential_id");
-                              }
-                            }}
-                            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-600/30 text-rose-300 text-xs font-bold transition-all border border-slate-700 cursor-pointer active:scale-95"
-                          >
-                            إلغاء التفعيل
-                          </button>
-                        )}
                       </div>
 
                       {biometricFeedback && (
-                        <p className="text-xs font-black text-amber-300 pt-1">{biometricFeedback}</p>
+                        <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs font-bold text-amber-300 animate-in fade-in duration-200">
+                          {biometricFeedback}
+                        </div>
                       )}
                     </div>
                   )}

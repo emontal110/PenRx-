@@ -77,15 +77,26 @@ export function hasUsedFreeTrial(subscriptions: SubscriptionRecord[], currentMac
   );
 }
 
-export function getSubscriptionDetails(subscriptions: SubscriptionRecord[], currentMachineId: string) {
-  // Find subscriptions matching current machine ID (either as primary or in allowedMachineIds)
-  const matchingSubs = subscriptions.filter(
+export function getSubscriptionDetails(
+  subscriptions: SubscriptionRecord[],
+  currentMachineId: string,
+  currentSubscriberId?: string | null
+) {
+  const effectiveSubId =
+    currentSubscriberId ||
+    (typeof window !== "undefined"
+      ? localStorage.getItem("penrx_last_subscriber_id") || useSubscriptionStore.getState()?.subscriberId
+      : null);
+
+  // Find subscriptions matching current machine ID OR allowed devices OR subscriber ID
+  const matchingSubs = (subscriptions || []).filter(
     (s) =>
       s.machineId === currentMachineId ||
-      (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(currentMachineId))
+      (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(currentMachineId)) ||
+      (effectiveSubId && effectiveSubId !== "SUB-0000" && s.subscriberId && s.subscriberId === effectiveSubId)
   );
 
-  // Strictly evaluate subscriptions belonging to this machine ID
+  // Strictly evaluate subscriptions belonging to this machine ID / subscriber
   const activeSub = matchingSubs.find((s) => s.status === "ACTIVE");
   const pendingSub = matchingSubs.find((s) => s.status === "PENDING");
   const sub = activeSub || pendingSub || matchingSubs[0] || null;
@@ -117,8 +128,8 @@ export function getSubscriptionDetails(subscriptions: SubscriptionRecord[], curr
   }
 
   const isExpired = sub.status === "ACTIVE" && daysRemaining <= 0;
-  // If subscription status is ACTIVE on database/portal, it is unlocked and active
-  const isActive = sub.status === "ACTIVE" && (daysRemaining > 0 || (sub.durationDays && sub.durationDays > 0));
+  // If subscription status is ACTIVE on database/portal and duration has not elapsed, it is unlocked and active
+  const isActive = sub.status === "ACTIVE" && !isExpired;
   const isPending = sub.status === "PENDING";
   const isSuspended = sub.status === "SUSPENDED";
 
@@ -514,7 +525,11 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         let supaReportedNoSub = false;
         try {
           const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
-          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(machineId.eq.${encodeURIComponent(machineId)},allowedMachineIds.cs.{${encodeURIComponent(machineId)}})&order=updatedAt.desc&limit=1`;
+          let orConditions = `machineId.eq.${encodeURIComponent(machineId)},allowedMachineIds.cs.{${encodeURIComponent(machineId)}}`;
+          if (subId && subId !== "SUB-0000") {
+            orConditions += `,subscriberId.eq.${encodeURIComponent(subId)}`;
+          }
+          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orConditions})&order=updatedAt.desc&limit=1`;
           const supaRes = await fetch(supaUrl, {
             headers: {
               apikey: supaKey,
@@ -551,8 +566,16 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           return;
         }
 
+        // Safeguard: Check if locally we already have an active unexpired subscription
+        const currentLocalSub = get().currentSubscription || get().subscriptions.find((s) => s.status === "ACTIVE");
+        const isLocalActiveUnexpired = currentLocalSub && currentLocalSub.status === "ACTIVE" && (
+          !currentLocalSub.expiresAt || new Date(currentLocalSub.expiresAt).getTime() > Date.now()
+        );
+
         // If cloud database explicitly confirmed that no subscription exists (deleted or revoked by admin)
-        if ((supaResponded && supaReportedNoSub) || (serverResponded && serverReportedNoSub)) {
+        // Require direct cloud confirmation (supaResponded && supaReportedNoSub) so transient serverless cold starts never revoke an active subscription
+        if (supaResponded && supaReportedNoSub && (serverReportedNoSub || !serverResponded)) {
+          // If locally we had an active unexpired subscription, ensure we don't revoke it unless admin deliberately deleted it from Supabase
           set({
             subscriptions: [],
             currentSubscription: null,
@@ -562,21 +585,11 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           if (typeof window !== "undefined") {
             try {
               localStorage.removeItem("penrx_last_sub");
-              localStorage.removeItem("penrx_clinic_storage");
-              localStorage.removeItem("penrx_prescription_storage");
               localStorage.removeItem("penrx_was_pending");
-              localStorage.removeItem("penrx_trial_claimed");
             } catch {}
           }
-          // Reset clinic profile & prescriptions locally so stale names/records disappear
-          try {
-            const { useClinicStore } = await import("./useClinicStore");
-            useClinicStore.getState().resetClinic();
-          } catch {}
-          try {
-            const { usePrescriptionStore } = await import("./usePrescriptionStore");
-            usePrescriptionStore.getState().clearAllPrescriptions();
-          } catch {}
+          // Note: Doctor clinic profile and patient prescriptions are NEVER wiped
+          // during subscription sync to ensure medical data safety.
         }
       },
     }),

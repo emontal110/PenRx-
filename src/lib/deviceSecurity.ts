@@ -140,19 +140,50 @@ export async function initializeHardwareMachineId(
 ): Promise<void> {
   if (typeof window === "undefined") return;
 
+  const STORAGE_KEY = "penrx_unique_machine_id";
   const w = window as any;
-  if (!w.penrxDesktop?.isElectron) return;
 
-  try {
-    const hwId: string = await getOrCreateMachineIdAsync();
-    const stored = localStorage.getItem("penrx_unique_machine_id");
-    if (hwId !== stored) {
-      localStorage.setItem("penrx_unique_machine_id", hwId);
-      onUpdate(hwId);
+  // 1. Electron Desktop Native Hardware ID
+  if (w.penrxDesktop?.isElectron && typeof w.penrxDesktop.getHardwareMachineId === "function") {
+    try {
+      const hwId: string = await w.penrxDesktop.getHardwareMachineId();
+      if (hwId && hwId.startsWith("PRX-")) {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored !== hwId) {
+          localStorage.setItem(STORAGE_KEY, hwId);
+          onUpdate(hwId);
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn("[DeviceSecurity] Electron hardware ID error:", err);
     }
-  } catch (err) {
-    console.warn("[DeviceSecurity] Hardware ID initialization error:", err);
   }
+
+  // 2. Capacitor Mobile (Android APK) Native Hardware ID (SSAID)
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
+      const { Device } = await import("@capacitor/device");
+      const idInfo = await Device.getId();
+      if (idInfo && idInfo.identifier) {
+        let hash = 2166136261;
+        const str = `ANDROID-HW-${idInfo.identifier}`;
+        for (let i = 0; i < str.length; i++) {
+          hash ^= str.charCodeAt(i);
+          hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+        }
+        const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, "0");
+        const suffix = idInfo.identifier.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase().padStart(4, "A");
+        const androidId = `PRX-ANDR-${hex.substring(0, 4)}-${suffix}`;
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored !== androidId) {
+          localStorage.setItem(STORAGE_KEY, androidId);
+          onUpdate(androidId);
+        }
+      }
+    }
+  } catch (capErr) {}
 }
 
 /**
@@ -190,15 +221,82 @@ export function isMobileDevice(): boolean {
 }
 
 /**
- * Check if the current mobile device supports biometric fingerprint / FaceID
- * Returns false on desktop/computer version.
+ * Detect if strictly running inside the Native Android APK (Capacitor Native Android)
+ * Excludes Desktop EXE, Desktop browsers, and regular mobile web browsers.
  */
-export async function isBiometricAvailable(): Promise<boolean> {
-  if (typeof window === "undefined" || !isMobileDevice()) {
+export function isNativeAndroidApk(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as any;
+  const ua = navigator.userAgent || "";
+
+  // 1. Desktop EXE / Electron -> strictly false
+  if (w.penrxDesktop?.isElectron || ua.includes("Electron")) {
     return false;
   }
 
-  if (!window.PublicKeyCredential) {
+  // 2. Desktop OS check -> strictly false
+  if (/Windows NT|Macintosh|Linux x86_64/i.test(ua) && !/Android/i.test(ua)) {
+    return false;
+  }
+
+  // 3. Capacitor native check
+  if (w.Capacitor && typeof w.Capacitor.isNativePlatform === "function") {
+    return w.Capacitor.isNativePlatform();
+  }
+
+  return false;
+}
+
+/**
+ * Check if the biometric lock is enabled in settings / storage
+ */
+export function isBiometricLockEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem("penrx_biometric_enabled") === "true";
+}
+
+/**
+ * Save biometric lock preference
+ */
+export function setBiometricLockEnabled(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("penrx_biometric_enabled", enabled ? "true" : "false");
+}
+
+export interface BiometricAuthResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Check if the current device supports biometric fingerprint / FaceID
+ * Returns true on Native Android APK when hardware is present and enrolled.
+ * Returns false on desktop/computer version.
+ */
+export async function isBiometricAvailable(): Promise<boolean> {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const w = window as any;
+  if (w.penrxDesktop?.isElectron) {
+    return false;
+  }
+
+  // 1. Native Capacitor Android APK (@aparajita/capacitor-biometric-auth)
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
+      const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
+      const check = await BiometricAuth.checkBiometry();
+      return Boolean(check && check.isAvailable);
+    }
+  } catch (err) {
+    console.warn("[Biometrics] Native checkBiometry error:", err);
+  }
+
+  // 2. Mobile Browser Fallback (WebAuthn)
+  if (!isMobileDevice() || !window.PublicKeyCredential) {
     return false;
   }
 
@@ -210,7 +308,7 @@ export async function isBiometricAvailable(): Promise<boolean> {
 }
 
 /**
- * Register a new biometric fingerprint credential (Mobile Fingerprint Enrollment)
+ * Register a new biometric fingerprint credential (Mobile Fingerprint Enrollment for Web)
  */
 export async function registerBiometricCredential(
   username = "doctor@penrx.app"
@@ -277,53 +375,101 @@ export async function registerBiometricCredential(
 
 /**
  * Authenticate with biometric fingerprint or device FaceID / PIN on mobile
+ * Directly invokes native Android BiometricPrompt on Android APK.
  */
 export async function authenticateWithBiometrics(
-  username = "doctor@penrx.app"
-): Promise<boolean> {
-  if (typeof window === "undefined" || !isMobileDevice() || !window.PublicKeyCredential) {
-    return false;
+  reason = "المس مستشعر البصمة لفتح منظومة PenRX+"
+): Promise<BiometricAuthResult> {
+  if (typeof window === "undefined") {
+    return { success: false, error: "البيئة الحالية غير مدعومة" };
   }
 
+  const w = window as any;
+  if (w.penrxDesktop?.isElectron) {
+    return { success: false, error: "البصمة غير مدعومة على أجهزة الكمبيوتر" };
+  }
+
+  // 1. Native Capacitor Android APK (@aparajita/capacitor-biometric-auth)
   try {
-    const isAvail = await isBiometricAvailable();
-    if (!isAvail) return false;
+    const { Capacitor } = await import("@capacitor/core");
+    if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
+      const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
 
-    const existingCredId = localStorage.getItem("penrx_biometric_credential_id");
+      const check = await BiometricAuth.checkBiometry();
+      if (!check || !check.isAvailable) {
+        return {
+          success: false,
+          error: check?.reason || "البصمة غير متوفرة أو لم يتم تعيين بصمة في إعدادات الهاتف",
+        };
+      }
 
-    // If no credential enrolled yet, enroll directly via create
-    if (!existingCredId) {
-      return await registerBiometricCredential(username);
+      await BiometricAuth.authenticate({
+        reason,
+        cancelTitle: "إلغاء",
+        allowDeviceCredential: true, // Enables device PIN/pattern as a safe fallback
+        androidTitle: "التحقق من الهوية - PenRX+",
+        androidSubtitle: "استخدم بصمة الإصبع أو رمز حماية الهاتف للدخول",
+      });
+
+      return { success: true };
     }
-
-    const challenge = new Uint8Array(32);
-    window.crypto.getRandomValues(challenge);
-
-    const getPublicKey: PublicKeyCredentialRequestOptions = {
-      challenge,
-      timeout: 60000,
-      userVerification: "required",
-    };
-
-    if (
-      window.location.hostname &&
-      window.location.hostname !== "localhost" &&
-      !window.location.hostname.includes("127.0.0.1")
-    ) {
-      getPublicKey.rpId = window.location.hostname;
-    }
-
-    const credential = await navigator.credentials.get({
-      publicKey: getPublicKey,
-    });
-
-    if (credential) {
-      return true;
-    }
-
-    return false;
   } catch (err: any) {
-    console.warn("[Biometrics] Verification error:", err?.message || err);
-    return false;
+    console.warn("[Biometrics] Native authenticate error:", err);
+    const code = err?.code || "";
+    let message = "فشل التحقق من البصمة";
+    if (code === "userCancel" || code === "appCancel") {
+      message = "تم إلغاء عملية البصمة";
+    } else if (code === "biometryLockout") {
+      message = "تم قفل البصمة مؤقتاً لتكرار المحاولات الخاطئة. يرجى استخدام قفل الشاشة.";
+    } else if (code === "biometryNotEnrolled") {
+      message = "لم يتم تسجيل بصمة في إعدادات الهاتف بعد.";
+    } else if (err?.message) {
+      message = err.message;
+    }
+    return { success: false, error: message };
   }
+
+  // 2. Mobile Browser WebAuthn Fallback
+  if (isMobileDevice() && window.PublicKeyCredential) {
+    try {
+      const isAvail = await isBiometricAvailable();
+      if (!isAvail) return { success: false, error: "البصمة غير متوفرة" };
+
+      const existingCredId = localStorage.getItem("penrx_biometric_credential_id");
+      if (!existingCredId) {
+        const enrolled = await registerBiometricCredential();
+        return { success: enrolled, error: enrolled ? undefined : "فشل تسجيل البصمة" };
+      }
+
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+
+      const getPublicKey: PublicKeyCredentialRequestOptions = {
+        challenge,
+        timeout: 60000,
+        userVerification: "required",
+      };
+
+      if (
+        window.location.hostname &&
+        window.location.hostname !== "localhost" &&
+        !window.location.hostname.includes("127.0.0.1")
+      ) {
+        getPublicKey.rpId = window.location.hostname;
+      }
+
+      const credential = await navigator.credentials.get({
+        publicKey: getPublicKey,
+      });
+
+      if (credential) {
+        return { success: true };
+      }
+      return { success: false, error: "لم يتم التعرف على البصمة" };
+    } catch (err: any) {
+      return { success: false, error: err?.message || "فشل التحقق من البصمة" };
+    }
+  }
+
+  return { success: false, error: "الجهاز لا يدعم المصادقة بالبصمة" };
 }

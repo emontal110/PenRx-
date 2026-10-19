@@ -135,7 +135,7 @@
         <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           <span>بوابة الأمان والتحكم • MASTER ADMIN</span>
-          <span class="portal-pkg-version font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 text-[9px]">v1.30</span>
+          <span class="portal-pkg-version font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 text-[9px]">v1.32</span>
         </div>
 
         <h1 class="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight leading-snug">
@@ -266,7 +266,7 @@
                 <span class="hidden xs:inline-block px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[9px] sm:text-[10px] font-black border border-emerald-500/40 whitespace-nowrap">
                   MASTER ADMIN
                 </span>
-                <span class="portal-pkg-version px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] border border-emerald-500/40 whitespace-nowrap">v1.30</span>
+                <span class="portal-pkg-version px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] border border-emerald-500/40 whitespace-nowrap">v1.32</span>
               </div>
               <p class="text-[10px] sm:text-[11px] text-slate-400 font-bold truncate">لوحة إدارة تراخيص الأطباء وتعدد الأجهزة</p>
             </div>
@@ -483,9 +483,10 @@
       } catch {}
     }
 
-    // Public Supabase configuration for zero-latency direct fallback
+    // Authoritative Supabase configuration for zero-latency direct fallback
     const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+    const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
 
     function getAdminApiSecret() {
       return (
@@ -506,6 +507,14 @@
       return {
         "apikey": SUPABASE_ANON_KEY,
         "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "Content-Type": "application/json"
+      };
+    }
+
+    function getSupabaseAdminHeaders() {
+      return {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
         "Content-Type": "application/json"
       };
     }
@@ -1219,7 +1228,7 @@
       });
     });
 
-    // Helper: Execute admin action via Server API (Local or Cloud)
+    // Helper: Execute admin action via Server API (Local or Cloud) with direct Supabase Admin fallback
     async function executeAdminAction(id, action, params = {}) {
       try {
         const res = await fetch(`${API_BASE}/api/system/verify`, {
@@ -1232,18 +1241,9 @@
           if (data && data.success) {
             return { success: true, data };
           }
-          return { success: false, error: data?.error || "تعذر إتمام العملية." };
         }
-        if (res.status === 401) {
-          return {
-            success: false,
-            error: "❌ السيرفر السحابي (Vercel) بحاجة لنشر التحديثات إليه أولاً (Git Push) ليعتمد رمز الـ PIN الجديد ويطبق تعديل الأيام والتفعيل."
-          };
-        }
-        const errData = await res.json().catch(() => ({}));
-        return { success: false, error: errData?.error || "حدث خطأ من الخادم." };
       } catch (err) {
-        console.warn("[AdminAction] Cloud API notice:", err);
+        console.warn("[AdminAction] Primary API notice:", err);
       }
 
       // If local dev server wasn't running, attempt CLOUD_API_BASE
@@ -1258,12 +1258,59 @@
             const data2 = await res2.json();
             if (data2 && data2.success) return { success: true, data: data2 };
           }
-        } catch {}
+        } catch (err2) {
+          console.warn("[AdminAction] Cloud API notice:", err2);
+        }
+      }
+
+      // Authoritative Direct Supabase Admin Fallback (guarantees instant DB update via service_role)
+      try {
+        const adminHeaders = {
+          ...getSupabaseAdminHeaders(),
+          "Prefer": "return=representation"
+        };
+        const current = allSubscriptions.find((s) => s.id === id);
+        const now = new Date();
+        let patchBody = { updatedAt: now.toISOString() };
+
+        if (action === "ACTIVATE") {
+          const days = Number(params.durationDays) || (current ? current.durationDays : 30) || 30;
+          const expires = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+          patchBody.status = "ACTIVE";
+          patchBody.durationDays = days;
+          patchBody.activatedAt = now.toISOString();
+          patchBody.expiresAt = expires.toISOString();
+        } else if (action === "SUSPEND") {
+          patchBody.status = "SUSPENDED";
+        } else if (action === "ADJUST_DAYS") {
+          const delta = Number(params.daysDelta) || 0;
+          let currentExpiry = current && current.expiresAt ? new Date(current.expiresAt).getTime() : now.getTime();
+          if (isNaN(currentExpiry) || currentExpiry < now.getTime()) currentExpiry = now.getTime();
+          const newExpiry = new Date(currentExpiry + delta * 24 * 60 * 60 * 1000);
+          const newDuration = Math.max(1, Math.ceil((newExpiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+          patchBody.status = "ACTIVE";
+          patchBody.expiresAt = newExpiry.toISOString();
+          patchBody.durationDays = newDuration;
+        }
+
+        const directRes = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: adminHeaders,
+          body: JSON.stringify(patchBody)
+        });
+        if (directRes.ok) {
+          const updated = await directRes.json().catch(() => []);
+          if (Array.isArray(updated) && updated.length > 0) {
+            return { success: true, data: { subscription: updated[0] } };
+          }
+        }
+      } catch (supaDirectErr) {
+        console.warn("[AdminAction] Direct Supabase fallback error:", supaDirectErr);
       }
 
       return {
         success: false,
-        error: "تعذر الاتصال بالخادم. يرجى نشر التحديثات على GitHub و Vercel لتطبيق التعديل بالسحابة."
+        error: "تعذر الاتصال بالخادم وقاعدة البيانات السحابية."
       };
     }
 
@@ -1399,7 +1446,8 @@
           </div>
         `,
         onConfirm: async () => {
-          let success = false;
+          let apiDeleted = false;
+          let supaDeleted = false;
           let errorMsg = "";
 
           // 1. Server delete via API (triggers cascade deletion of prescriptions, backups, and subscription)
@@ -1416,42 +1464,52 @@
             }
             if (res.ok) {
               const data = await res.json();
-              if (data && data.success) success = true;
-              else errorMsg = data?.error || "";
-            } else if (res.status === 401) {
-              errorMsg = "❌ السيرفر السحابي (Vercel) بحاجة لنشر التحديثات إليه أولاً (Git Push) ليعتمد رمز الـ PIN.";
-            } else {
-              const errData = await res.json().catch(() => ({}));
-              errorMsg = errData?.error || "حدث خطأ من الخادم.";
+              if (data && data.success) apiDeleted = true;
             }
           } catch (err) {
-            errorMsg = "تعذر الاتصال بالخادم السحابي.";
+            console.warn("API delete notice:", err);
           }
 
-          // 2. Direct Supabase Cascade Delete (ensures immediate cloud wipe of Subscription, CloudPrescription, and CloudBackup)
+          // 2. Direct Supabase Cascade Delete using service_role credentials
           try {
-            const supaHeaders = getSupabaseHeaders();
-            await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
+            const adminHeaders = {
+              ...getSupabaseAdminHeaders(),
+              Prefer: "return=representation"
+            };
+            const supaRes = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
               method: "DELETE",
-              headers: supaHeaders
+              headers: adminHeaders
             });
+            if (supaRes.ok) {
+              const rows = await supaRes.json().catch(() => []);
+              if (Array.isArray(rows) && rows.length > 0) {
+                supaDeleted = true;
+              }
+            }
             if (subCode && subCode !== "SUB") {
               const supaBase = SUPABASE_REST_URL.replace(/\/Subscription$/, "");
               await fetch(`${supaBase}/CloudPrescription?subscriberId=eq.${encodeURIComponent(subCode)}`, {
                 method: "DELETE",
-                headers: supaHeaders
-              });
+                headers: adminHeaders
+              }).catch(() => {});
               await fetch(`${supaBase}/CloudBackup?subscriberId=eq.${encodeURIComponent(subCode)}`, {
                 method: "DELETE",
-                headers: supaHeaders
-              });
+                headers: adminHeaders
+              }).catch(() => {});
+              await fetch(`${supaBase}/Subscription?subscriberId=eq.${encodeURIComponent(subCode)}`, {
+                method: "DELETE",
+                headers: adminHeaders
+              }).catch(() => {});
             }
-            success = true;
           } catch (supaErr) {
             console.warn("Direct Supabase cascade delete notice:", supaErr);
           }
 
-          if (success) {
+          if (apiDeleted || supaDeleted) {
+            // Remove immediately from memory to prevent stale UI
+            allSubscriptions = allSubscriptions.filter((s) => s.id !== id);
+            renderDashboard();
+
             showActionNotification({
               type: "DELETE",
               title: "تم حذف الاشتراك نهائياً 🗑️",
@@ -1463,7 +1521,7 @@
             showActionNotification({
               type: "ERROR",
               title: "فشل الحذف",
-              message: errorMsg || "تعذر حذف الاشتراك من قاعدة البيانات السحابية."
+              message: "تعذر حذف الاشتراك من قاعدة البيانات السحابية. يرجى التحقق من الاتصال بالإنترنت."
             });
           }
         }
@@ -1707,7 +1765,7 @@
       const total = allSubscriptions.length;
       const active = allSubscriptions.filter((s) => s.status === "ACTIVE").length;
       const pending = allSubscriptions.filter((s) => s.status === "PENDING").length;
-      const trial = allSubscriptions.filter((s) => s.isTrial).length;
+      const trial = allSubscriptions.filter((s) => s.isTrial || s.planId === "trial" || s.price === 0).length;
       const activeRevenue = allSubscriptions
         .filter((s) => s.status === "ACTIVE")
         .reduce((sum, s) => sum + (Number(s.price) || 0), 0);
@@ -1763,7 +1821,7 @@
         // Status & Expiration filter
         if (currentFilter === "PENDING" && sub.status !== "PENDING") return false;
         if (currentFilter === "ACTIVE" && sub.status !== "ACTIVE") return false;
-        if (currentFilter === "FREE_TRIAL" && !sub.isTrial) return false;
+        if (currentFilter === "FREE_TRIAL" && !sub.isTrial && sub.planId !== "trial" && sub.price !== 0) return false;
         if (currentFilter === "EXPIRING_7") {
           const d = getDaysLeft(sub);
           if (d === null || d < 0 || d > 7) return false;

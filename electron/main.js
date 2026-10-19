@@ -199,12 +199,19 @@ ipcMain.handle("ensure-maximized", () => {
 });
 
 // Differential Auto-Updater Events & IPC Handlers (matches Classico implementation)
+let isUpdateDownloading = false;
+let updateDownloadedSuccessfully = false;
+
 if (autoUpdater) {
   autoUpdater.on("update-available", (info) => {
     const version = info ? info.version : "";
-    console.log(`[PenRX+ AutoUpdater] Differential update available: v${version}`);
+    console.log(`[PenRX+ AutoUpdater] Update available: v${version}`);
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("update_available", version);
+      mainWindow.webContents.send("update_available", {
+        version,
+        releaseNotes: info?.releaseNotes || "",
+        releaseDate: info?.releaseDate || "",
+      });
     }
   });
 
@@ -222,11 +229,33 @@ if (autoUpdater) {
 
   autoUpdater.on("update-downloaded", () => {
     console.log("[PenRX+ AutoUpdater] Differential update downloaded successfully!");
+    isUpdateDownloading = false;
+    updateDownloadedSuccessfully = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("update_downloaded");
       mainWindow.webContents.send("update-download-progress", {
         progress: 100,
         status: "completed",
+      });
+    }
+    // Auto-install and restart after 1.5 seconds!
+    setTimeout(() => {
+      try {
+        console.log("[PenRX+ AutoUpdater] Quitting and installing update with auto-restart...");
+        autoUpdater.quitAndInstall(false, true);
+      } catch (err) {
+        console.error("[PenRX+ AutoUpdater] quitAndInstall error:", err);
+      }
+    }, 1500);
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.warn("[PenRX+ AutoUpdater] Error event:", err?.message || err);
+    isUpdateDownloading = false;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update-download-progress", {
+        status: "error",
+        error: err?.message || "حدث خطأ أثناء فحص أو تنزيل التحديث",
       });
     }
   });
@@ -245,11 +274,16 @@ ipcMain.handle("check-differential-update", async () => {
 });
 
 ipcMain.handle("download-differential-update", async () => {
+  if (isUpdateDownloading) {
+    return { success: true, message: "Download already in progress" };
+  }
   if (autoUpdater) {
     try {
+      isUpdateDownloading = true;
       console.log("[PenRX+ AutoUpdater] Checking for differential updates before download...");
       const checkRes = await autoUpdater.checkForUpdates();
       if (!checkRes || !checkRes.updateInfo) {
+        isUpdateDownloading = false;
         console.warn("[PenRX+ AutoUpdater] No update info returned from checkForUpdates.");
         return { success: false, error: "لا يوجد تحديث متاح حالياً" };
       }
@@ -257,6 +291,7 @@ ipcMain.handle("download-differential-update", async () => {
       await autoUpdater.downloadUpdate();
       return { success: true, updateInfo: checkRes.updateInfo };
     } catch (err) {
+      isUpdateDownloading = false;
       console.error("[PenRX+ AutoUpdater] Differential update failed:", err.message);
       return { success: false, error: err.message };
     }
@@ -266,7 +301,7 @@ ipcMain.handle("download-differential-update", async () => {
 
 ipcMain.on("restart_app", () => {
   if (autoUpdater) {
-    autoUpdater.quitAndInstall();
+    autoUpdater.quitAndInstall(false, true);
   }
 });
 
@@ -276,9 +311,13 @@ ipcMain.handle("quit-and-install-update", async () => {
       await mainWindow.webContents.session.clearCache();
     } catch {}
   }
-  if (autoUpdater) {
-    autoUpdater.quitAndInstall();
-    return true;
+  if (autoUpdater && updateDownloadedSuccessfully) {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+      return true;
+    } catch (err) {
+      console.error("[PenRX+ AutoUpdater] quitAndInstall error:", err);
+    }
   }
   return false;
 });
@@ -438,7 +477,8 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
     // Launch updater silently using PowerShell with WindowStyle Hidden & windowsHide: true
     // This executes completely invisibly without any batch files or CMD black console flashes!
     const { spawn } = require("child_process");
-    const updateCmd = `Start-Sleep -Milliseconds 800; Start-Process -FilePath '${tempPath}' -ArgumentList '/S' -Wait; Remove-Item -Path '${tempPath}' -Force -ErrorAction SilentlyContinue`;
+    const appExePath = process.execPath;
+    const updateCmd = `Start-Sleep -Milliseconds 1000; Start-Process -FilePath '${tempPath}' -ArgumentList '/S' -Wait; Start-Process -FilePath '${appExePath}'; Start-Sleep -Milliseconds 1500; Remove-Item -Path '${tempPath}' -Force -ErrorAction SilentlyContinue`;
 
     const runner = spawn(
       "powershell.exe",
@@ -454,7 +494,7 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
     // Exit Electron cleanly to release all files for the installer
     setTimeout(() => {
       app.exit(0);
-    }, 400);
+    }, 500);
 
     return { success: true };
   } catch (err) {
@@ -778,6 +818,22 @@ app.whenReady().then(() => {
       mainWindow.loadURL(targetUrl);
       if (!mainWindow.isMaximized()) {
         mainWindow.maximize();
+      }
+
+      // Fast Startup Update Check: Check 2 seconds after window loads, then every 15 minutes
+      if (autoUpdater && app.isPackaged) {
+        setTimeout(() => {
+          console.log("[PenRX+ AutoUpdater] Triggering fast startup update check...");
+          autoUpdater.checkForUpdates().catch((err) => {
+            console.warn("[PenRX+ AutoUpdater] Fast startup check notice:", err.message);
+          });
+        }, 2000);
+
+        setInterval(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            autoUpdater.checkForUpdates().catch(() => {});
+          }
+        }, 15 * 60 * 1000);
       }
     }
   });

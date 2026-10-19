@@ -73,10 +73,38 @@ export function AutoUpdateModal() {
       }
     }
 
+    const w = typeof window !== "undefined" ? (window as any) : null;
+
+    // Fast Native Update Listener: Catches instant update notifications from Electron main process
+    let unsubAvailable: (() => void) | undefined;
+    if (typeof w?.penrxDesktop?.onUpdateAvailable === "function") {
+      unsubAvailable = w.penrxDesktop.onUpdateAvailable(async (info: any) => {
+        if (info && info.version) {
+          let currentAppVer = "";
+          if (w?.penrxDesktop?.getAppVersion) {
+            try { currentAppVer = await w.penrxDesktop.getAppVersion(); } catch {}
+          }
+          if (currentAppVer && !compareSemver(currentAppVer, info.version)) {
+            return;
+          }
+          const dismissedVersion = localStorage.getItem("penrx_dismissed_update_version");
+          if (dismissedVersion !== info.version) {
+            setUpdateInfo({
+              hasUpdate: true,
+              currentVersion: currentAppVer || "v...",
+              latestVersion: info.version,
+              releaseNotes: info.releaseNotes,
+              releaseDate: info.releaseDate,
+            });
+            setIsOpen(true);
+          }
+        }
+      });
+    }
+
     async function checkForUpdates() {
       try {
         let currentAppVer = "";
-        const w = typeof window !== "undefined" ? (window as any) : null;
         if (w?.penrxDesktop?.getAppVersion) {
           try {
             currentAppVer = await w.penrxDesktop.getAppVersion();
@@ -92,9 +120,7 @@ export function AutoUpdateModal() {
         let data: UpdateInfo | null = null;
 
         if (isNativeCapacitor) {
-          // Mobile APK is powered by Live Cloud Updates directly from Vercel (Capacitor live server).
-          // All updates, features, templates, and drug data are pulled instantly and silently from the cloud
-          // on startup without forcing the doctor to re-download a 50MB APK or perform manual installation.
+          // Mobile APK is powered by Live Cloud Updates directly from Vercel
           return;
         }
 
@@ -105,7 +131,7 @@ export function AutoUpdateModal() {
 
         const res = await fetch(url, {
           cache: "no-store",
-          signal: AbortSignal.timeout(3500),
+          signal: AbortSignal.timeout(4000),
         });
         if (!res.ok) return;
         data = await res.json();
@@ -129,9 +155,16 @@ export function AutoUpdateModal() {
       }
     }
 
-    // Check after 6 seconds on app startup to avoid initial load contention
-    const timer = setTimeout(checkForUpdates, 6000);
-    return () => clearTimeout(timer);
+    // Fast check: Run 1.5 seconds after app startup
+    const timer = setTimeout(checkForUpdates, 1500);
+    // Recurring periodic check every 15 minutes
+    const interval = setInterval(checkForUpdates, 15 * 60 * 1000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      unsubAvailable?.();
+    };
   }, []);
 
   if (!isClient || !isOpen || !updateInfo) {
@@ -174,6 +207,7 @@ export function AutoUpdateModal() {
 
     // 1. ELECTRON NATIVE UPDATER (For Desktop PC installed version)
     if (isElectron && targetType === "desktop") {
+      if (isDownloading) return; // Prevent double trigger
       setIsDownloading(true);
       setDownloadProgress(0);
       setDownloadedMB(0);
@@ -183,8 +217,12 @@ export function AutoUpdateModal() {
 
       // Subscribe to live IPC progress from Electron main process
       let unsubscribe: (() => void) | undefined;
+      let hasCompleted = false;
+
       if (typeof w?.penrxDesktop?.onUpdateProgress === "function") {
         unsubscribe = w.penrxDesktop.onUpdateProgress((progress: any) => {
+          if (hasCompleted) return;
+
           if (typeof progress?.percent === "number") {
             setDownloadProgress(progress.percent);
           } else if (typeof progress?.progress === "number") {
@@ -196,30 +234,43 @@ export function AutoUpdateModal() {
           if (typeof progress?.totalMB === "number" || typeof progress?.totalMB === "string") {
             setTotalMB(Number(progress.totalMB));
           }
+
           if (progress?.completed || progress?.status === "completed") {
+            hasCompleted = true;
             setDownloadProgress(100);
             setDownloadStatus("completed");
+            setIsDownloading(false);
+            // Give user visual confirmation, then trigger quit and auto-restart
             setTimeout(() => {
               if (typeof w?.penrxDesktop?.quitAndInstallUpdate === "function") {
                 w.penrxDesktop.quitAndInstallUpdate();
               }
-            }, 1200);
+            }, 1000);
+          } else if (progress?.status === "error") {
+            setDownloadStatus("error");
+            setIsDownloading(false);
+            setDownloadError(progress.error || "فشل تنزيل ملف التحديث");
           }
         });
       }
 
-      // Try official differential delta update (Classico-style) first
+      // Try official differential delta update (Classico-style)
       if (typeof w?.penrxDesktop?.downloadDifferentialUpdate === "function") {
         try {
           const diffRes = await w.penrxDesktop.downloadDifferentialUpdate();
-          if (diffRes?.success) return;
-          console.warn("[AutoUpdateModal] Differential update failed, falling back to full installer:", diffRes?.error);
+          if (diffRes?.success) {
+            // autoUpdater.downloadUpdate() is active, do NOT fall through!
+            return;
+          }
+          console.warn("[AutoUpdateModal] Differential update notice:", diffRes?.error);
         } catch (e: any) {
-          console.warn("[AutoUpdateModal] Differential update exception, falling back:", e?.message);
+          console.warn("[AutoUpdateModal] Differential update exception:", e?.message);
         }
       }
 
-      // Fallback: direct download & install
+      // Fallback: direct download & install ONLY IF differential update failed and not completed
+      if (hasCompleted) return;
+
       const targetUrl =
         updateInfo.desktopDownloadUrl ||
         "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
@@ -227,14 +278,20 @@ export function AutoUpdateModal() {
       try {
         const res = await w.penrxDesktop.downloadAndInstallUpdate(targetUrl);
         if (!res || !res.success) {
-          unsubscribe?.();
-          setDownloadStatus("error");
-          setDownloadError(res?.error || "تعذر إكمال التحديث التلقائي");
+          if (!hasCompleted) {
+            unsubscribe?.();
+            setIsDownloading(false);
+            setDownloadStatus("error");
+            setDownloadError(res?.error || "تعذر إكمال التحديث التلقائي");
+          }
         }
       } catch (err: any) {
-        unsubscribe?.();
-        setDownloadStatus("error");
-        setDownloadError(err?.message || "حدث خطأ غير متوقع أثناء التحديث");
+        if (!hasCompleted) {
+          unsubscribe?.();
+          setIsDownloading(false);
+          setDownloadStatus("error");
+          setDownloadError(err?.message || "حدث خطأ غير متوقع أثناء التحديث");
+        }
       }
       return;
     }

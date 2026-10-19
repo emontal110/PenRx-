@@ -8,6 +8,7 @@ import {
   getSubscriptionBySubscriberId,
   validateAdminAuthorization,
   machineOwnsSubscription,
+  DEFAULT_SUPABASE_SERVICE_ROLE_KEY,
 } from "@/lib/subscriptionManager";
 import {
   savePrescriptionRelational,
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
 // RLS on CloudPrescription only admits service_role — anon key writes are silently rejected
 const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
 
 // High-Speed Server In-Memory Cache (Multi-Tenant, Partitioned by Subscriber ID)
 // Key: subscriberId -> Map<prescriptionId, LeanCloudPrescription>

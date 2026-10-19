@@ -388,7 +388,7 @@ export default function SubscriptionsPage() {
 
     const isTrialPlan = activePlanForCheckout.price === 0;
     if (!isTrialPlan && (!senderPhone.trim() || !transactionRef.trim())) {
-      alert("يرجى إدخال رقم هاتف المحول ورقم العملية المرجعي.");
+      alert("يرجى إدخال رقم هاتف المحول ورقم عملية الدفع.");
       return;
     }
 
@@ -454,10 +454,10 @@ export default function SubscriptionsPage() {
   // ============================================================
   if (activePlanForCheckout) {
     return (
-      <div className="space-y-6 pb-12 max-w-4xl mx-auto px-3.5 sm:px-6 transition-all duration-300" dir="rtl">
-        <div className="max-w-xl mx-auto space-y-5 text-right">
-          {/* Navigation Bar / Header */}
-          <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+      <div className="space-y-4 pb-12 max-w-xl mx-auto px-3.5 sm:px-6 transition-all duration-300" dir="rtl">
+        <div className="space-y-3.5 text-right">
+          {/* Top Bar: Back to Plans & Security Indicator */}
+          <div className="flex items-center justify-between gap-2.5 pb-2 border-b border-slate-800/80">
             <button
               type="button"
               onClick={() => {
@@ -465,338 +465,296 @@ export default function SubscriptionsPage() {
                 setCheckoutDoctorName("");
                 setCheckoutClinicName("");
               }}
-              className="inline-flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 text-xs sm:text-sm font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
             >
-              <ArrowRight className="w-4 h-4 text-emerald-400" />
+              <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
               <span>العودة لاختيار باقة أخرى</span>
             </button>
 
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 sm:py-2 rounded-xl border border-emerald-500/20">
-              <ShieldCheck className="w-4 h-4" />
+            <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/20">
+              <ShieldCheck className="w-3.5 h-3.5" />
               <span>دفع آمن ومشفّر</span>
             </div>
           </div>
 
-        {/* Clean, Seamless Single-Column Vertical Flow */}
-        <div className="space-y-5">
-          
-          {/* Order Summary Card */}
-          <div className="space-y-4">
-            <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/95 border-2 border-emerald-500/40 shadow-2xl space-y-5 backdrop-blur-xl relative overflow-hidden">
-              <div className="absolute -top-20 -left-20 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-              
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
-                  <Crown className="w-4 h-4 text-amber-400" />
-                  <span>تفاصيل الباقة المختارة</span>
-                </span>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+          {/* Selected Plan Details Card - Compact, Refined & No Clutter */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-950 border border-emerald-500/30 shadow-xl space-y-3 relative overflow-hidden backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Crown className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-emerald-400/90 block">تفاصيل الباقة المختارة</span>
+                  <h2 className="text-base sm:text-lg font-black text-white leading-tight truncate">
+                    {activePlanForCheckout.nameAr}
+                  </h2>
+                </div>
+              </div>
+
+              <div className="text-left flex flex-col items-end shrink-0">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-800/90 text-slate-300 border border-slate-700/80 mb-0.5">
                   {activePlanForCheckout.durationLabel}
                 </span>
-              </div>
-
-              <div className="space-y-1">
-                <h2 className="text-xl sm:text-2xl font-black text-white">
-                  {activePlanForCheckout.nameAr}
-                </h2>
-                <div className="pt-2 flex items-baseline gap-2">
-                  <span className="text-3xl sm:text-4xl font-black text-emerald-400 font-mono">
+                <div className="flex items-baseline gap-1" dir="ltr">
+                  <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
                     {activePlanForCheckout.price === 0 ? "0" : activePlanForCheckout.price}
                   </span>
-                  <span className="text-sm font-bold text-slate-300">
-                    {activePlanForCheckout.price === 0 ? "مجاناً بالكامل (0 ج.م)" : "جنيه مصري"}
+                  <span className="text-xs font-bold text-slate-400">
+                    {activePlanForCheckout.price === 0 ? "مجاناً" : "ج.م"}
                   </span>
                 </div>
               </div>
+            </div>
 
-              {/* Included Benefits */}
-              <div className="space-y-2.5 pt-3 border-t border-slate-800 text-xs">
-                <span className="text-[11px] font-bold text-slate-400 block mb-1">
-                  المميزات المضمنة في الباقة:
-                </span>
-                <div className="flex items-center gap-2 text-slate-200">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>تفعيل فوري لربط البورتال السحابي والروشتات</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-200">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>مساعد الذكاء الاصطناعي لفحص تعارض وتداخل الأدوية</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-200">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>تحديثات مستمرة وقاعدة بيانات الأدوية المصرية</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-200">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>دعم فني وحفظ بيانات المرضى ومزامنة سحابية</span>
-                </div>
-              </div>
-
-              {/* Machine ID Badge */}
-              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between text-slate-400 font-bold">
-                  <span className="text-[11px]">معرّف جهازك الحالي (Machine ID):</span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(machineId, "checkout-mid")}
-                    className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-bold text-[10px] cursor-pointer"
-                  >
-                    <Copy className="w-3 h-3" />
-                    <span>{copySuccess === "checkout-mid" ? "تم النسخ" : "نسخ الكود"}</span>
-                  </button>
-                </div>
-                <span className="font-mono font-bold text-emerald-400 text-xs block truncate" dir="ltr">
+            {/* Machine ID - Small, Discreet & Compact */}
+            <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px]">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-slate-400 text-[10px] font-bold shrink-0">معرف الجهاز:</span>
+                <span className="font-mono text-emerald-400/90 font-bold text-[11px] truncate tracking-wide" dir="ltr">
                   {machineId}
                 </span>
               </div>
+              <button
+                type="button"
+                onClick={() => handleCopy(machineId, "checkout-mid")}
+                className="px-2 py-0.5 rounded-md bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-emerald-300 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 active:scale-95 border border-slate-700/60"
+              >
+                <Copy className="w-2.5 h-2.5" />
+                <span>{copySuccess === "checkout-mid" ? "تم" : "نسخ"}</span>
+              </button>
             </div>
           </div>
 
-          {/* Payment Methods & Inputs Form Card */}
-          <div className="p-5 sm:p-7 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-6">
-              
-              {/* If Paid Plan: Show Payment Methods & Direct Number */}
-              {activePlanForCheckout.price > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs sm:text-sm font-black text-slate-200">
-                      اختر وسيلة التحويل:
-                    </label>
-                    <span className="text-[11px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                      تحويل فوري ومباشر ⚡
-                    </span>
-                  </div>
+          {/* Payment Details & Inputs Card */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/95 border border-slate-800 shadow-xl space-y-4">
+            {/* If Paid Plan: Show Payment Methods & Direct Number */}
+            {activePlanForCheckout.price > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300">
+                    اختر وسيلة التحويل:
+                  </label>
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    تحويل فوري ⚡
+                  </span>
+                </div>
 
-                  {/* Payment Methods Grid - Transparent, Crisp & High Contrast (NO WHITE BOXES!) */}
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                    
-                    {/* Vodafone Cash Card */}
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("vodafone")}
-                      className={`group p-3 sm:p-4 rounded-2xl border-2 flex flex-col items-center justify-between gap-3 transition-all cursor-pointer relative overflow-hidden ${
-                        paymentMethod === "vodafone"
-                          ? "bg-rose-500/15 border-rose-500 text-rose-200 shadow-xl shadow-rose-950/40 ring-2 ring-rose-500/30 scale-[1.02]"
-                          : "bg-slate-950/80 border-slate-800/90 text-slate-400 hover:border-slate-700 hover:text-white hover:bg-slate-900/90"
-                      }`}
-                    >
-                      {paymentMethod === "vodafone" && (
-                        <div className="absolute top-2.5 left-2.5 z-10">
-                          <CheckCircle2 className="w-4 h-4 text-rose-400 fill-rose-500/20" />
-                        </div>
-                      )}
-                      
-                      {/* Transparent Logo Container with subtle glass tint & vivid glow */}
-                      <div className="w-full h-14 sm:h-16 flex items-center justify-center p-1.5 rounded-xl bg-white/[0.04] border border-white/5 backdrop-blur-sm group-hover:bg-white/[0.08] transition-all">
-                        <img
-                          src="/vodafone-cash.png"
-                          alt="فودافون كاش - Vodafone Cash"
-                          loading="eager"
-                          decoding="sync"
-                          className="h-10 sm:h-12 w-auto max-w-full object-contain filter drop-shadow-[0_0_12px_rgba(239,68,68,0.5)] brightness-110 transform transition-transform group-hover:scale-105"
-                        />
-                      </div>
-
-                      <div className="text-center space-y-0.5">
-                        <span className="text-xs sm:text-sm font-black block text-slate-100">فودافون كاش</span>
-                        <span className="text-[10px] sm:text-[11px] font-bold text-rose-400 block">محفظة إلكترونية</span>
-                      </div>
-                    </button>
-
-                    {/* InstaPay Card */}
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("instapay")}
-                      className={`group p-3 sm:p-4 rounded-2xl border-2 flex flex-col items-center justify-between gap-3 transition-all cursor-pointer relative overflow-hidden ${
-                        paymentMethod === "instapay"
-                          ? "bg-purple-500/15 border-purple-500 text-purple-200 shadow-xl shadow-purple-950/40 ring-2 ring-purple-500/30 scale-[1.02]"
-                          : "bg-slate-950/80 border-slate-800/90 text-slate-400 hover:border-slate-700 hover:text-white hover:bg-slate-900/90"
-                      }`}
-                    >
-                      {paymentMethod === "instapay" && (
-                        <div className="absolute top-2.5 left-2.5 z-10">
-                          <CheckCircle2 className="w-4 h-4 text-purple-400 fill-purple-500/20" />
-                        </div>
-                      )}
-
-                      {/* Transparent Logo Container with subtle glass tint & vivid glow */}
-                      <div className="w-full h-14 sm:h-16 flex items-center justify-center p-1.5 rounded-xl bg-white/[0.04] border border-white/5 backdrop-blur-sm group-hover:bg-white/[0.08] transition-all">
-                        <img
-                          src="/instapay.png"
-                          alt="إنستا باي - InstaPay"
-                          loading="eager"
-                          decoding="sync"
-                          className="h-10 sm:h-12 w-auto max-w-full object-contain filter drop-shadow-[0_0_14px_rgba(168,85,247,0.5)] brightness-110 contrast-125 transform transition-transform group-hover:scale-105"
-                        />
-                      </div>
-
-                      <div className="text-center space-y-0.5">
-                        <span className="text-xs sm:text-sm font-black block text-slate-100">إنستا باي (InstaPay)</span>
-                        <span className="text-[10px] sm:text-[11px] font-bold text-purple-400 block">تحويل بنكي لحظي</span>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* Transfer Number Card */}
-                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-                    <span className="text-slate-400 font-bold text-xs block">
-                      رقم التحويل المعتمد ({paymentMethod === "vodafone" ? "محفظة فودافون كاش" : "إنستاباي"}):
-                    </span>
-                    <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-slate-900 border border-slate-800">
-                      <span className="text-lg sm:text-xl font-mono font-black text-emerald-400 tracking-widest" dir="ltr">
-                        {TRANSFER_NUMBER}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(TRANSFER_NUMBER, "page-transfer")}
-                        className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-600 text-emerald-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>{copySuccess === "page-transfer" ? "تم النسخ ✅" : "نسخ الرقم"}</span>
-                      </button>
+                {/* Payment Methods Grid - Sleek, Compact & Balanced */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Vodafone Cash Card */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("vodafone")}
+                    className={`p-2.5 rounded-xl border transition-all cursor-pointer relative flex items-center gap-2.5 text-right ${
+                      paymentMethod === "vodafone"
+                        ? "bg-rose-500/10 border-rose-500/80 text-rose-200 shadow-md shadow-rose-950/30 ring-1 ring-rose-500/40"
+                        : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center p-1 shrink-0">
+                      <img
+                        src="/vodafone-cash.png"
+                        alt="فودافون كاش"
+                        className="h-5 w-auto max-w-full object-contain"
+                      />
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      حول مبلغ <span className="text-emerald-400 font-black font-mono">{activePlanForCheckout.price} ج.م</span> إلى هذا الرقم، ثم اكتب رقم العملية بالأسفل.
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-black block text-slate-100 truncate">فودافون كاش</span>
+                      <span className="text-[10px] text-rose-400 block font-medium">محفظة إلكترونية</span>
+                    </div>
+                    {paymentMethod === "vodafone" && (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    )}
+                  </button>
+
+                  {/* InstaPay Card */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("instapay")}
+                    className={`p-2.5 rounded-xl border transition-all cursor-pointer relative flex items-center gap-2.5 text-right ${
+                      paymentMethod === "instapay"
+                        ? "bg-purple-500/10 border-purple-500/80 text-purple-200 shadow-md shadow-purple-950/30 ring-1 ring-purple-500/40"
+                        : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center p-1 shrink-0">
+                      <img
+                        src="/instapay.png"
+                        alt="إنستا باي"
+                        className="h-5 w-auto max-w-full object-contain"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-black block text-slate-100 truncate">إنستا باي</span>
+                      <span className="text-[10px] text-purple-400 block font-medium">تحويل لحظي</span>
+                    </div>
+                    {paymentMethod === "instapay" && (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Transfer Number Box - Compact, Clean & Visually Calm */}
+                <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800/90 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                    <span>رقم التحويل المعتمد ({paymentMethod === "vodafone" ? "فودافون كاش" : "إنستاباي"}):</span>
+                  </div>
+
+                  <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-sm sm:text-base font-mono font-black text-emerald-400 tracking-wider" dir="ltr">
+                      {TRANSFER_NUMBER}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(TRANSFER_NUMBER, "page-transfer")}
+                      className="px-2.5 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copySuccess === "page-transfer" ? "تم النسخ" : "نسخ الرقم"}</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[10.5px] text-slate-400 leading-relaxed">
+                    حول مبلغ <strong className="text-emerald-400 font-mono font-bold">{activePlanForCheckout.price} ج.م</strong> إلى هذا الرقم، ثم أدخل رقم عملية الدفع بالأسفل.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Confirmation Form */}
+            <form onSubmit={handleConfirmSubmit} className="space-y-3.5" autoComplete="off">
+              <div className="space-y-0.5 pb-1 border-b border-slate-800/80">
+                <h3 className="text-xs sm:text-sm font-black text-slate-200">
+                  بيانات التأكيد والتفعيل السحابي:
+                </h3>
+                <p className="text-[10.5px] text-slate-400">
+                  يرجى كتابة الاسم والعيادة بدقة كما تريد ظهورهما بالروشتة والبورتال
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Doctor Name */}
+                <div className="space-y-1">
+                  <label htmlFor="checkout_doctor_name_input" className="font-bold text-slate-300 text-xs block">
+                    اسم الطبيب بالكامل (الذي سيظهر بالروشتة): <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    id="checkout_doctor_name_input"
+                    name="checkout_doc_name_custom"
+                    type="text"
+                    required
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="words"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
+                    value={checkoutDoctorName}
+                    onChange={(e) => setCheckoutDoctorName(e.target.value)}
+                    placeholder="د. اكتب اسمك هنا..."
+                    className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* Clinic Name */}
+                <div className="space-y-1">
+                  <label htmlFor="checkout_clinic_name_input" className="font-bold text-slate-300 text-xs block">
+                    اسم العيادة / المركز الطبي: <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    id="checkout_clinic_name_input"
+                    name="checkout_clinic_name_custom"
+                    type="text"
+                    required
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
+                    value={checkoutClinicName}
+                    onChange={(e) => setCheckoutClinicName(e.target.value)}
+                    placeholder="اكتب اسم العيادة هنا..."
+                    className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Sender Phone & Transaction Reference */}
+              {activePlanForCheckout.price > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label htmlFor="checkout_sender_phone_input" className="font-bold text-slate-300 text-xs block">
+                      رقم الهاتف المحول منه: <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      id="checkout_sender_phone_input"
+                      name="checkout_sender_phone"
+                      type="tel"
+                      required
+                      autoComplete="off"
+                      value={senderPhone}
+                      onChange={(e) => setSenderPhone(e.target.value)}
+                      placeholder="010XXXXXXXX"
+                      dir="ltr"
+                      className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-right sm:text-left"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="checkout_tx_ref_input" className="font-bold text-slate-300 text-xs block">
+                      رقم عملية الدفع: <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      id="checkout_tx_ref_input"
+                      name="checkout_tx_ref"
+                      type="text"
+                      required
+                      autoComplete="off"
+                      value={transactionRef}
+                      onChange={(e) => setTransactionRef(e.target.value)}
+                      placeholder="أدخل رقم عملية التحويل أو المرجع..."
+                      className="w-full px-3 py-2 sm:py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    />
                   </div>
                 </div>
               )}
 
-              {/* Confirmation Form */}
-              <form onSubmit={handleConfirmSubmit} className="space-y-4" autoComplete="off">
-                <div className="space-y-1 pb-1 border-b border-slate-800/80">
-                  <h3 className="text-xs sm:text-sm font-black text-slate-200">
-                    بيانات التأكيد والتفعيل السحابي:
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    يرجى كتابة الاسم والعيادة بدقة كما تريد ظهورهما بالروشتة والبورتال
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  {/* Doctor Name - ALWAYS EMPTY & NEVER OVERWRITTEN */}
-                  <div className="space-y-1.5">
-                    <label htmlFor="checkout_doctor_name_input" className="font-bold text-slate-300 text-xs block">
-                      اسم الطبيب بالكامل ( الذى سيظهر بالروشته ): <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      id="checkout_doctor_name_input"
-                      name="checkout_doc_name_custom"
-                      type="text"
-                      required
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="words"
-                      spellCheck={false}
-                      data-lpignore="true"
-                      data-form-type="other"
-                      value={checkoutDoctorName}
-                      onChange={(e) => setCheckoutDoctorName(e.target.value)}
-                      placeholder="د. اكتب اسمك هنا..."
-                      className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  {/* Clinic Name - ALWAYS EMPTY & NEVER OVERWRITTEN */}
-                  <div className="space-y-1.5">
-                    <label htmlFor="checkout_clinic_name_input" className="font-bold text-slate-300 text-xs block">
-                      اسم العيادة / المركز الطبي: <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      id="checkout_clinic_name_input"
-                      name="checkout_clinic_name_custom"
-                      type="text"
-                      required
-                      autoComplete="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      data-lpignore="true"
-                      data-form-type="other"
-                      value={checkoutClinicName}
-                      onChange={(e) => setCheckoutClinicName(e.target.value)}
-                      placeholder="اكتب اسم العيادة هنا..."
-                      className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Sender Phone & Transaction Ref (for Paid Plans) */}
-                {activePlanForCheckout.price > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1.5">
-                      <label htmlFor="checkout_sender_phone_input" className="font-bold text-slate-300 text-xs block">
-                        رقم الهاتف المحول منه: <span className="text-rose-400">*</span>
-                      </label>
-                      <input
-                        id="checkout_sender_phone_input"
-                        name="checkout_sender_phone"
-                        type="tel"
-                        required
-                        autoComplete="off"
-                        value={senderPhone}
-                        onChange={(e) => setSenderPhone(e.target.value)}
-                        placeholder="010XXXXXXXX"
-                        dir="ltr"
-                        className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-950 border border-slate-700 font-mono font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-right sm:text-left"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label htmlFor="checkout_tx_ref_input" className="font-bold text-slate-300 text-xs block">
-                        رقم العملية المرجعي (Ref ID): <span className="text-rose-400">*</span>
-                      </label>
-                      <input
-                        id="checkout_tx_ref_input"
-                        name="checkout_tx_ref"
-                        type="text"
-                        required
-                        autoComplete="off"
-                        value={transactionRef}
-                        onChange={(e) => setTransactionRef(e.target.value)}
-                        placeholder="رقم مرجع الإيصال..."
-                        className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-950 border border-slate-700 font-mono font-bold text-slate-100 text-xs sm:text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Submit Action Button */}
-                <div className="pt-3">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-sm sm:text-base shadow-xl shadow-emerald-950/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <Crown className="w-5 h-5 shrink-0" />
-                    <span>
-                      {isSubmitting
-                        ? "جاري إرسال الطلب للبورتال السحابي..."
-                        : activePlanForCheckout.price === 0
-                        ? "تأكيد وتفعيل الاشتراك التجريبي فوراً (30 يوم)"
-                        : `تأكيد وإرسال طلب تفعيل ${activePlanForCheckout.nameAr} (${activePlanForCheckout.price} ج.م)`}
-                    </span>
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Instant Support Notice */}
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-3 text-xs">
-              <div className="space-y-0.5">
-                <span className="font-bold text-slate-200 block">تحتاج مساعدة فورية في التفعيل؟</span>
-                <span className="text-[11px] text-slate-400 block">فريق الدعم متاح عبر الواتساب طوال اليوم</span>
+              {/* Submit Action Button - Balanced, Refined & Elegant */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-3 sm:py-3.5 px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-emerald-950/50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>
+                    {isSubmitting
+                      ? "جاري إرسال الطلب للبورتال السحابي..."
+                      : activePlanForCheckout.price === 0
+                      ? "تأكيد وتفعيل الاشتراك التجريبي مجاناً"
+                      : `تأكيد وإرسال طلب التفعيل • ${activePlanForCheckout.price} ج.م`}
+                  </span>
+                </button>
               </div>
-              <a
-                href="https://wa.me/201094085228"
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>واتساب</span>
-              </a>
-            </div>
+            </form>
+          </div>
 
+          {/* Instant Support Notice - Compact & Clean */}
+          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center justify-between gap-3 text-xs">
+            <div className="space-y-0.5">
+              <span className="font-bold text-slate-200 block text-xs">تحتاج مساعدة فورية في التفعيل؟</span>
+              <span className="text-[10px] text-slate-400 block">فريق الدعم متاح عبر الواتساب طوال اليوم</span>
+            </div>
+            <a
+              href="https://wa.me/201094085228"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>واتساب</span>
+            </a>
           </div>
         </div>
       </div>
@@ -928,7 +886,7 @@ export default function SubscriptionsPage() {
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
-                    <span className="text-slate-400 text-[11px]">رقم العملية المرجعي:</span>
+                    <span className="text-slate-400 text-[11px]">رقم عملية الدفع:</span>
                     <p className="text-sm font-mono font-black text-purple-300 truncate" dir="ltr">
                       {currentSub.transactionRef || "قيد التسجيل"}
                     </p>

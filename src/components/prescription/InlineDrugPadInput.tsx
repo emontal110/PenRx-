@@ -26,6 +26,7 @@ import { PrescriptionItem } from "@/store/usePrescriptionStore";
 import { getSmartDrugDosage, getCleanEnglishDrugName } from "@/lib/smartDrugDosage";
 import { checkInstantDrugConflict, InteractionConflict } from "@/lib/clinicalInteractionChecker";
 import { cacheDrugsLocally, searchOfflineDrugs } from "@/lib/offlineDrugStorage";
+import { showGlobalToast } from "@/components/common/GlobalToast";
 
 interface InlineDrugPadInputProps {
   onAddItem: (item: Omit<PrescriptionItem, "id">) => void;
@@ -104,10 +105,53 @@ export function InlineDrugPadInput({
   const [duration, setDuration] = useState("لمدة 5 أيام");
   const [instructions, setInstructions] = useState("");
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isAddingRef = useRef(false);
+
+  // Smoothly scrolls page so the search input appears directly beneath the sticky header
+  const scrollToSearchBar = () => {
+    if (typeof window === "undefined" || !containerRef.current) return;
+
+    try {
+      const stickyHeader =
+        document.querySelector(".sticky.top-0") ||
+        document.querySelector("header") ||
+        document.querySelector("nav");
+
+      const headerHeight = stickyHeader
+        ? stickyHeader.getBoundingClientRect().height
+        : 70;
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const currentScrollY =
+        window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+
+      const targetScrollY = Math.max(0, currentScrollY + rect.top - headerHeight - 6);
+
+      window.scrollTo({
+        top: targetScrollY,
+        behavior: "smooth",
+      });
+    } catch {
+      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleSearchFocus = () => {
+    if (query.trim()) {
+      setIsDropdownOpen(true);
+    }
+    // Instantly scroll smoothly to position search engine below header
+    scrollToSearchBar();
+
+    // Accommodate mobile soft keyboard animation
+    setTimeout(scrollToSearchBar, 120);
+    setTimeout(scrollToSearchBar, 320);
+  };
 
   // Debounced Drug Search with Multi-layer Cascading & Offline Fallback
   useEffect(() => {
@@ -194,25 +238,71 @@ export function InlineDrugPadInput({
   }, [selectedDrug, currentItems]);
 
   const handleSelectDrug = (drug: DrugRecord) => {
-    setSelectedDrug(drug);
-    setIsDropdownOpen(false);
-    setShowEquivalents(false);
-    const cleanEng = getCleanEnglishDrugName(drug.name, drug.nameAr);
-    setQuery(cleanEng);
+    if (isAddingRef.current) return;
+    isAddingRef.current = true;
 
-    // Clinical Smart Auto-Fill for Dose Quantity, Form, Frequency, Duration, Instructions
-    const smart = getSmartDrugDosage(drug);
-    setDoseQuantity(smart.doseQuantity);
-    setDoseForm(smart.doseForm);
+    try {
+      // 1. Strictly resolve clean English drug name for prescription
+      const finalDrugName = getCleanEnglishDrugName(drug.name, drug.nameAr);
 
-    if (drug.isAiGenerated && drug.recommendedDose) {
-      setFrequency(drug.recommendedDose);
-      setDuration("طوال فترة العلاج");
-      setInstructions("تم الضبط الذكي بواسطة Gemini 3.8 Flash");
-    } else {
-      setFrequency(smart.frequency);
-      setDuration(smart.duration);
-      setInstructions(smart.instructions);
+      // 2. Clinical Smart Auto-Fill for Dose Quantity, Form, Frequency, Duration, Instructions
+      const smart = getSmartDrugDosage(drug);
+      const finalQuantity = smart.doseQuantity || "1";
+      const finalDoseForm = smart.doseForm || "Tablet (قرص)";
+
+      let finalFrequency = smart.frequency || "كل 8 ساعات بعد الأكل (3 مرات)";
+      let finalDuration = smart.duration || "لمدة 5 أيام";
+      let finalInstructions = smart.instructions || "";
+
+      if (drug.isAiGenerated && drug.recommendedDose) {
+        finalFrequency = drug.recommendedDose;
+        finalDuration = "طوال فترة العلاج";
+        finalInstructions = "تم الضبط الذكي بواسطة Gemini 3.8 Flash";
+      }
+
+      // 3. Immediately add item to prescription!
+      onAddItem({
+        drugName: finalDrugName,
+        activeIngredient: drug.activeIngredient?.trim() || undefined,
+        doseQuantity: finalQuantity,
+        doseForm: finalDoseForm,
+        frequency: finalFrequency,
+        duration: finalDuration,
+        instructions: finalInstructions,
+      });
+
+      // 4. Record usage in local tracking for popularity analytics
+      recordDrugPrescribed(drug.name);
+
+      // 5. Toast feedback
+      showGlobalToast("تمت الإضافة إلى الروشتة", "success");
+
+      // 6. Complete clear of search engine & filters (query, results, dropdown, and filter modes)
+      setQuery("");
+      setResults([]);
+      setSelectedDrug(null);
+      setIsDropdownOpen(false);
+      setShowEquivalents(false);
+      setActiveConflict(null);
+      setHighlightedIndex(0);
+      setSearchByActiveIngredient(false);
+      setSearchByAi(false);
+
+      // Reset default form presets
+      setDoseQuantity("1");
+      setDoseForm("Tablet (قرص)");
+      setFrequency("كل 8 ساعات بعد الأكل (3 مرات)");
+      setDuration("لمدة 5 أيام");
+      setInstructions("");
+
+      // 7. Keep focus on search input for lightning-fast continuous prescribing
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 60);
+    } finally {
+      setTimeout(() => {
+        isAddingRef.current = false;
+      }, 200);
     }
   };
 
@@ -260,7 +350,7 @@ export function InlineDrugPadInput({
       activeIngredient: finalActiveIngredient || undefined,
       doseQuantity: doseQuantity.trim() || "1",
       doseForm: doseForm.trim() || "Tablet (قرص)",
-      frequency: frequency.trim() || "كل 8 ساعات بعد الأكل",
+      frequency: frequency.trim() || "كل 8 ساعات بعد الأكل (3 مرات)",
       duration: duration.trim() || "لمدة 5 أيام",
       instructions: instructions.trim() || "",
     });
@@ -269,6 +359,8 @@ export function InlineDrugPadInput({
     if (selectedDrug) {
       recordDrugPrescribed(selectedDrug.name);
     }
+
+    showGlobalToast("تمت الإضافة إلى الروشتة", "success");
 
     // Reset state for next entry
     setQuery("");
@@ -281,6 +373,8 @@ export function InlineDrugPadInput({
     setShowEquivalents(false);
     setActiveConflict(null);
     setHighlightedIndex(0);
+    setSearchByActiveIngredient(false);
+    setSearchByAi(false);
     setDoseQuantity("1");
     setDoseForm("Tablet (قرص)");
     setFrequency("كل 8 ساعات بعد الأكل (3 مرات)");
@@ -330,7 +424,8 @@ export function InlineDrugPadInput({
 
   return (
     <div
-      className="mt-3 p-3.5 sm:p-4 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-emerald-500/60 transition-all space-y-3 no-print relative"
+      ref={containerRef}
+      className="mt-3 p-3.5 sm:p-4 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-emerald-500/60 transition-all space-y-3 no-print relative scroll-mt-20 sm:scroll-mt-24"
       dir="rtl"
     >
       {/* Top Strip: Input Mode Toggle & Advanced Clinical Layers */}
@@ -353,7 +448,11 @@ export function InlineDrugPadInput({
               type="button"
               onClick={() => {
                 setIsManualMode(false);
-                setTimeout(() => searchInputRef.current?.focus(), 50);
+                scrollToSearchBar();
+                setTimeout(() => {
+                  searchInputRef.current?.focus();
+                  scrollToSearchBar();
+                }, 50);
               }}
               className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
                 !isManualMode
@@ -371,7 +470,11 @@ export function InlineDrugPadInput({
                 setIsManualMode(true);
                 setIsDropdownOpen(false);
                 setShowEquivalents(false);
-                setTimeout(() => manualInputRef.current?.focus(), 50);
+                scrollToSearchBar();
+                setTimeout(() => {
+                  manualInputRef.current?.focus();
+                  scrollToSearchBar();
+                }, 50);
               }}
               className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
                 isManualMode
@@ -450,9 +553,8 @@ export function InlineDrugPadInput({
                 setSelectedDrug(null);
                 setShowEquivalents(false);
               }}
-              onFocus={() => {
-                if (query.trim()) setIsDropdownOpen(true);
-              }}
+              onFocus={handleSearchFocus}
+              onClick={scrollToSearchBar}
               onKeyDown={handleKeyDown}
               placeholder={
                 searchByAi
@@ -475,10 +577,14 @@ export function InlineDrugPadInput({
                 type="button"
                 onClick={() => {
                   setQuery("");
+                  setResults([]);
                   setSelectedDrug(null);
                   setIsDropdownOpen(false);
                   setShowEquivalents(false);
+                  setSearchByActiveIngredient(false);
+                  setSearchByAi(false);
                   searchInputRef.current?.focus();
+                  scrollToSearchBar();
                 }}
                 className="absolute left-2.5 p-1 text-slate-400 hover:text-slate-700 transition-colors text-xs"
               >
@@ -523,6 +629,10 @@ export function InlineDrugPadInput({
                       key={drug.id || idx}
                       type="button"
                       onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleSelectDrug(drug);
+                      }}
+                      onClick={(e) => {
                         e.preventDefault();
                         handleSelectDrug(drug);
                       }}
@@ -635,6 +745,8 @@ export function InlineDrugPadInput({
               type="text"
               value={manualDrugName}
               onChange={(e) => setManualDrugName(e.target.value)}
+              onFocus={handleSearchFocus}
+              onClick={scrollToSearchBar}
               onKeyDown={handleKeyDown}
               placeholder="اكتب اسم الدواء الحر..."
               className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 font-bold text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500"

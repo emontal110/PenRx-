@@ -23,6 +23,14 @@ contextBridge.exposeInMainWorld("penrxDesktop", {
     return () => ipcRenderer.removeListener("update-download-progress", listener);
   },
   /**
+   * Subscribes to native update available events (instant detection)
+   */
+  onUpdateAvailable: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on("update_available", listener);
+    return () => ipcRenderer.removeListener("update_available", listener);
+  },
+  /**
    * Opens link directly in the default OS browser
    */
   openExternal: (url) => ipcRenderer.invoke("open-external", url),

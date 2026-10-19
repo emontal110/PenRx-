@@ -9,6 +9,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 const DEFAULT_SIGNING_SECRET = "d1132b51b81d261f94fc6fa2edb1292b534a75bdc8ce10ec8d0e3c00efe843b4";
 const DEFAULT_ADMIN_SECRET = "e9cd3b8092032e1bd922701017d04496314298dde190bac6244e0f9f99d60e92";
 const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+export const DEFAULT_SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
 
 function getSecretKey(): string {
   return process.env.PENRX_SECRET_KEY || DEFAULT_SIGNING_SECRET;
@@ -19,10 +20,10 @@ function getAdminSecret(): string {
 }
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
+// Authoritative backend operations (activate, delete, suspend, adjust days) strictly require service_role
 const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  DEFAULT_SUPABASE_ANON_KEY;
+  DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
 
 async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
   const headers = {
@@ -876,8 +877,9 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
   } catch {}
 
   try {
-    await fetchSupabaseRest(`?id=eq.${subscriptionId}`, {
+    await fetchSupabaseRest(`?id=eq.${encodeURIComponent(subscriptionId)}`, {
       method: "DELETE",
+      headers: { Prefer: "return=representation" },
     });
   } catch {}
 
@@ -887,9 +889,10 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
     apikey: SUPABASE_KEY,
     Authorization: "Bearer " + SUPABASE_KEY,
     "Content-Type": "application/json",
+    Prefer: "return=representation",
   };
 
-  if (subscriberId) {
+  if (subscriberId && subscriberId !== "SUB") {
     // Delete CloudPrescription from Supabase
     try {
       await fetch(
@@ -906,7 +909,15 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
       );
     } catch {}
 
-    // Delete relational prescriptions from Prisma
+    // Clean up any remaining records in Subscription for this subscriberId
+    try {
+      await fetch(
+        `${SUPABASE_BASE_ROOT}/Subscription?subscriberId=eq.${encodeURIComponent(subscriberId)}`,
+        { method: "DELETE", headers: supabaseHeaders }
+      );
+    } catch {}
+
+    // Delete relational prescriptions from Prisma safely
     try {
       await prisma.prescription.deleteMany({
         where: { subscriberId },

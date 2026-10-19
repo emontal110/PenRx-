@@ -19,7 +19,7 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
   const [copySuccess, setCopySuccess] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
 
-  const subDetails = getSubscriptionDetails(subscriptions, machineId);
+  const subDetails = getSubscriptionDetails(subscriptions, machineId, subscriberId);
   const isHydrated = useSubscriptionStore.persist?.hasHydrated?.() ?? mounted;
 
   // Track subscription status via ref to avoid re-creating the interval on every render

@@ -8,6 +8,7 @@ import { AutoUpdateModal } from "@/components/common/AutoUpdateModal";
 import { GlobalToastContainer } from "@/components/common/GlobalToast";
 import { AppHydrationSplash } from "@/components/common/AppHydrationSplash";
 import { CapacitorNativeBridge } from "@/components/common/CapacitorNativeBridge";
+import { MobileBiometricLock } from "@/components/common/MobileBiometricLock";
 
 export const metadata: Metadata = {
   title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية الذكية",
@@ -42,6 +43,7 @@ export default function RootLayout({
             <Navbar />
           </div>
           <CapacitorNativeBridge />
+          <MobileBiometricLock />
           <main className="max-w-7xl 2xl:max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-20 md:pb-8">
             <SubscriptionExpiryBanner />
             <PaywallGuard>{children}</PaywallGuard>
