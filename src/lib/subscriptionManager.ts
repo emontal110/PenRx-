@@ -226,11 +226,15 @@ async function hydrateCache(force = false): Promise<void> {
     console.warn("Supabase REST cache hydration notice:", err.message);
   }
 
-  // 2. Fallback to Prisma if available
+  // 2. Fallback to Prisma if available (with strict 2s timeout to prevent hanging on IPv6-only DB host)
   try {
-    const records = await prisma.subscription.findMany({
+    const prismaPromise = prisma.subscription.findMany({
       orderBy: { createdAt: "desc" },
     });
+    const prismaTimeout = new Promise<any[]>((_, reject) =>
+      setTimeout(() => reject(new Error("Prisma timeout")), 2000)
+    );
+    const records = await Promise.race([prismaPromise, prismaTimeout]);
 
     globalSubscriptionsCache.clear();
     for (const r of records) {
@@ -277,11 +281,27 @@ async function hydrateCache(force = false): Promise<void> {
 export async function getAllSubscriptions(): Promise<SubscriptionRecord[]> {
   await hydrateCache();
 
-  // Try DB update
+  // If cache is already fresh from Supabase REST, return immediately without stalling on Prisma
+  if (isCacheHydrated && globalSubscriptionsCache.size > 0) {
+    for (const s of globalSubscriptionsCache.values()) {
+      if (s.status === "ACTIVE" && s.expiresAt && !s.signatureToken) {
+        s.signatureToken = safeGenerateSignedToken(s.machineId, s.expiresAt, s.subscriberId);
+      }
+    }
+    return Array.from(globalSubscriptionsCache.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  // Try DB update with safe 2s timeout
   try {
-    const records = await prisma.subscription.findMany({
+    const prismaPromise = prisma.subscription.findMany({
       orderBy: { createdAt: "desc" },
     });
+    const prismaTimeout = new Promise<any[]>((_, reject) =>
+      setTimeout(() => reject(new Error("Prisma timeout")), 2000)
+    );
+    const records = await Promise.race([prismaPromise, prismaTimeout]);
     for (const r of records) {
       const existing = globalSubscriptionsCache.get(r.id);
       const subId = (r as any).subscriberId || existing?.subscriberId || generateSubscriberId();
@@ -455,52 +475,59 @@ export async function submitSubscription(data: {
 
   // Persist directly to Supabase REST Cloud for instant Portal visibility
   try {
-    await fetchSupabaseRest("", {
+    const supaRes = await fetchSupabaseRest("", {
       method: "POST",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify(record),
     });
+    if (!supaRes.ok) {
+      const errText = await supaRes.text().catch(() => "");
+      console.warn(`[Supabase REST Error ${supaRes.status}]:`, errText);
+    }
   } catch (err: any) {
     console.warn("Supabase REST persist notice:", err.message);
   }
 
-  // Also persist to PostgreSQL via Prisma if reachable
+  // Also persist to PostgreSQL via Prisma if reachable (with 2s timeout guard)
   try {
-    await prisma.subscription.upsert({
-      where: { id },
-      update: {
-        subscriberId,
-        planId: record.planId,
-        planName: record.planName,
-        price: record.price,
-        paymentMethod: record.paymentMethod,
-        senderPhone: record.senderPhone,
-        transactionRef: record.transactionRef,
-        doctorName: record.doctorName || null,
-        clinicName: record.clinicName || null,
-        durationDays: record.durationDays,
-        isTrial: record.isTrial || false,
-        allowedMachineIds: record.allowedMachineIds,
-        updatedAt: new Date(),
-      },
-      create: {
-        id,
-        subscriberId,
-        planId: record.planId,
-        planName: record.planName,
-        price: record.price,
-        paymentMethod: record.paymentMethod,
-        senderPhone: record.senderPhone,
-        transactionRef: record.transactionRef,
-        status: "PENDING",
-        machineId: record.machineId,
-        allowedMachineIds: record.allowedMachineIds,
-        doctorName: record.doctorName || null,
-        clinicName: record.clinicName || null,
-        durationDays: record.durationDays,
-        isTrial: record.isTrial || false,
-      },
-    });
+    await Promise.race([
+      prisma.subscription.upsert({
+        where: { id },
+        update: {
+          subscriberId,
+          planId: record.planId,
+          planName: record.planName,
+          price: record.price,
+          paymentMethod: record.paymentMethod,
+          senderPhone: record.senderPhone,
+          transactionRef: record.transactionRef,
+          doctorName: record.doctorName || null,
+          clinicName: record.clinicName || null,
+          durationDays: record.durationDays,
+          isTrial: record.isTrial || false,
+          allowedMachineIds: record.allowedMachineIds,
+          updatedAt: new Date(),
+        },
+        create: {
+          id,
+          subscriberId,
+          planId: record.planId,
+          planName: record.planName,
+          price: record.price,
+          paymentMethod: record.paymentMethod,
+          senderPhone: record.senderPhone,
+          transactionRef: record.transactionRef,
+          status: "PENDING",
+          machineId: record.machineId,
+          allowedMachineIds: record.allowedMachineIds,
+          doctorName: record.doctorName || null,
+          clinicName: record.clinicName || null,
+          durationDays: record.durationDays,
+          isTrial: record.isTrial || false,
+        },
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Prisma upsert timeout")), 2000)),
+    ]);
   } catch (err: any) {
     console.warn("DB subscription persist notice:", err.message);
   }

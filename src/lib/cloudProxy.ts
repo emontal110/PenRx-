@@ -18,7 +18,7 @@ export const CLOUD_API_BASE = (
   DEFAULT_CLOUD_API_URL
 ).replace(/\/+$/, "");
 
-const PROXY_TIMEOUT_MS = 10_000;
+const PROXY_TIMEOUT_MS = 20_000;
 
 const PROXY_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -35,6 +35,10 @@ const PROXY_CORS_HEADERS = {
 export function hasCloudCredentials(): boolean {
   if (process.env.VERCEL === "1" || process.env.NEXT_PUBLIC_VERCEL_ENV) {
     return true;
+  }
+  // The desktop runtime (Electron) must always proxy to authoritative cloud
+  if (process.env.PENRX_DESKTOP_RUNTIME === "1" || process.env.ELECTRON_RUN_AS_NODE === "1") {
+    return false;
   }
   return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.DATABASE_URL);
 }

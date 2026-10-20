@@ -8,6 +8,7 @@ const http = require("http");
 process.env.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 process.env.NEXT_PUBLIC_ADMIN_PORTAL_URL = process.env.NEXT_PUBLIC_ADMIN_PORTAL_URL || "http://localhost:3000/admin/portal";
 process.env.PENRX_CLOUD_API_URL = process.env.PENRX_CLOUD_API_URL || "https://pen-rx.vercel.app";
+process.env.PENRX_DESKTOP_RUNTIME = "1";
 process.env.NEXT_TELEMETRY_DISABLED = "1";
 
 const appDir = path.resolve(__dirname, "..");

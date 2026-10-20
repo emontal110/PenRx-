@@ -1030,18 +1030,36 @@ export default function SettingsPage() {
       const subState = useSubscriptionStore.getState();
       const targetMachineId = subState.machineId || machineId;
       if (subState.subscriberId || targetMachineId) {
+        const updatePayload = {
+          action: "update_profile",
+          subscriberId: subState.subscriberId,
+          machineId: targetMachineId,
+          doctorName: doctorName.trim(),
+          clinicName: syncedClinicName,
+          phone: clinicPhone.trim(),
+        };
+
         fetch("/api/subscriptions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "update_profile",
-            subscriberId: subState.subscriberId,
-            machineId: targetMachineId,
-            doctorName: doctorName.trim(),
-            clinicName: syncedClinicName,
-            phone: clinicPhone.trim(),
-          }),
-        }).catch((err) => console.warn("Portal sync notice:", err));
+          body: JSON.stringify(updatePayload),
+        })
+          .then((res) => {
+            if (!res.ok) {
+              fetch("https://pen-rx.vercel.app/api/subscriptions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updatePayload),
+              }).catch(() => {});
+            }
+          })
+          .catch(() => {
+            fetch("https://pen-rx.vercel.app/api/subscriptions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(updatePayload),
+            }).catch(() => {});
+          });
       }
     } catch {}
 
