@@ -288,7 +288,11 @@ export async function isBiometricAvailable(): Promise<boolean> {
     const { Capacitor } = await import("@capacitor/core");
     if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
       const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
-      const check = await BiometricAuth.checkBiometry();
+      const checkPromise = BiometricAuth.checkBiometry();
+      const timeoutPromise = new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error("Biometric check timeout")), 4000)
+      );
+      const check = await Promise.race([checkPromise, timeoutPromise]);
       return Boolean(check && check.isAvailable);
     }
   } catch (err) {
@@ -393,9 +397,9 @@ export async function authenticateWithBiometrics(
   try {
     const { Capacitor } = await import("@capacitor/core");
     if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
-      const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
+      const { BiometricAuth, AndroidBiometryStrength } = await import("@aparajita/capacitor-biometric-auth");
 
-      const check = await BiometricAuth.checkBiometry();
+      const check = await BiometricAuth.checkBiometry().catch(() => null);
       if (!check || !check.isAvailable) {
         return {
           success: false,
@@ -403,15 +407,53 @@ export async function authenticateWithBiometrics(
         };
       }
 
-      await BiometricAuth.authenticate({
-        reason,
-        cancelTitle: "إلغاء",
-        allowDeviceCredential: true, // Enables device PIN/pattern as a safe fallback
-        androidTitle: "التحقق من الهوية - PenRX+",
-        androidSubtitle: "استخدم بصمة الإصبع أو رمز حماية الهاتف للدخول",
+      // Strong strength required on Android 11+ (API 30+) when combined with allowDeviceCredential
+      const biometryStrength = AndroidBiometryStrength?.strong ?? 1;
+
+      const authAction = async (): Promise<BiometricAuthResult> => {
+        try {
+          // Attempt 1: Native biometrics with system device credentials (PIN/pattern fallback)
+          await BiometricAuth.authenticate({
+            reason,
+            cancelTitle: "إلغاء",
+            allowDeviceCredential: true,
+            androidTitle: "التحقق من الهوية - PenRX+",
+            androidSubtitle: "استخدم بصمة الإصبع أو رمز حماية الهاتف للدخول",
+            androidBiometryStrength: biometryStrength,
+          });
+          return { success: true };
+        } catch (firstErr: any) {
+          console.warn("[Biometrics] Attempt 1 failed:", firstErr);
+          const code = firstErr?.code || "";
+          if (code === "userCancel" || code === "appCancel" || code === "biometryLockout") {
+            throw firstErr;
+          }
+
+          // Attempt 2: Direct biometric without device credential fallback
+          try {
+            await BiometricAuth.authenticate({
+              reason,
+              cancelTitle: "إلغاء",
+              allowDeviceCredential: false,
+              androidTitle: "التحقق من الهوية - PenRX+",
+              androidSubtitle: "المس مستشعر البصمة للفتح",
+              androidBiometryStrength: biometryStrength,
+            });
+            return { success: true };
+          } catch (secondErr) {
+            throw secondErr;
+          }
+        }
+      };
+
+      // Watchdog timeout: 20 seconds maximum to prevent UI freezing
+      const timeoutPromise = new Promise<BiometricAuthResult>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("انتهت مهلة انتظار مستشعر البصمة"));
+        }, 20000);
       });
 
-      return { success: true };
+      return await Promise.race([authAction(), timeoutPromise]);
     }
   } catch (err: any) {
     console.warn("[Biometrics] Native authenticate error:", err);
@@ -420,7 +462,7 @@ export async function authenticateWithBiometrics(
     if (code === "userCancel" || code === "appCancel") {
       message = "تم إلغاء عملية البصمة";
     } else if (code === "biometryLockout") {
-      message = "تم قفل البصمة مؤقتاً لتكرار المحاولات الخاطئة. يرجى استخدام قفل الشاشة.";
+      message = "تم قفل البصمة مؤقتاً لتكرار المحاولات الخاطئة. يرجى استخدام رمز العيادة.";
     } else if (code === "biometryNotEnrolled") {
       message = "لم يتم تسجيل بصمة في إعدادات الهاتف بعد.";
     } else if (err?.message) {
