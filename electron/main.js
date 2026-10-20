@@ -11,6 +11,7 @@ if (nativeTheme) {
   nativeTheme.themeSource = "dark";
 }
 
+let splashWindow = null;
 let mainWindow = null;
 let serverProcess = null;
 let CACHED_HARDWARE_ID = null;
@@ -73,9 +74,11 @@ if (!gotTheLock) {
 }
 
 app.on("second-instance", () => {
-  if (mainWindow) {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
+  } else if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.focus();
   }
 });
 
@@ -276,6 +279,16 @@ if (autoUpdater) {
     setTimeout(() => {
       try {
         console.log("[PenRX+ AutoUpdater] Quitting and installing update with auto-restart...");
+        if (serverProcess && serverProcess.pid) {
+          try {
+            if (process.platform === "win32") {
+              exec(`taskkill /pid ${serverProcess.pid} /T /F`, { windowsHide: true });
+            } else {
+              serverProcess.kill("SIGKILL");
+            }
+          } catch {}
+          serverProcess = null;
+        }
         autoUpdater.quitAndInstall(false, true);
       } catch (err) {
         console.error("[PenRX+ AutoUpdater] quitAndInstall error:", err);
@@ -497,6 +510,7 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
     console.log(`[PenRX+ AutoUpdate] Download completed to ${tempPath}. Preparing silent installation & auto-restart...`);
 
     // Kill background next server process immediately so port 3000 and all file locks are released
+    // Kill background next server process immediately so port 3000 and all file locks are released
     if (serverProcess && serverProcess.pid) {
       try {
         if (process.platform === "win32") {
@@ -508,11 +522,9 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
       serverProcess = null;
     }
 
-    // Launch updater silently using PowerShell with WindowStyle Hidden & windowsHide: true
-    // This executes completely invisibly without any batch files or CMD black console flashes!
+    // Launch updater with official setup wizard GUI ("Next > Next > Install > Finish")
     const { spawn } = require("child_process");
-    const appExePath = process.execPath;
-    const updateCmd = `Start-Sleep -Milliseconds 1000; Start-Process -FilePath '${tempPath}' -ArgumentList '/S' -Wait; Start-Process -FilePath '${appExePath}'; Start-Sleep -Milliseconds 1500; Remove-Item -Path '${tempPath}' -Force -ErrorAction SilentlyContinue`;
+    const updateCmd = `Start-Sleep -Milliseconds 600; Start-Process -FilePath '${tempPath}'`;
 
     const runner = spawn(
       "powershell.exe",
@@ -525,10 +537,10 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
     );
     runner.unref();
 
-    // Exit Electron cleanly to release all files for the installer
+    // Exit Electron cleanly to release all files so the installer can update without file locks
     setTimeout(() => {
       app.exit(0);
-    }, 500);
+    }, 400);
 
     return { success: true };
   } catch (err) {
@@ -627,107 +639,241 @@ async function ensureServerRunning() {
   });
 }
 
-// HTML Splash Screen to display seamlessly within the main window while Next.js boots
-const SPLASH_HTML = `data:text/html;charset=utf-8,<!DOCTYPE html>
+function getAppIconPath() {
+  const ico = path.join(__dirname, "../public/icon.ico");
+  if (fs.existsSync(ico)) return ico;
+  const png = path.join(__dirname, "../public/icon-512.png");
+  if (fs.existsSync(png)) return png;
+  return undefined;
+}
+
+function getLogoBase64() {
+  const candidates = [
+    path.join(__dirname, "../public/icon-512.png"),
+    path.join(__dirname, "../logo-penrx.jpg"),
+    path.join(process.resourcesPath, "public/icon-512.png"),
+    path.join(process.resourcesPath, "logo-penrx.jpg"),
+  ];
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c)) {
+        return `data:image/jpeg;base64,${fs.readFileSync(c).toString("base64")}`;
+      }
+    } catch {}
+  }
+  return "";
+}
+
+function buildSplashHtml(logoBase64) {
+  const logoHtml = logoBase64
+    ? `<img src="${logoBase64}" class="splash-logo" alt="PenRX+" />`
+    : `<div class="splash-logo-fallback"><span>PenRX<b>+</b></span></div>`;
+
+  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
   <title>PenRX+ Medical Suite</title>
   <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background-color: #0b1329;
-      color: #f8fafc;
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", sans-serif;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .splash-card {
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b1329 80%);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      border-radius: 28px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 45px rgba(16, 185, 129, 0.18);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      padding: 24px 32px;
+      text-align: center;
+      position: relative;
       overflow: hidden;
-      user-select: none;
     }
-    .brand-wrap {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 24px;
+    .ambient-glow {
+      position: absolute;
+      width: 240px;
+      height: 240px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.22) 0%, transparent 70%);
+      top: -70px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
     }
-    .logo-box {
-      width: 80px;
-      height: 80px;
+    .logo-container {
+      position: relative;
+      margin-bottom: 16px;
+      z-index: 1;
+    }
+    .splash-logo {
+      width: 90px;
+      height: 90px;
+      border-radius: 22px;
+      object-fit: cover;
+      box-shadow: 0 12px 30px rgba(16, 185, 129, 0.4);
+      border: 2px solid rgba(16, 185, 129, 0.6);
+      animation: floatBreath 3s ease-in-out infinite;
+    }
+    .splash-logo-fallback {
+      width: 90px;
+      height: 90px;
       background: #0f172a;
-      border: 2px solid rgba(16, 185, 129, 0.5);
-      border-radius: 24px;
+      border: 2px solid rgba(16, 185, 129, 0.6);
+      border-radius: 22px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 20px 40px -10px rgba(16, 185, 129, 0.35);
-      margin-bottom: 20px;
-    }
-    .logo-box span {
-      font-size: 28px;
+      box-shadow: 0 12px 30px rgba(16, 185, 129, 0.4);
+      color: #fff;
+      font-size: 26px;
       font-weight: 900;
-      color: #ffffff;
-      letter-spacing: -1px;
     }
-    .logo-box span b {
+    .splash-logo-fallback b { color: #10b981; }
+    @keyframes floatBreath {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-4px) scale(1.02); }
+    }
+    .brand-title {
+      font-size: 24px;
+      font-weight: 900;
+      color: #f8fafc;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+      z-index: 1;
+    }
+    .brand-title span {
       color: #10b981;
     }
-    .title {
-      font-size: 22px;
-      font-weight: 900;
-      color: #f1f5f9;
-      margin: 0 0 8px 0;
-      letter-spacing: -0.5px;
-    }
-    .subtitle {
-      font-size: 14px;
-      color: #94a3b8;
-      margin: 0 0 32px 0;
+    .brand-subtitle {
+      font-size: 13px;
       font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 22px;
+      z-index: 1;
     }
-    .loader-track {
-      width: 280px;
+    .progress-track {
+      width: 290px;
       height: 6px;
       background: rgba(255, 255, 255, 0.08);
       border-radius: 999px;
       overflow: hidden;
       position: relative;
+      margin-bottom: 12px;
+      z-index: 1;
     }
-    .loader-bar {
+    .progress-bar {
       height: 100%;
       width: 45%;
       background: linear-gradient(90deg, #10b981, #06b6d4);
       border-radius: 999px;
       position: absolute;
-      animation: sweep 1.5s ease-in-out infinite;
+      animation: sweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
     @keyframes sweep {
       0% { left: -45%; width: 45%; }
       50% { left: 35%; width: 65%; }
       100% { left: 100%; width: 45%; }
     }
+    .status-text {
+      font-size: 11px;
+      font-weight: 600;
+      color: #cbd5e1;
+      letter-spacing: -0.2px;
+      z-index: 1;
+    }
+    .footer-meta {
+      position: absolute;
+      bottom: 12px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 28px;
+      font-size: 9px;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      z-index: 1;
+    }
   </style>
 </head>
 <body>
-  <div class="logo-box">
-    <span>PenRX<b>+</b></span>
-  </div>
-  <h1 class="title">منظومة PenRX+ الطبية</h1>
-  <p class="subtitle">جاري تشغيل محرك النظام وقاعدة البيانات الطبية...</p>
-  <div class="loader-track">
-    <div class="loader-bar"></div>
+  <div class="splash-card">
+    <div class="ambient-glow"></div>
+    <div class="logo-container">
+      ${logoHtml}
+    </div>
+    <div class="brand-title">منظومة <span>PenRX+</span> الطبية</div>
+    <div class="brand-subtitle">الإدارة الذكية للروشتات والعيادات التخصصية</div>
+    <div class="progress-track">
+      <div class="progress-bar"></div>
+    </div>
+    <div class="status-text">جاري تشغيل محرك النظام وقاعدة البيانات الطبية...</div>
+    <div class="footer-meta">
+      <span>PENRX+ ENTERPRISE</span>
+      <span>محمي ومُشفر © 2026</span>
+    </div>
   </div>
 </body>
-</html>`;
+</html>`)}`;
+}
 
-function createMainWindow() {
-  const iconPath = fs.existsSync(path.join(__dirname, "../public/icon.ico"))
-    ? path.join(__dirname, "../public/icon.ico")
-    : path.join(__dirname, "../public/icon-512.png");
+function createSplashWindow() {
+  const iconPath = getAppIconPath();
+  const logoBase64 = getLogoBase64();
 
+  splashWindow = new BrowserWindow({
+    width: 540,
+    height: 400,
+    resizable: false,
+    movable: true,
+    center: true,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    icon: iconPath,
+    backgroundColor: "#00000000",
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  splashWindow.loadURL(buildSplashHtml(logoBase64));
+
+  splashWindow.once("ready-to-show", () => {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.show();
+      splashWindow.focus();
+    }
+  });
+
+  splashWindow.on("closed", () => {
+    splashWindow = null;
+  });
+
+  return splashWindow;
+}
+
+function createMainWindow(targetUrl) {
+  const iconPath = getAppIconPath();
   const isWindows = process.platform === "win32";
 
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -763,24 +909,28 @@ function createMainWindow() {
 
   Menu.setApplicationMenu(null);
 
-  // Load the Splash Screen immediately
-  mainWindow.loadURL(SPLASH_HTML);
+  let hasRevealed = false;
+  const revealMainWindow = () => {
+    if (hasRevealed) return;
+    hasRevealed = true;
 
-  mainWindow.once("ready-to-show", () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.maximize();
-      mainWindow.focus();
-    }
-  });
-
-  mainWindow.webContents.on("did-finish-load", () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      if (!mainWindow.isMaximized()) {
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.maximize();
+        mainWindow.show();
+        mainWindow.focus();
       }
-    }
-  });
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close();
+        splashWindow = null;
+      }
+    }, 250);
+  };
+
+  mainWindow.webContents.once("did-finish-load", revealMainWindow);
+
+  // Safety fallback: if did-finish-load doesn't fire within 8s, show anyway
+  setTimeout(revealMainWindow, 8000);
 
   // Support F11 keyboard shortcut to toggle borderless full screen mode anytime
   mainWindow.webContents.on("before-input-event", (event, input) => {
@@ -812,6 +962,10 @@ function createMainWindow() {
     mainWindow = null;
   });
 
+  if (targetUrl) {
+    mainWindow.loadURL(targetUrl);
+  }
+
   return mainWindow;
 }
 
@@ -842,46 +996,43 @@ app.whenReady().then(() => {
     console.warn("[PenRX+ Electron] Notice during update cache check:", err.message);
   }
 
-  // Open the main window directly (maximized with splash) without any intermediate small windows
-  createMainWindow();
+  // Show luxury centered Splash Screen immediately
+  createSplashWindow();
 
   ensureServerRunning().then((baseUrl) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      const targetUrl = `${baseUrl}/`;
-      console.log(`[PenRX+ Electron] Server ready, navigating main window to: ${targetUrl}`);
-      mainWindow.loadURL(targetUrl);
-      if (!mainWindow.isMaximized()) {
-        mainWindow.maximize();
-      }
+    const targetUrl = `${baseUrl}/`;
+    console.log(`[PenRX+ Electron] Server ready, navigating main window to: ${targetUrl}`);
+    createMainWindow(targetUrl);
 
-      // Fast Startup Update Check: Check 2 seconds after window loads, then every 15 minutes
-      if (autoUpdater && app.isPackaged) {
-        setTimeout(() => {
-          console.log("[PenRX+ AutoUpdater] Triggering fast startup update check...");
-          autoUpdater.checkForUpdates().catch((err) => {
-            console.warn("[PenRX+ AutoUpdater] Fast startup check notice:", err.message);
-          });
-        }, 2000);
+    // Fast Startup Update Check: Check 3 seconds after window loads, then every 15 minutes
+    if (autoUpdater && app.isPackaged) {
+      setTimeout(() => {
+        console.log("[PenRX+ AutoUpdater] Triggering fast startup update check...");
+        autoUpdater.checkForUpdates().catch((err) => {
+          console.warn("[PenRX+ AutoUpdater] Fast startup check notice:", err.message);
+        });
+      }, 3000);
 
-        setInterval(() => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            autoUpdater.checkForUpdates().catch(() => {});
-          }
-        }, 15 * 60 * 1000);
-      }
+      setInterval(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          autoUpdater.checkForUpdates().catch(() => {});
+        }
+      }, 15 * 60 * 1000);
     }
   });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
       if (activeServerUrl) {
-        mainWindow.loadURL(`${activeServerUrl}/`);
+        createMainWindow(`${activeServerUrl}/`);
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.maximize();
+        }
       } else {
+        createSplashWindow();
         ensureServerRunning().then((baseUrl) => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.loadURL(`${baseUrl}/`);
-          }
+          createMainWindow(`${baseUrl}/`);
         });
       }
     }

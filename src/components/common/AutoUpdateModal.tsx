@@ -271,6 +271,12 @@ export function AutoUpdateModal() {
       // Fallback: direct download & install ONLY IF differential update failed and not completed
       if (hasCompleted) return;
 
+      // Cleanly reset progress UI for the official installer package download
+      setDownloadProgress(0);
+      setDownloadedMB(0);
+      setTotalMB(0);
+      setDownloadStatus("downloading");
+
       const targetUrl =
         updateInfo.desktopDownloadUrl ||
         "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
@@ -368,14 +374,16 @@ export function AutoUpdateModal() {
             <p className="text-xs text-slate-400">
               {downloadStatus === "completed"
                 ? isElectron
-                  ? "اكتمل تنزيل التحديثات الجديدة بنجاح! جاري تثبيتها وإعادة تشغيل المنظومة تلقائياً..."
+                  ? "اكتمل تنزيل حزمة التحديث بنجاح! جاري فتح معالج التثبيت الرسمي الآن..."
                   : "تم فتح رابط التنزيل المباشر، قم بتشغيل الملف بمجرد اكتماله."
                 : downloadStatus === "downloading"
                 ? isElectron
-                  ? "جارٍ تنزيل الملفات والتعديلات الجديدة فقط بالتقنية التفاضلية الذكية (Delta Update)..."
+                  ? totalMB > 60
+                    ? `جارٍ تنزيل حزمة التثبيت الرسمية الكاملة (${downloadedMB} / ${totalMB} MB)...`
+                    : "جارٍ تنزيل ملفات التحديث بالتقنية التفاضلية السريعة (Delta Update)..."
                   : "يرجى الانتظار حتى اكتمال تنزيل ملف التحديث الجديد"
                 : isElectron
-                ? "تحديث ذكي وفوري: يتم تنزيل الإضافات والملفات الجديدة فقط بسرعة فائقة دون إعادة تحميل البرنامج بالكامل."
+                ? "تحديث فوري وآمن: يتم تنزيل التحديث وتثبيته بمعالج التثبيت الرسمي المعتمد."
                 : "تم إطلاق إصدار جديد يتضمن تحسينات ومميزات دوائية وتقنية متقدمة"}
             </p>
           </div>
@@ -441,7 +449,7 @@ export function AutoUpdateModal() {
             {downloadStatus === "completed" && (
               <p className="text-[11px] text-emerald-300 font-bold text-center pt-1 animate-in fade-in">
                 {isElectron
-                  ? "✨ تم حفظ التحديث وسيبدأ التثبيت التلقائي خلال لحظات..."
+                  ? "✨ تم استلام حزمة التحديث، جاري تشغيل معالج التثبيت الرسمي وإعادة التشغيل..."
                   : "✨ اكتمل التنزيل، قم بفتح الملف لاستكمال التثبيت!"}
               </p>
             )}

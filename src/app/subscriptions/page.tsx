@@ -38,6 +38,7 @@ import {
   Share2,
   Download,
   Smartphone,
+  Settings,
 } from "lucide-react";
 import {
   useSubscriptionStore,
@@ -163,14 +164,8 @@ export default function SubscriptionsPage() {
     if (!showWelcomeModal) return;
 
     if (redirectCountdown <= 0) {
-      const isProfileComplete = Boolean(
-        clinic.isProfileSaved &&
-        clinic.doctorName?.trim() &&
-        (clinic.name?.trim() || clinic.nameAr?.trim()) &&
-        clinic.phone?.trim()
-      );
       setShowWelcomeModal(false);
-      router.push(isProfileComplete ? "/" : "/settings");
+      router.push("/settings");
       return;
     }
 
@@ -410,11 +405,12 @@ export default function SubscriptionsPage() {
         isTrial: isTrialPlan,
       });
 
-      // Update local clinic store with subscriber info
+      // Update local clinic store with subscriber info (keep isProfileSaved false until doctor saves in settings)
       useClinicStore.getState().updateClinic({
         doctorName: finalDocName,
         nameAr: finalClinicName,
         phone: senderPhone.trim() || clinic.phone,
+        isProfileSaved: false,
       });
 
       if (typeof window !== "undefined") {
@@ -1031,14 +1027,33 @@ export default function SubscriptionsPage() {
                 </div>
               </div>
 
-              {/* Direct Link to Prescriptions New without NewRxGuard interception */}
-              <Link
-                href="/prescriptions/new"
-                className="flex-1 sm:flex-initial justify-center px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
-              >
-                <span>الدخول للروشتات</span>
-                <ArrowRight className="w-4 h-4 rotate-180 stroke-[2.5]" />
-              </Link>
+              {/* Action Button: Directly guide to /settings if profile is incomplete, or allow entry to prescriptions */}
+              {!clinic.isProfileSaved ? (
+                <Link
+                  href="/settings"
+                  className="flex-1 sm:flex-initial justify-center px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                >
+                  <span>إكمال بيانات العيادة والطبيب 🏥</span>
+                  <ArrowRight className="w-4 h-4 rotate-180 stroke-[2.5]" />
+                </Link>
+              ) : (
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Link
+                    href="/settings"
+                    className="flex-1 sm:flex-initial justify-center px-4 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-xs border border-slate-700 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Settings className="w-4 h-4 text-emerald-400" />
+                    <span>إعدادات العيادة</span>
+                  </Link>
+                  <Link
+                    href="/prescriptions/new"
+                    className="flex-1 sm:flex-initial justify-center px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                  >
+                    <span>الدخول للروشتات</span>
+                    <ArrowRight className="w-4 h-4 rotate-180 stroke-[2.5]" />
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
 

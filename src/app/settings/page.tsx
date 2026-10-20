@@ -147,7 +147,7 @@ function SettingsPrescriptionPreview({
   showHeader,
   showFooter,
   visibleFields,
-  branchAddress = "عنوان العيادة الرئيسي",
+  branchAddress = "",
   branches = [],
   activeBranchId = "",
   title = "معاينة حية فورية للروشتة المطبوعة:",
@@ -266,7 +266,7 @@ function SettingsPrescriptionPreview({
                             : undefined
                         }
                       >
-                        {doctorName || "د. الطبيب المعالج"}
+                        {doctorName || "اسم الطبيب المعالج"}
                       </h3>
                       <p
                         className={`text-[10px] font-bold ${
@@ -279,7 +279,7 @@ function SettingsPrescriptionPreview({
                             : "text-slate-700"
                         }`}
                       >
-                        {doctorTitle || "أخصائي واستشاري"}
+                        {doctorTitle || "الدرجة العلمية والتخصص"}
                       </p>
                       <p
                         className={`text-[9px] font-semibold ${
@@ -294,7 +294,7 @@ function SettingsPrescriptionPreview({
                             : "text-slate-500"
                         }`}
                       >
-                        {specialty || "التخصص الطبي"}
+                        {specialty || ""}
                       </p>
                       {syndicateId && (
                         <p
@@ -327,7 +327,7 @@ function SettingsPrescriptionPreview({
                         letterSpacing: "-0.01em",
                       }}
                     >
-                      {nameAr || "المركز الطبي"}
+                      {nameAr || "اسم العيادة / المركز"}
                     </h4>
                     {name && (
                       <p
@@ -708,11 +708,10 @@ export default function SettingsPage() {
     clinic.phone?.trim()
   );
 
-  // Read-only / Dimmed edit state: open immediately if profile is incomplete
-  const [isEditing, setIsEditing] = useState<boolean>(!isProfileComplete);
+  // Branch mode state: true if doctor clicked "إضافة فرع جديد"
   const [isAddingNew, setIsAddingNew] = useState<boolean>(branches.length === 0);
 
-  // Local form state for Clinic Profile
+  // Local form state for Clinic Profile (empty by default for clean fresh accounts)
   const [name, setName] = useState(clinic.name || "");
   const [nameAr, setNameAr] = useState(clinic.nameAr || "");
   const [doctorName, setDoctorName] = useState(clinic.doctorName || "");
@@ -721,7 +720,7 @@ export default function SettingsPage() {
   const [syndicateId, setSyndicateId] = useState(clinic.syndicateId || "");
   const [clinicPhone, setClinicPhone] = useState(clinic.phone || "");
   const [branchAddress, setBranchAddress] = useState(clinic.address || branches[0]?.address || "");
-  const [workingHours, setWorkingHours] = useState(clinic.workingHours || branches[0]?.workingHours || "يومياً من 4 مساءً حتى 10 مساءً");
+  const [workingHours, setWorkingHours] = useState(clinic.workingHours || branches[0]?.workingHours || "");
   const [footerText, setFooterText] = useState(clinic.footerText || "");
   const [logoUrl, setLogoUrl] = useState(clinic.logoUrl || "");
   const [logoWidth, setLogoWidth] = useState(clinic.logoWidth || 80);
@@ -758,7 +757,7 @@ export default function SettingsPage() {
     setSyndicateId(activeB?.syndicateId || c.syndicateId || "");
     setClinicPhone(activeB?.phone || c.phone || "");
     setBranchAddress(activeB?.address || c.address || "");
-    setWorkingHours(activeB?.workingHours || c.workingHours || "يومياً من 4 مساءً حتى 10 مساءً");
+    setWorkingHours(activeB?.workingHours || c.workingHours || "");
     setFooterText(c.footerText || "");
     setLogoUrl(c.logoUrl || "");
     setLogoWidth(c.logoWidth || 80);
@@ -769,6 +768,24 @@ export default function SettingsPage() {
     setShowHeader(c.showHeader !== false);
     setShowFooter(c.showFooter !== false);
     setBiometricsEnabled(c.biometricsEnabled || false);
+  };
+
+  // Direct branch selector: switches active branch without cascading loops
+  const handleSelectBranch = (nextId: string) => {
+    setActiveBranchId(nextId);
+    setIsAddingNew(false);
+    const targetBranch = branches.find((b) => b.id === nextId);
+    if (targetBranch) {
+      if (targetBranch.address !== undefined) setBranchAddress(targetBranch.address);
+      if (targetBranch.phone !== undefined) setClinicPhone(targetBranch.phone);
+      if (targetBranch.nameAr !== undefined) setNameAr(targetBranch.nameAr);
+      if (targetBranch.name !== undefined) setName(targetBranch.name);
+      if (targetBranch.doctorName !== undefined) setDoctorName(targetBranch.doctorName);
+      if (targetBranch.doctorTitle !== undefined) setDoctorTitle(targetBranch.doctorTitle);
+      if (targetBranch.specialty !== undefined) setSpecialty(targetBranch.specialty);
+      if (targetBranch.syndicateId !== undefined) setSyndicateId(targetBranch.syndicateId);
+      if (targetBranch.workingHours !== undefined) setWorkingHours(targetBranch.workingHours);
+    }
   };
 
   useEffect(() => {
@@ -788,7 +805,7 @@ export default function SettingsPage() {
         if (!isCancelled) setHasBiometricsHardware(false);
       }
     }
-    checkHardware();
+    const hwTimer = setTimeout(checkHardware, 120);
 
     // Populate initial saved clinic data
     if (clinic.isProfileSaved || clinic.doctorName || clinic.nameAr || clinic.address || clinic.phone) {
@@ -815,39 +832,19 @@ export default function SettingsPage() {
 
     return () => {
       isCancelled = true;
+      clearTimeout(hwTimer);
       unsub?.();
     };
   }, []);
 
-  // When branches exist/change, manage initial edit mode
+  // When branches exist/change, ensure active branch has valid ID
   useEffect(() => {
     if (branches.length === 0) {
-      setIsEditing(true);
       setIsAddingNew(true);
     } else if (!activeBranchId && branches[0]?.id) {
       setActiveBranchId(branches[0].id);
     }
   }, [branches.length, activeBranchId]);
-
-  // When activeBranchId changes, sync the active branch data into the form
-  useEffect(() => {
-    if (activeBranchId && branches.length > 0) {
-      const currentBranch = branches.find((b) => b.id === activeBranchId);
-      if (currentBranch) {
-        if (currentBranch.address !== undefined) setBranchAddress(currentBranch.address);
-        if (currentBranch.phone !== undefined) setClinicPhone(currentBranch.phone);
-        if (currentBranch.nameAr !== undefined) setNameAr(currentBranch.nameAr);
-        if (currentBranch.name !== undefined) setName(currentBranch.name);
-        if (currentBranch.doctorName !== undefined) setDoctorName(currentBranch.doctorName);
-        if (currentBranch.doctorTitle !== undefined) setDoctorTitle(currentBranch.doctorTitle);
-        if (currentBranch.specialty !== undefined) setSpecialty(currentBranch.specialty);
-        if (currentBranch.syndicateId !== undefined) setSyndicateId(currentBranch.syndicateId);
-        if (currentBranch.workingHours !== undefined) setWorkingHours(currentBranch.workingHours);
-      }
-      setIsEditing(false);
-      setIsAddingNew(false);
-    }
-  }, [activeBranchId]);
 
   const handleTestBiometrics = async () => {
     setBiometricFeedback("يرجى لمس مستشعر البصمة على جهازك للتحقق...");
@@ -1048,8 +1045,8 @@ export default function SettingsPage() {
       }
     } catch {}
 
-    // Re-lock the form into dimmed read-only mode
-    setIsEditing(false);
+    // Profile is now saved successfully
+    setIsAddingNew(false);
 
     showGlobalToast("✅ تم حفظ وتأكيد بيانات العيادة ومزامنتها مع البورتال بنجاح! تم فتح كامل أقسام البرنامج.", "success");
     setSavedSuccessMsg("تم حفظ بيانات وهوية العيادة بنجاح ومزامنتها مع البورتال. تم فتح كامل أقسام البرنامج الآن.");
@@ -1231,13 +1228,13 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Edit Mode indicator (only when editing) */}
-                {isEditing && (
+                {/* Status indicator when adding new branch */}
+                {isAddingNew && (
                   <div className="self-start sm:self-auto">
-                    <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-2 shadow-xs animate-pulse">
-                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                      <Pencil className="w-3.5 h-3.5 shrink-0" />
-                      <span>{isAddingNew ? "وضع إضافة فرع جديد" : "وضع التعديل نشط"}</span>
+                    <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2 shadow-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-ping" />
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      <span>وضع إضافة فرع جديد</span>
                     </span>
                   </div>
                 )}
@@ -1250,12 +1247,7 @@ export default function SettingsPage() {
                   <div className="relative flex-1 min-w-0">
                     <select
                       value={activeBranchId}
-                      onChange={(e) => {
-                        const nextId = e.target.value;
-                        setActiveBranchId(nextId);
-                        setIsEditing(false);
-                        setIsAddingNew(false);
-                      }}
+                      onChange={(e) => handleSelectBranch(e.target.value)}
                       disabled={branches.length === 0}
                       className="w-full h-11 pr-10 pl-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-700/80 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer appearance-none truncate transition-colors shadow-inner"
                     >
@@ -1301,10 +1293,9 @@ export default function SettingsPage() {
                     type="button"
                     onClick={() => {
                       setIsAddingNew(true);
-                      setIsEditing(true);
                       setBranchAddress("");
-                      setClinicPhone("");
-                      setWorkingHours("يومياً من 4 مساءً حتى 10 مساءً");
+                      setClinicPhone(clinic.phone || "");
+                      setWorkingHours("");
                       showGlobalToast("🏥 اكتب بيانات الفرع الجديد أدناه ثم انقر على حفظ لإضافته إلى قائمة فروعك.", "info");
                     }}
                     className="col-span-2 sm:col-span-1 h-10 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:brightness-110 text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-950/40 active:scale-95"
@@ -1312,37 +1303,6 @@ export default function SettingsPage() {
                     <Plus className="w-4 h-4 stroke-[2.5]" />
                     <span>إضافة فرع جديد</span>
                   </button>
-
-                  {/* تعديل الفرع / إلغاء التعديل */}
-                  {branches.length > 0 && (
-                    !isEditing ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsEditing(true);
-                          setIsAddingNew(false);
-                          showGlobalToast("🔓 تم فتح الحقول للتعديل! يمكنك تعديل بيانات وتصميم الفرع ثم الحفظ.", "info");
-                        }}
-                        className="h-10 px-4 rounded-xl bg-slate-800 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                        <span>تعديل بيانات الفرع</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsEditing(false);
-                          setIsAddingNew(false);
-                          syncFormFromClinic(clinic, branches);
-                        }}
-                        className="h-10 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        <span>إلغاء التعديل</span>
-                      </button>
-                    )
-                  )}
 
                   {/* حذف الفرع */}
                   {branches.length > 0 && (
@@ -1355,10 +1315,7 @@ export default function SettingsPage() {
                           deleteBranch(branchToDelete.id);
                           showGlobalToast("🗑️ تم حذف الفرع بنجاح.", "info");
                           if (branches.length <= 1) {
-                            setIsEditing(true);
                             setIsAddingNew(true);
-                          } else {
-                            setIsEditing(false);
                           }
                         }
                       }}
@@ -1385,7 +1342,6 @@ export default function SettingsPage() {
                     type="button"
                     onClick={() => {
                       setIsAddingNew(false);
-                      setIsEditing(false);
                       syncFormFromClinic(clinic, branches);
                     }}
                     className="self-end sm:self-auto px-3.5 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold cursor-pointer active:scale-95 transition-all shrink-0"
@@ -1397,7 +1353,7 @@ export default function SettingsPage() {
             </div>
 
             <form onSubmit={handleSaveClinicSettings} className="space-y-6">
-              <div className={!isEditing ? "opacity-60 pointer-events-none select-none transition-all duration-300 relative space-y-6" : "transition-all duration-300 relative space-y-6"}>
+              <div className="transition-all duration-200 relative space-y-6">
                 {/* Box 1: Doctor & Clinic Credentials */}
                 <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/95 border border-slate-800 space-y-4 shadow-xl">
                   <h3 className="text-sm font-black text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-3">
@@ -1498,7 +1454,7 @@ export default function SettingsPage() {
                         required
                         value={clinicPhone}
                         onChange={(e) => setClinicPhone(e.target.value)}
-                        placeholder="01094085228"
+                        placeholder="مثال: 010xxxxxxxx"
                         className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 font-mono font-bold text-slate-100 focus:outline-none transition-all ${
                           !clinicPhone.trim()
                             ? "border-2 border-amber-500/60 focus:border-amber-400 focus:shadow-[0_0_15px_rgba(245,158,11,0.25)]"
@@ -2195,12 +2151,15 @@ export default function SettingsPage() {
               {/* End of dimmed fields wrapper */}
               </div>
 
-              {/* Form Bottom Indicator */}
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-bold px-1">
-                <span>يمكنك حفظ وتأكيد بيانات الفرع عبر لوحة الإجراءات أسفل المعاينة ↗</span>
-                <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                  {isEditing ? "وضع التعديل نشط" : "عرض للقراءة"}
-                </span>
+              {/* Prominent Direct Save Button right on the form for fast mobile & desktop saving */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:brightness-110 text-white font-black text-sm sm:text-base shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-3 transition-all cursor-pointer active:scale-95"
+                >
+                  <Save className="w-5 h-5" />
+                  <span>{isAddingNew ? "حفظ وإضافة الفرع الجديد 🏥" : "حفظ وتأكيد بيانات وهوية العيادة 💾"}</span>
+                </button>
               </div>
             </form>
           </div>
@@ -2241,49 +2200,29 @@ export default function SettingsPage() {
                   <span>إجراءات الفرع وتطبيق الروشتة:</span>
                 </span>
                 <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                  {isEditing ? "جاهز للحفظ" : "جاهز للطباعة"}
+                  جاهز للحفظ
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Save Branch / Edit Branch Button */}
-                {isEditing ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleSaveClinicSettings();
-                    }}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-slate-950 border-2 border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900 text-white font-black text-xs transition-all shadow-lg shadow-emerald-950/30 flex items-center justify-center gap-3 cursor-pointer active:scale-95 group hover:-translate-y-0.5"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all shrink-0 shadow-xs">
-                      <Save className="w-4 h-4 stroke-[2.4]" />
-                    </div>
-                    <div className="text-right">
-                      <span className="block text-xs font-black text-slate-100 group-hover:text-emerald-300">
-                        {isAddingNew ? "حفظ وإضافة الفرع" : "حفظ بيانات الفرع"}
-                      </span>
-                      <span className="block text-[10px] font-normal text-slate-400">تأكيد الحفظ والمزامنة السحابية</span>
-                    </div>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditing(true);
-                      setIsAddingNew(false);
-                      showGlobalToast("تم فتح الحقول لتعديل بيانات وتصميم الفرع والروشتة!", "info");
-                    }}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-slate-950 border-2 border-cyan-500/40 hover:border-cyan-400 hover:bg-slate-900 text-white font-black text-xs transition-all shadow-lg shadow-cyan-950/30 flex items-center justify-center gap-3 cursor-pointer active:scale-95 group hover:-translate-y-0.5"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 transition-all shrink-0 shadow-xs">
-                      <Edit2 className="w-4 h-4 stroke-[2.4]" />
-                    </div>
-                    <div className="text-right">
-                      <span className="block text-xs font-black text-slate-100 group-hover:text-cyan-300">تعديل بيانات الفرع</span>
-                      <span className="block text-[10px] font-normal text-slate-400">فتح الحقول للتعديل</span>
-                    </div>
-                  </button>
-                )}
+                {/* Save Branch Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSaveClinicSettings();
+                  }}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-slate-950 border-2 border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900 text-white font-black text-xs transition-all shadow-lg shadow-emerald-950/30 flex items-center justify-center gap-3 cursor-pointer active:scale-95 group hover:-translate-y-0.5"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all shrink-0 shadow-xs">
+                    <Save className="w-4 h-4 stroke-[2.4]" />
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-xs font-black text-slate-100 group-hover:text-emerald-300">
+                      {isAddingNew ? "حفظ وإضافة الفرع" : "حفظ بيانات الفرع والعيادة"}
+                    </span>
+                    <span className="block text-[10px] font-normal text-slate-400">تأكيد الحفظ والمزامنة السحابية</span>
+                  </div>
+                </button>
 
                 {/* Edit Prescription Now Button */}
                 <Link

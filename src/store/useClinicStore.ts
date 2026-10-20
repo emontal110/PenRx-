@@ -87,14 +87,14 @@ const DEFAULT_CLINIC: ClinicSettings = {
   syndicateId: "",
   phone: "",
   address: "",
-  logoUrl: "/logo-penrx.jpg",
+  logoUrl: "",
   logoWidth: 80,
   primaryColor: "#059669",
   fontFamily: "'Cairo', sans-serif",
   templateId: "classic",
   headerText: "",
   footerText: "",
-  workingHours: "يومياً من 4 مساءً حتى 10 مساءً",
+  workingHours: "",
   paperSize: "A5",
   showHeader: true,
   showFooter: true,
@@ -123,7 +123,7 @@ export const useClinicStore = create<ClinicStoreState>()(
       activeBranchId: "",
 
       updateClinic: (updates) =>
-        set((state) => ({ clinic: { ...state.clinic, ...updates, isProfileSaved: true } })),
+        set((state) => ({ clinic: { ...state.clinic, ...updates } })),
 
       saveClinicAndCreateFirstBranch: (updates) => {
         set((state) => {
@@ -133,7 +133,7 @@ export const useClinicStore = create<ClinicStoreState>()(
 
           // If no branches exist, automatically create the primary branch from clinic data
           if (updatedBranches.length === 0) {
-            const branchNameAr = (updatedClinic.nameAr || updatedClinic.name || `العيادة`).trim();
+            const branchNameAr = (updatedClinic.nameAr || updatedClinic.name || `العيادة الرئيسية`).trim();
             const branchNameEn = (updatedClinic.name || "Main Branch").trim();
             const firstBranchId = `branch-${Date.now()}`;
             const firstBranch: Branch = {
@@ -142,7 +142,7 @@ export const useClinicStore = create<ClinicStoreState>()(
               nameAr: branchNameAr,
               address: (updatedClinic.address || updatedClinic.headerText || "").trim(),
               phone: updatedClinic.phone || "",
-              workingHours: (updatedClinic.workingHours || "يومياً من 4 مساءً حتى 10 مساءً").trim(),
+              workingHours: (updatedClinic.workingHours || "").trim(),
               isDefault: true,
               doctorName: updatedClinic.doctorName || "",
               doctorTitle: updatedClinic.doctorTitle || "",

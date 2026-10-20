@@ -302,9 +302,9 @@ export async function isBiometricAvailable(): Promise<boolean> {
         const { Capacitor } = await import("@capacitor/core");
         if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
           const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
-          const checkPromise = BiometricAuth.checkBiometry();
-          const timeoutPromise = new Promise<any>((_, reject) =>
-            setTimeout(() => reject(new Error("Biometric check timeout")), 2500)
+          const checkPromise = BiometricAuth.checkBiometry().catch(() => null);
+          const timeoutPromise = new Promise<any>((resolve) =>
+            setTimeout(() => resolve(null), 500)
           );
           const check = await Promise.race([checkPromise, timeoutPromise]);
           const result = Boolean(check && check.isAvailable);
@@ -315,14 +315,16 @@ export async function isBiometricAvailable(): Promise<boolean> {
         console.warn("[Biometrics] Native checkBiometry error:", err);
       }
 
-      // 2. Mobile Browser Fallback (WebAuthn)
+      // 2. Mobile Browser Fallback (WebAuthn) with non-blocking 500ms watchdog
       if (!isMobileDevice() || !window.PublicKeyCredential) {
         _cachedBiometricAvailable = false;
         return false;
       }
 
       try {
-        const result = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        const webauthnPromise = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false);
+        const webauthnTimeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500));
+        const result = await Promise.race([webauthnPromise, webauthnTimeout]);
         _cachedBiometricAvailable = Boolean(result);
         return Boolean(result);
       } catch {

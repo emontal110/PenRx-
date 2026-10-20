@@ -99,7 +99,9 @@ for (const file of landingFiles) {
 const portalFiles = [
   path.join(rootDir, "portal.html"),
   path.join(rootDir, "docs", "portal.html"),
-  path.join(rootDir, "mobile.html")
+  path.join(rootDir, "public", "portal.html"),
+  path.join(rootDir, "mobile.html"),
+  path.join(rootDir, "public", "mobile.html")
 ];
 for (const file of portalFiles) {
   if (fs.existsSync(file)) {
