@@ -32,9 +32,15 @@ async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
     "Content-Type": "application/json",
     ...((options.headers as any) || {}),
   };
+  const signal =
+    options.signal ||
+    (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+      ? AbortSignal.timeout(6000)
+      : undefined);
   return fetch(`${SUPABASE_REST_URL}${endpoint}`, {
     ...options,
     headers,
+    signal,
   });
 }
 
@@ -344,7 +350,32 @@ export async function getSubscriptionByMachine(machineId: string): Promise<Subsc
   if (active) return active;
   const pending = matching.find((s) => s.status === "PENDING");
   if (pending) return pending;
-  return matching[0] || null;
+  if (matching[0]) return matching[0];
+
+  // Direct Supabase REST targeted query fallback if not in cache
+  try {
+    const res = await fetchSupabaseRest(
+      `?or=(machineId.eq.${encodeURIComponent(cleanId)},allowedMachineIds.cs.{${encodeURIComponent(cleanId)}})&limit=5`
+    );
+    if (res.ok) {
+      const records: SubscriptionRecord[] = await res.json();
+      if (Array.isArray(records) && records.length > 0) {
+        for (const r of records) {
+          if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
+            r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
+          }
+          globalSubscriptionsCache.set(r.id, r);
+        }
+        const directActive = records.find((s) => s.status === "ACTIVE");
+        if (directActive) return directActive;
+        const directPending = records.find((s) => s.status === "PENDING");
+        if (directPending) return directPending;
+        return records[0];
+      }
+    }
+  } catch {}
+
+  return null;
 }
 
 /**
@@ -353,7 +384,26 @@ export async function getSubscriptionByMachine(machineId: string): Promise<Subsc
 export async function getSubscriptionBySubscriberId(subscriberId: string): Promise<SubscriptionRecord | null> {
   const all = await getAllSubscriptions();
   const cleanId = subscriberId.toUpperCase().trim();
-  return all.find((s) => s.subscriberId?.toUpperCase() === cleanId) || null;
+  const found = all.find((s) => s.subscriberId?.toUpperCase() === cleanId) || null;
+  if (found) return found;
+
+  // Direct Supabase REST fallback if not in cache
+  try {
+    const res = await fetchSupabaseRest(`?subscriberId=eq.${encodeURIComponent(cleanId)}&limit=1`);
+    if (res.ok) {
+      const records = await res.json();
+      if (Array.isArray(records) && records.length > 0) {
+        const r = records[0];
+        if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
+          r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
+        }
+        globalSubscriptionsCache.set(r.id, r);
+        return r;
+      }
+    }
+  } catch {}
+
+  return null;
 }
 
 /**

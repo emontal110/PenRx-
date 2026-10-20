@@ -19,13 +19,47 @@ let activeServerUrl = null;
 // Official differential auto-updater (Classico-style)
 let autoUpdater = null;
 try {
-  autoUpdater = require("electron-updater").autoUpdater;
+  const electronUpdater = require("electron-updater");
+  autoUpdater = electronUpdater.autoUpdater;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   // Explicitly enable differential (delta) downloads so only changes are fetched
   autoUpdater.disableDifferentialDownload = false;
   autoUpdater.disableWebInstaller = true;
   autoUpdater.logger = console;
+
+  // Patch Provider.prototype.getBlockMapFiles to seamlessly handle both 2-part (v1.34) and 3-part (v1.34.0) GitHub release tags
+  // This ensures electron-updater always finds the previous release's blockmap instead of falling back to full download!
+  try {
+    const { Provider } = require("electron-updater/out/providers/Provider");
+    const { newUrlFromBase } = require("electron-updater/out/util");
+    if (Provider && Provider.prototype && typeof Provider.prototype.getBlockMapFiles === "function") {
+      Provider.prototype.getBlockMapFiles = function (baseUrl, oldVersion, newVersion, oldBlockMapFileBaseUrl = null) {
+        const newBlockMapUrl = newUrlFromBase(`${baseUrl.pathname}.blockmap`, baseUrl);
+
+        const oldVShort = oldVersion.replace(/\.0$/, "");
+        const newVShort = newVersion.replace(/\.0$/, "");
+
+        let oldPath = baseUrl.pathname;
+        if (oldPath.includes(newVersion)) {
+          oldPath = oldPath.replace(new RegExp(newVersion, "g"), oldVersion);
+        } else if (oldPath.includes(newVShort)) {
+          oldPath = oldPath.replace(new RegExp(newVShort, "g"), oldVShort);
+        } else {
+          oldPath = oldPath.replace(new RegExp(newVersion, "g"), oldVersion);
+        }
+
+        const oldBlockMapUrl = newUrlFromBase(
+          `${oldPath}.blockmap`,
+          oldBlockMapFileBaseUrl ? new URL(oldBlockMapFileBaseUrl) : baseUrl
+        );
+        return [oldBlockMapUrl, newBlockMapUrl];
+      };
+      console.log("[PenRX+ AutoUpdater] Differential blockmap tag resolver patch applied successfully.");
+    }
+  } catch (patchErr) {
+    console.warn("[PenRX+ AutoUpdater] Blockmap patch warning:", patchErr.message);
+  }
 } catch (e) {
   console.warn("[PenRX+ AutoUpdater] electron-updater not initialized:", e.message);
 }

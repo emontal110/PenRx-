@@ -28,6 +28,17 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
   isPendingRef.current = subDetails.isPending;
   isActiveRef.current = subDetails.isActive;
 
+  // Anti-loop redirect throttle: prevents rapid back-and-forth router.replace calls
+  const lastRedirectRef = React.useRef<{ target: string; time: number }>({ target: "", time: 0 });
+  const safeRedirect = React.useCallback((target: string) => {
+    const now = Date.now();
+    if (lastRedirectRef.current.target === target && now - lastRedirectRef.current.time < 3000) {
+      return;
+    }
+    lastRedirectRef.current = { target, time: now };
+    router.replace(target);
+  }, [router]);
+
   useEffect(() => {
     setMounted(true);
     // Initialize hardware machine ID (Electron mode)
@@ -71,19 +82,19 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (mounted && isHydrated && subDetails.isActive && !isProfileComplete) {
       if (!pathname?.startsWith("/settings") && !pathname?.startsWith("/api")) {
-        router.replace("/settings");
+        safeRedirect("/settings");
       }
     }
-  }, [mounted, isHydrated, subDetails.isActive, isProfileComplete, pathname, router]);
+  }, [mounted, isHydrated, subDetails.isActive, isProfileComplete, pathname, safeRedirect]);
 
   // Auto-redirect new unactivated users directly to /subscriptions (Protective Wall)
   useEffect(() => {
     if (mounted && isHydrated && !subDetails.isActive) {
       if (!pathname?.startsWith("/subscriptions") && !pathname?.startsWith("/api")) {
-        router.replace("/subscriptions");
+        safeRedirect("/subscriptions");
       }
     }
-  }, [mounted, isHydrated, subDetails.isActive, pathname, router]);
+  }, [mounted, isHydrated, subDetails.isActive, pathname, safeRedirect]);
 
   // --- ANTI-TAMPER: Detect and flag excessive offline usage (Classico-style 7-day limit) ---
   useEffect(() => {

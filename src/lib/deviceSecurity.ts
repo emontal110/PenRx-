@@ -268,10 +268,14 @@ export interface BiometricAuthResult {
   error?: string;
 }
 
+let _cachedBiometricAvailable: boolean | null = null;
+let _biometricCheckInFlight: Promise<boolean> | null = null;
+
 /**
  * Check if the current device supports biometric fingerprint / FaceID
  * Returns true on Native Android APK when hardware is present and enrolled.
  * Returns false on desktop/computer version.
+ * Caches result in memory to avoid repeated/concurrent native IPC bridge calls.
  */
 export async function isBiometricAvailable(): Promise<boolean> {
   if (typeof window === "undefined") {
@@ -283,32 +287,54 @@ export async function isBiometricAvailable(): Promise<boolean> {
     return false;
   }
 
-  // 1. Native Capacitor Android APK (@aparajita/capacitor-biometric-auth)
-  try {
-    const { Capacitor } = await import("@capacitor/core");
-    if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
-      const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
-      const checkPromise = BiometricAuth.checkBiometry();
-      const timeoutPromise = new Promise<any>((_, reject) =>
-        setTimeout(() => reject(new Error("Biometric check timeout")), 4000)
-      );
-      const check = await Promise.race([checkPromise, timeoutPromise]);
-      return Boolean(check && check.isAvailable);
+  if (_cachedBiometricAvailable !== null) {
+    return _cachedBiometricAvailable;
+  }
+
+  if (_biometricCheckInFlight) {
+    return _biometricCheckInFlight;
+  }
+
+  _biometricCheckInFlight = (async () => {
+    try {
+      // 1. Native Capacitor Android APK (@aparajita/capacitor-biometric-auth)
+      try {
+        const { Capacitor } = await import("@capacitor/core");
+        if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
+          const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
+          const checkPromise = BiometricAuth.checkBiometry();
+          const timeoutPromise = new Promise<any>((_, reject) =>
+            setTimeout(() => reject(new Error("Biometric check timeout")), 2500)
+          );
+          const check = await Promise.race([checkPromise, timeoutPromise]);
+          const result = Boolean(check && check.isAvailable);
+          _cachedBiometricAvailable = result;
+          return result;
+        }
+      } catch (err) {
+        console.warn("[Biometrics] Native checkBiometry error:", err);
+      }
+
+      // 2. Mobile Browser Fallback (WebAuthn)
+      if (!isMobileDevice() || !window.PublicKeyCredential) {
+        _cachedBiometricAvailable = false;
+        return false;
+      }
+
+      try {
+        const result = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        _cachedBiometricAvailable = Boolean(result);
+        return Boolean(result);
+      } catch {
+        _cachedBiometricAvailable = false;
+        return false;
+      }
+    } finally {
+      _biometricCheckInFlight = null;
     }
-  } catch (err) {
-    console.warn("[Biometrics] Native checkBiometry error:", err);
-  }
+  })();
 
-  // 2. Mobile Browser Fallback (WebAuthn)
-  if (!isMobileDevice() || !window.PublicKeyCredential) {
-    return false;
-  }
-
-  try {
-    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-  } catch {
-    return false;
-  }
+  return _biometricCheckInFlight;
 }
 
 /**

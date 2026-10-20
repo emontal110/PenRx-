@@ -89,12 +89,26 @@ export function getSubscriptionDetails(
       : null);
 
   // Find subscriptions matching current machine ID OR allowed devices OR subscriber ID
-  const matchingSubs = (subscriptions || []).filter(
+  let matchingSubs = (subscriptions || []).filter(
     (s) =>
       s.machineId === currentMachineId ||
       (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(currentMachineId)) ||
       (effectiveSubId && effectiveSubId !== "SUB-0000" && s.subscriberId && s.subscriberId === effectiveSubId)
   );
+
+  // Fallback: If no match by exact machine ID (e.g. mobile SSAID updated after subscription creation),
+  // but there is an existing ACTIVE unexpired subscription record stored in this installation,
+  // honor it and associate the current machine ID so the doctor is never locked out.
+  if (matchingSubs.length === 0 && subscriptions && subscriptions.length > 0) {
+    const activeCandidate = subscriptions.find(
+      (s) =>
+        s.status === "ACTIVE" &&
+        (!s.expiresAt || new Date(s.expiresAt).getTime() > Date.now())
+    );
+    if (activeCandidate) {
+      matchingSubs = [activeCandidate];
+    }
+  }
 
   // Strictly evaluate subscriptions belonging to this machine ID / subscriber
   const activeSub = matchingSubs.find((s) => s.status === "ACTIVE");
@@ -187,10 +201,30 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       setSubscriberId: (id: string) => set({ subscriberId: id }),
       setSignatureToken: (token: string | null) => set({ signatureToken: token }),
 
-      // Initialize real hardware machine ID from Electron (called once on app mount)
+      // Initialize real hardware machine ID from Electron or Capacitor (called once on app mount)
       initHardwareId: async () => {
         await initializeHardwareMachineId((newId) => {
-          set({ machineId: newId });
+          set((state) => {
+            const updatedSubs = (state.subscriptions || []).map((s) => {
+              const list = s.allowedMachineIds || [];
+              if (!list.includes(newId)) {
+                return { ...s, allowedMachineIds: [...list, newId] };
+              }
+              return s;
+            });
+            return {
+              machineId: newId,
+              subscriptions: updatedSubs,
+              currentSubscription: state.currentSubscription
+                ? {
+                    ...state.currentSubscription,
+                    allowedMachineIds: Array.from(
+                      new Set([...(state.currentSubscription.allowedMachineIds || []), newId])
+                    ),
+                  }
+                : null,
+            };
+          });
         });
       },
 
@@ -525,17 +559,26 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         let supaReportedNoSub = false;
         try {
           const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+          const currentLocalSub = get().currentSubscription || get().subscriptions.find((s) => s.status === "ACTIVE");
+
           let orConditions = `machineId.eq.${encodeURIComponent(machineId)},allowedMachineIds.cs.{${encodeURIComponent(machineId)}}`;
           if (subId && subId !== "SUB-0000") {
             orConditions += `,subscriberId.eq.${encodeURIComponent(subId)}`;
           }
+          if (currentLocalSub?.id) {
+            orConditions += `,id.eq.${encodeURIComponent(currentLocalSub.id)}`;
+          }
+          if (currentLocalSub?.subscriberId && currentLocalSub.subscriberId !== subId && currentLocalSub.subscriberId !== "SUB-0000") {
+            orConditions += `,subscriberId.eq.${encodeURIComponent(currentLocalSub.subscriberId)}`;
+          }
+
           const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orConditions})&order=updatedAt.desc&limit=1`;
           const supaRes = await fetch(supaUrl, {
             headers: {
               apikey: supaKey,
               Authorization: "Bearer " + supaKey,
             },
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(6000),
           });
           if (supaRes.ok) {
             supaResponded = true;
@@ -553,6 +596,12 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         // If an active/valid subscription was found, update state
         if (confirmedSub) {
           const fresh = confirmedSub;
+          // Remember last confirmed subscriber ID in local storage for resilient lookups
+          if (typeof window !== "undefined" && fresh.subscriberId) {
+            try {
+              localStorage.setItem("penrx_last_subscriber_id", fresh.subscriberId);
+            } catch {}
+          }
           set((state) => ({
             subscriptions: [
               fresh,
@@ -568,14 +617,23 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
 
         // Safeguard: Check if locally we already have an active unexpired subscription
         const currentLocalSub = get().currentSubscription || get().subscriptions.find((s) => s.status === "ACTIVE");
-        const isLocalActiveUnexpired = currentLocalSub && currentLocalSub.status === "ACTIVE" && (
-          !currentLocalSub.expiresAt || new Date(currentLocalSub.expiresAt).getTime() > Date.now()
+        const isLocalActiveUnexpired = Boolean(
+          currentLocalSub &&
+          currentLocalSub.status === "ACTIVE" &&
+          (!currentLocalSub.expiresAt || new Date(currentLocalSub.expiresAt).getTime() > Date.now())
         );
 
-        // If cloud database explicitly confirmed that no subscription exists (deleted or revoked by admin)
-        // Require direct cloud confirmation (supaResponded && supaReportedNoSub) so transient serverless cold starts never revoke an active subscription
-        if (supaResponded && supaReportedNoSub && (serverReportedNoSub || !serverResponded)) {
-          // If locally we had an active unexpired subscription, ensure we don't revoke it unless admin deliberately deleted it from Supabase
+        // CRITICAL DEFENSIVE FIX: If locally we already hold an active unexpired subscription,
+        // NEVER revoke or wipe it merely because background sync timed out, Vercel was cold,
+        // the admin portal was closed, or Supabase query returned empty!
+        // The doctor's subscription remains ACTIVE until its legitimate expiration date.
+        if (isLocalActiveUnexpired) {
+          return;
+        }
+
+        // Only wipe if BOTH the server and Supabase explicitly responded and confirmed no record exists,
+        // AND we hold no valid active unexpired local subscription
+        if (supaResponded && supaReportedNoSub && serverResponded && serverReportedNoSub) {
           set({
             subscriptions: [],
             currentSubscription: null,
@@ -588,8 +646,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               localStorage.removeItem("penrx_was_pending");
             } catch {}
           }
-          // Note: Doctor clinic profile and patient prescriptions are NEVER wiped
-          // during subscription sync to ensure medical data safety.
         }
       },
     }),

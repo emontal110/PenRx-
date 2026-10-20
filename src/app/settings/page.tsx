@@ -772,14 +772,20 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    let isCancelled = false;
     async function checkHardware() {
-      const mobile = isMobileDevice();
-      setIsMobile(mobile);
-      if (mobile) {
-        const avail = await isBiometricAvailable();
-        setHasBiometricsHardware(avail);
-      } else {
-        setHasBiometricsHardware(false);
+      try {
+        const mobile = isMobileDevice();
+        if (isCancelled) return;
+        setIsMobile(mobile);
+        if (mobile) {
+          const avail = await isBiometricAvailable();
+          if (!isCancelled) setHasBiometricsHardware(avail);
+        } else {
+          if (!isCancelled) setHasBiometricsHardware(false);
+        }
+      } catch {
+        if (!isCancelled) setHasBiometricsHardware(false);
       }
     }
     checkHardware();
@@ -807,7 +813,10 @@ export default function SettingsPage() {
       }
     }
 
-    return () => unsub?.();
+    return () => {
+      isCancelled = true;
+      unsub?.();
+    };
   }, []);
 
   // When branches exist/change, manage initial edit mode
