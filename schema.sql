@@ -261,6 +261,8 @@ ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "allowedMachineIds" TEXT[] D
 ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "durationDays" INTEGER DEFAULT 30;
 ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "activatedAt" TIMESTAMP(3);
 ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMP(3);
+ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
 
 -- Ensure all columns exist on existing Prescription table in Supabase (Prisma relational compatibility)
 ALTER TABLE "Prescription" ADD COLUMN IF NOT EXISTS "subscriberId" TEXT;
@@ -399,4 +401,13 @@ CREATE POLICY "service_role_cloud_backup" ON "CloudBackup"
     TO service_role
     USING (true)
     WITH CHECK (true);
+
+-- Enable Realtime broadcasting on Subscription table for instant client sync
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE "Subscription";
+EXCEPTION
+    WHEN duplicate_object THEN null;
+    WHEN undefined_object THEN null;
+END $$;
+
 

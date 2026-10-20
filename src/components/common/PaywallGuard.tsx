@@ -3,12 +3,13 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Lock, Crown, ArrowRight, ShieldAlert, Sparkles, Copy, Smartphone, Laptop, Building2 } from "lucide-react";
+import { Lock, Crown, ArrowRight, ShieldAlert, Sparkles, Copy, Smartphone, Laptop, Building2, RefreshCw } from "lucide-react";
 import { useSubscriptionStore, getSubscriptionDetails } from "@/store/useSubscriptionStore";
 import { processSyncQueue } from "@/lib/prescriptionSync";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
 import { runDailySilentBackupAndAutoArchival } from "@/lib/backupService";
+import { initSubscriptionRealtimeListener } from "@/lib/supabaseRealtime";
 
 export function PaywallGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -16,10 +17,9 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
   const { subscriptions, machineId, subscriberId, syncWithServer, initHardwareId, signatureToken, lastOnlineCheck } = useSubscriptionStore();
   const { clinic } = useClinicStore();
   const [mounted, setMounted] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(false);
-  const [offlineMode, setOfflineMode] = useState(false);
+  const [isCheckingOnline, setIsCheckingOnline] = useState(false);
 
-  const subDetails = getSubscriptionDetails(subscriptions, machineId, subscriberId);
+  const subDetails = getSubscriptionDetails(subscriptions, machineId, subscriberId, lastOnlineCheck);
   const isHydrated = useSubscriptionStore.persist?.hasHydrated?.() ?? mounted;
 
   // Track subscription status via ref to avoid re-creating the interval on every render
@@ -45,6 +45,9 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
     initHardwareId().catch(() => {});
     syncWithServer();
 
+    // Initialize Supabase Realtime WebSocket listener for instantaneous (<300ms) sync with admin portal
+    const cleanupRealtime = initSubscriptionRealtimeListener();
+
     // Defer heavy maintenance (smart cache cleaner, sync queue, silent daily backup)
     // by 15 seconds after app startup so the initial screen loads and responds with zero CPU lag
     const deferredTasksTimer = setTimeout(() => {
@@ -55,16 +58,13 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
       } catch {}
     }, 15000);
 
-    // Adaptive background sync with stable interval:
-    // Uses a single interval that checks current status via refs
+    // Adaptive background heartbeat sync:
     const interval = setInterval(() => {
-      const ms = isPendingRef.current ? 15000 : isActiveRef.current ? 90000 : 45000;
-      // The throttle in useSubscriptionStore already prevents excessive calls,
-      // so we can safely call syncWithServer and let the throttle manage timing
       syncWithServer();
-    }, 15000); // Check every 15 seconds, throttle handles the rest
+    }, 15000); // Check every 15 seconds
 
     return () => {
+      cleanupRealtime();
       clearTimeout(deferredTasksTimer);
       clearInterval(interval);
     };
@@ -87,28 +87,14 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
     }
   }, [mounted, isHydrated, subDetails.isActive, isProfileComplete, pathname, safeRedirect]);
 
-  // Auto-redirect new unactivated users directly to /subscriptions (Protective Wall)
+  // Auto-redirect new or unactivated/revoked users directly to /subscriptions (Protective Wall)
   useEffect(() => {
-    if (mounted && isHydrated && !subDetails.isActive) {
+    if (mounted && isHydrated && !subDetails.isActive && !subDetails.isOfflineGraceExpired) {
       if (!pathname?.startsWith("/subscriptions") && !pathname?.startsWith("/api")) {
         safeRedirect("/subscriptions");
       }
     }
-  }, [mounted, isHydrated, subDetails.isActive, pathname, safeRedirect]);
-
-  // --- ANTI-TAMPER: Detect and flag excessive offline usage (Classico-style 7-day limit) ---
-  useEffect(() => {
-    if (!mounted) return;
-    if (lastOnlineCheck && signatureToken) {
-      const diffMs = Date.now() - lastOnlineCheck;
-      const diffDays = diffMs / (1000 * 60 * 60 * 24);
-      if (diffDays > 7) {
-        setOfflineMode(true);
-      } else {
-        setOfflineMode(false);
-      }
-    }
-  }, [mounted, lastOnlineCheck, signatureToken]);
+  }, [mounted, isHydrated, subDetails.isActive, subDetails.isOfflineGraceExpired, pathname, safeRedirect]);
 
   // Allow API routes freely
   if (pathname?.startsWith("/api")) {
@@ -120,7 +106,48 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  // If subscription is ACTIVE
+  // 1. BLOCKING SCREEN: 3-Day Offline Grace Limit Exceeded (Strict Anti-Tamper & Security)
+  if (subDetails.isOfflineGraceExpired) {
+    return (
+      <div className="min-h-[85vh] flex items-center justify-center p-4">
+        <div className="w-full max-w-lg bg-slate-900/95 border-2 border-amber-500/50 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-2xl text-center relative overflow-hidden">
+          <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-inner">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2.5">
+            <span className="px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs font-black">
+              تنبيه الأمان والترخيص • حماية العيادة 🛡️
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-100">
+              انتهت فترة السماح بالعمل دون إنترنت (3 أيام)
+            </h2>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              يعمل نظام PenRX+ بمرونة تامة دون إنترنت لمدة تصل إلى 3 أيام متواصلة كحد أقصى لحماية بيانات عيادتك. لتأكيد استمرار ترخيصك ومزامنة الحساب، يرجى توصيل الجهاز بشبكة الإنترنت والضغط على زر التحقق أدناه.
+            </p>
+          </div>
+
+          <button
+            onClick={async () => {
+              setIsCheckingOnline(true);
+              try {
+                await syncWithServer();
+              } finally {
+                setIsCheckingOnline(false);
+              }
+            }}
+            disabled={isCheckingOnline}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:brightness-110 text-white font-black text-sm shadow-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isCheckingOnline ? "animate-spin" : ""}`} />
+            <span>{isCheckingOnline ? "جارٍ التحقق من السيرفر..." : "🔄 فحص الاتصال وتحديث الترخيص الآن"}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. If subscription is ACTIVE
   if (subDetails.isActive) {
     // MANDATORY PROFILE ENFORCEMENT: User CANNOT use any part of the app until doctorName, clinicName, and phone are saved!
     if (!isProfileComplete) {
@@ -161,26 +188,14 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
       );
     }
 
-    // Also block if offline limit exceeded (7 days without internet check)
-    if (offlineMode) {
-      return (
-        <>
-          {children}
-          <div className="fixed bottom-4 right-4 z-50 max-w-xs p-4 rounded-2xl bg-amber-950/90 border border-amber-500/40 text-xs text-amber-300 font-bold shadow-2xl backdrop-blur-xl">
-            <span>⚠️ تنبيه: مضى أكثر من 7 أيام دون اتصال بالإنترنت. يرجى الاتصال لتحديث حالة الاشتراك.</span>
-          </div>
-        </>
-      );
-    }
-
     return <>{children}</>;
   }
 
-  // Allow access to subscriptions page only when subscription is NOT yet active (so they can subscribe)
+  // 3. Allow access to subscriptions page only when subscription is NOT active (so they can subscribe)
   if (pathname?.startsWith("/subscriptions")) {
     return <>{children}</>;
   }
 
-  // When inactive and attempting to access any other page, return null while router.replace("/subscriptions") executes to eliminate any screen flash
+  // When inactive and attempting to access any other page, return null while router.replace("/subscriptions") executes
   return null;
 }

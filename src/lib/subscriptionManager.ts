@@ -898,6 +898,16 @@ export async function suspendSubscription(subscriptionId: string): Promise<Subsc
   globalSubscriptionsCache.set(sub.id, sub);
 
   try {
+    await fetchSupabaseRest(`?id=eq.${encodeURIComponent(sub.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "SUSPENDED",
+        updatedAt: sub.updatedAt,
+      }),
+    });
+  } catch {}
+
+  try {
     await prisma.subscription.update({
       where: { id: sub.id },
       data: { status: "SUSPENDED", updatedAt: new Date() },

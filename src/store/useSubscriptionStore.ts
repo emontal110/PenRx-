@@ -77,16 +77,24 @@ export function hasUsedFreeTrial(subscriptions: SubscriptionRecord[], currentMac
   );
 }
 
+export const MAX_OFFLINE_GRACE_MS = 3 * 24 * 60 * 60 * 1000; // 3 days (72 hours max continuous offline)
+
 export function getSubscriptionDetails(
   subscriptions: SubscriptionRecord[],
   currentMachineId: string,
-  currentSubscriberId?: string | null
+  currentSubscriberId?: string | null,
+  lastOnlineCheck?: number
 ) {
   const effectiveSubId =
     currentSubscriberId ||
     (typeof window !== "undefined"
       ? localStorage.getItem("penrx_last_subscriber_id") || useSubscriptionStore.getState()?.subscriberId
       : null);
+
+  const effectiveLastOnline =
+    typeof lastOnlineCheck === "number"
+      ? lastOnlineCheck
+      : (typeof window !== "undefined" ? useSubscriptionStore.getState()?.lastOnlineCheck || 0 : 0);
 
   // Find subscriptions matching current machine ID OR allowed devices OR subscriber ID
   let matchingSubs = (subscriptions || []).filter(
@@ -121,6 +129,7 @@ export function getSubscriptionDetails(
       isPending: false,
       isExpired: false,
       isSuspended: false,
+      isOfflineGraceExpired: false,
       daysRemaining: 0,
       planName: "غير مسجل",
       subscriberId: "لم ينشأ بعد",
@@ -142,10 +151,19 @@ export function getSubscriptionDetails(
   }
 
   const isExpired = sub.status === "ACTIVE" && daysRemaining <= 0;
-  // If subscription status is ACTIVE on database/portal and duration has not elapsed, it is unlocked and active
-  const isActive = sub.status === "ACTIVE" && !isExpired;
-  const isPending = sub.status === "PENDING";
   const isSuspended = sub.status === "SUSPENDED";
+  const isPending = sub.status === "PENDING";
+
+  // Check 3-day offline limit:
+  // If subscription is ACTIVE, but device has not verified online for > 3 days (72 hours),
+  // lock the app and demand an internet connection.
+  const isOfflineGraceExpired =
+    sub.status === "ACTIVE" &&
+    effectiveLastOnline > 0 &&
+    now - effectiveLastOnline > MAX_OFFLINE_GRACE_MS;
+
+  // Active only if: status is ACTIVE, not expired by date, and not exceeded 3-day offline grace!
+  const isActive = sub.status === "ACTIVE" && !isExpired && !isOfflineGraceExpired;
 
   let statusLabel = "مفعل وجاهز للعمل ✅";
   let badgeColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
@@ -159,6 +177,9 @@ export function getSubscriptionDetails(
   } else if (isExpired) {
     statusLabel = "انتهت فترة الصلاحية ⚠️";
     badgeColor = "bg-rose-500/20 text-rose-300 border-rose-500/40";
+  } else if (isOfflineGraceExpired) {
+    statusLabel = "انتهت مهلة العمل بدون إنترنت (3 أيام) — يرجى الاتصال بالإنترنت للتحقق 🌐";
+    badgeColor = "bg-amber-500/20 text-amber-300 border-amber-500/40";
   }
 
   return {
@@ -166,6 +187,7 @@ export function getSubscriptionDetails(
     isPending,
     isExpired,
     isSuspended,
+    isOfflineGraceExpired,
     daysRemaining,
     planName: sub.planName,
     subscriberId: sub.subscriberId || "SUB-0000",
@@ -611,42 +633,38 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             subscriberId: fresh.subscriberId || state.subscriberId,
             signatureToken: fresh.signatureToken || state.signatureToken,
             lastSyncedAt: Date.now(),
+            lastOnlineCheck: Date.now(), // Resets 3-day offline countdown
           }));
           return;
         }
 
-        // Safeguard: Check if locally we already have an active unexpired subscription
-        const currentLocalSub = get().currentSubscription || get().subscriptions.find((s) => s.status === "ACTIVE");
-        const isLocalActiveUnexpired = Boolean(
-          currentLocalSub &&
-          currentLocalSub.status === "ACTIVE" &&
-          (!currentLocalSub.expiresAt || new Date(currentLocalSub.expiresAt).getTime() > Date.now())
-        );
-
-        // CRITICAL DEFENSIVE FIX: If locally we already hold an active unexpired subscription,
-        // NEVER revoke or wipe it merely because background sync timed out, Vercel was cold,
-        // the admin portal was closed, or Supabase query returned empty!
-        // The doctor's subscription remains ACTIVE until its legitimate expiration date.
-        if (isLocalActiveUnexpired) {
-          return;
-        }
-
-        // Only wipe if BOTH the server and Supabase explicitly responded and confirmed no record exists,
-        // AND we hold no valid active unexpired local subscription
-        if (supaResponded && supaReportedNoSub && serverResponded && serverReportedNoSub) {
+        // AUTHORITATIVE ONLINE REVOCATION:
+        // When online, if the authoritative database confirms that no subscription exists for this doctor
+        // (i.e. Admin deleted it from the portal or directly from Supabase via SQL):
+        // WIPE local subscription immediately and clear security tokens so the app locks immediately!
+        if ((supaResponded && supaReportedNoSub) || (serverResponded && serverReportedNoSub)) {
+          console.warn("[PenRX+ License] Online verification confirmed subscription was deleted from database.");
           set({
             subscriptions: [],
             currentSubscription: null,
             signatureToken: null,
             lastSyncedAt: Date.now(),
+            lastOnlineCheck: Date.now(),
           });
           if (typeof window !== "undefined") {
             try {
               localStorage.removeItem("penrx_last_sub");
               localStorage.removeItem("penrx_was_pending");
+              localStorage.removeItem("penrx_last_subscriber_id");
             } catch {}
           }
+          return;
         }
+
+        // OFFLINE MODE:
+        // Neither Supabase nor the Server could be reached (network is disconnected, no Wi-Fi, offline).
+        // Under offline mode, the subscription is safely preserved in local storage and continues working
+        // without interruption for up to 3 days (MAX_OFFLINE_GRACE_MS).
       },
     }),
     {
