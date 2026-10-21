@@ -27,6 +27,10 @@ const nextConfig = {
         source: "/portal",
         destination: "/portal.html",
       },
+      {
+        source: "/admin/portal",
+        destination: "/portal.html",
+      },
     ];
   },
   async headers() {
