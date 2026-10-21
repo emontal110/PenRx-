@@ -63,7 +63,7 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 --decode > penrx-release.keystore
           elif [ ! -f penrx-release.keystore ]; then
-            keytool -genkey -v -keystore penrx-release.keystore -alias "$KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -dname "CN=PenRX+, OU=Medical, O=PenRX, L=Cairo, S=Cairo, C=EG"
+            keytool -genkeypair -v -keystore penrx-release.keystore -alias "$KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -dname "CN=PenRX, OU=Medical, O=PenRX, L=Cairo, ST=Cairo, C=EG"
           fi
 
       - name: Build Android Release APK via Gradle
