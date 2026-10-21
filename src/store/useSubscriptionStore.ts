@@ -70,7 +70,7 @@ interface SubscriptionStoreState {
   adjustSubscriptionDays: (id: string, daysDelta: number) => Promise<void>;
   addDeviceToSubscriber: (subscriptionId: string, newMachineId: string) => Promise<void>;
   removeDeviceFromSubscriber: (subscriptionId: string, targetMachineId: string) => Promise<void>;
-  syncWithServer: () => Promise<void>;
+  syncWithServer: (force?: boolean) => Promise<void>;
 }
 
 export function hasUsedFreeTrial(subscriptions: SubscriptionRecord[], currentMachineId: string): boolean {
@@ -103,25 +103,34 @@ export function getSubscriptionDetails(
       ? lastOnlineCheck
       : (typeof window !== "undefined" ? useSubscriptionStore.getState()?.lastOnlineCheck || 0 : 0);
 
-  // Find subscriptions matching current machine ID OR allowed devices OR subscriber ID
-  let matchingSubs = (subscriptions || []).filter(
-    (s) =>
-      s.machineId === currentMachineId ||
-      (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(currentMachineId)) ||
-      (effectiveSubId && effectiveSubId !== "SUB-0000" && s.subscriberId && s.subscriberId === effectiveSubId)
-  );
+  const normCurrentMachine = (currentMachineId || "").trim().toUpperCase();
+  const normEffectiveSub = (effectiveSubId || "").trim().toUpperCase();
+
+  // Find subscriptions matching current machine ID OR allowed devices OR subscriber ID (case-insensitive)
+  let matchingSubs = (subscriptions || []).filter((s) => {
+    const sMachine = (s.machineId || "").trim().toUpperCase();
+    const sSubId = (s.subscriberId || "").trim().toUpperCase();
+    const inAllowed =
+      Array.isArray(s.allowedMachineIds) &&
+      s.allowedMachineIds.some((m) => (m || "").trim().toUpperCase() === normCurrentMachine);
+    const matchMachine = normCurrentMachine && (sMachine === normCurrentMachine || inAllowed);
+    const matchSub = normEffectiveSub && normEffectiveSub !== "SUB-0000" && sSubId === normEffectiveSub;
+    return matchMachine || matchSub;
+  });
 
   // Fallback: If no match by exact machine ID (e.g. mobile SSAID updated after subscription creation),
-  // but there is an existing ACTIVE unexpired subscription record stored in this installation,
-  // honor it and associate the current machine ID so the doctor is never locked out.
+  // honor ACTIVE or PENDING records stored in this installation so the doctor is never locked out.
   if (matchingSubs.length === 0 && subscriptions && subscriptions.length > 0) {
     const activeCandidate = subscriptions.find(
       (s) =>
         s.status === "ACTIVE" &&
         (!s.expiresAt || new Date(s.expiresAt).getTime() > Date.now())
     );
+    const pendingCandidate = subscriptions.find((s) => s.status === "PENDING");
     if (activeCandidate) {
       matchingSubs = [activeCandidate];
+    } else if (pendingCandidate) {
+      matchingSubs = [pendingCandidate];
     }
   }
 
@@ -314,6 +323,14 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           subscriptions: [newRecord, ...state.subscriptions.filter((s) => s.machineId !== machineId)],
           currentSubscription: newRecord,
         }));
+
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("penrx_last_subscriber_id", subscriberId);
+            localStorage.setItem("penrx_pending_sub_id", newRecord.id);
+            localStorage.setItem("penrx_was_pending", "true");
+          } catch {}
+        }
 
         // 1. Direct Supabase Cloud REST persist (Instant Portal Delivery via Supabase Realtime)
         // Explicitly authorized by PostgreSQL RLS policy "anon_insert_pending_sub" (status = 'PENDING').
@@ -608,10 +625,10 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         } catch {}
       },
 
-      syncWithServer: async () => {
-        // Throttle: Skip if another sync ran less than 5 seconds ago
+      syncWithServer: async (force?: boolean) => {
+        // Throttle: Skip if another sync ran less than 5 seconds ago unless forced
         const now = Date.now();
-        if (now - _lastSyncTime < SYNC_THROTTLE_MS) return;
+        if (!force && now - _lastSyncTime < SYNC_THROTTLE_MS) return;
         _lastSyncTime = now;
 
         const machineId = get().machineId || getOrCreateMachineId();
@@ -621,6 +638,22 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         let confirmedSub: SubscriptionRecord | null = null;
         let serverResponded = false;
         let serverReportedNoSub = false;
+
+        // Check if there is an existing pending request in local store or localStorage
+        const localSubs = get().subscriptions || [];
+        const hasPendingSub =
+          localSubs.some((s) => s.status === "PENDING") ||
+          get().currentSubscription?.status === "PENDING" ||
+          (typeof window !== "undefined" && localStorage.getItem("penrx_was_pending") === "true");
+
+        const currentLocalSub =
+          get().currentSubscription ||
+          localSubs.find((s) => s.status === "ACTIVE") ||
+          localSubs.find((s) => s.status === "PENDING") ||
+          localSubs[0];
+
+        const savedPendingId =
+          typeof window !== "undefined" ? localStorage.getItem("penrx_pending_sub_id") : null;
 
         // 1. Fetch this machine's subscription from the app API
         try {
@@ -704,18 +737,30 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         let supaResponded = false;
         let supaReportedNoSub = false;
         try {
-          const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
-          const currentLocalSub = get().currentSubscription || get().subscriptions.find((s) => s.status === "ACTIVE");
+          const supaKey =
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
 
-          let orConditions = `machineId.eq.${encodeURIComponent(machineId)},allowedMachineIds.cs.{${encodeURIComponent(machineId)}}`;
+          let orConditions = `machineId.ilike.${encodeURIComponent(machineId)},allowedMachineIds.cs.{${encodeURIComponent(machineId)}}`;
+          const mUpper = machineId.toUpperCase();
+          const mLower = machineId.toLowerCase();
+          if (mUpper !== machineId) {
+            orConditions += `,allowedMachineIds.cs.{${encodeURIComponent(mUpper)}}`;
+          }
+          if (mLower !== machineId) {
+            orConditions += `,allowedMachineIds.cs.{${encodeURIComponent(mLower)}}`;
+          }
           if (subId && subId !== "SUB-0000") {
-            orConditions += `,subscriberId.eq.${encodeURIComponent(subId)}`;
+            orConditions += `,subscriberId.ilike.${encodeURIComponent(subId)}`;
           }
           if (currentLocalSub?.id) {
             orConditions += `,id.eq.${encodeURIComponent(currentLocalSub.id)}`;
           }
+          if (savedPendingId && savedPendingId !== currentLocalSub?.id) {
+            orConditions += `,id.eq.${encodeURIComponent(savedPendingId)}`;
+          }
           if (currentLocalSub?.subscriberId && currentLocalSub.subscriberId !== subId && currentLocalSub.subscriberId !== "SUB-0000") {
-            orConditions += `,subscriberId.eq.${encodeURIComponent(currentLocalSub.subscriberId)}`;
+            orConditions += `,subscriberId.ilike.${encodeURIComponent(currentLocalSub.subscriberId)}`;
           }
 
           const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orConditions})&order=updatedAt.desc&limit=1`;
@@ -736,7 +781,10 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             const supaData = await supaRes.json();
             if (Array.isArray(supaData)) {
               if (supaData.length > 0) {
-                confirmedSub = supaData[0];
+                // If confirmedSub from server was not active, but Supabase returned active, prefer active!
+                if (!confirmedSub || (supaData[0].status === "ACTIVE" && confirmedSub.status !== "ACTIVE")) {
+                  confirmedSub = supaData[0];
+                }
               } else {
                 supaReportedNoSub = true;
               }
@@ -753,6 +801,13 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               localStorage.setItem("penrx_last_subscriber_id", fresh.subscriberId);
             } catch {}
           }
+          if (fresh.status === "ACTIVE") {
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.removeItem("penrx_pending_sub_id");
+              } catch {}
+            }
+          }
           set((state) => ({
             subscriptions: [
               fresh,
@@ -767,11 +822,18 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           return;
         }
 
+        // PROTECTION FOR PENDING REQUESTS:
+        // If the user has a pending subscription waiting for admin approval, NEVER wipe it!
+        // The waiting screen must stay visible until the admin explicitly approves or rejects.
+        if (hasPendingSub) {
+          return;
+        }
+
         // AUTHORITATIVE ONLINE REVOCATION:
-        // When online, if the authoritative database confirms that no subscription exists for this doctor
+        // When online, ONLY if BOTH Supabase AND Server explicitly confirm that no subscription exists for this doctor:
         // (i.e. Admin deleted it from the portal or directly from Supabase via SQL):
         // WIPE local subscription immediately and clear security tokens so the app locks immediately!
-        if ((supaResponded && supaReportedNoSub) || (serverResponded && serverReportedNoSub)) {
+        if (supaResponded && supaReportedNoSub && serverResponded && serverReportedNoSub) {
           console.warn("[PenRX+ License] Online verification confirmed subscription was deleted from database.");
           set({
             subscriptions: [],
@@ -784,6 +846,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             try {
               localStorage.removeItem("penrx_last_sub");
               localStorage.removeItem("penrx_was_pending");
+              localStorage.removeItem("penrx_pending_sub_id");
               localStorage.removeItem("penrx_last_subscriber_id");
             } catch {}
           }

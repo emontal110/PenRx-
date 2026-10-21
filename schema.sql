@@ -272,8 +272,15 @@ ALTER TABLE "Prescription" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);
 -- Indexes on Subscription (Safe after column existence check)
 CREATE INDEX IF NOT EXISTS "Subscription_machineId_idx" ON "Subscription"("machineId");
 CREATE INDEX IF NOT EXISTS "Subscription_subscriberId_idx" ON "Subscription"("subscriberId");
+CREATE INDEX IF NOT EXISTS "Subscription_status_idx" ON "Subscription"("status");
+CREATE INDEX IF NOT EXISTS "Subscription_updatedAt_idx" ON "Subscription"("updatedAt" DESC);
 CREATE INDEX IF NOT EXISTS "Prescription_subscriberId_idx" ON "Prescription"("subscriberId");
 CREATE INDEX IF NOT EXISTS "Prescription_isArchived_idx" ON "Prescription"("isArchived");
+
+-- Enable Supabase Realtime broadcast for Subscription changes (if publication exists)
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE "Subscription";
+EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END $$;
 
 -- =========================================================================
 -- Security Hardening: Enable Strict Row Level Security (RLS) on Subscription

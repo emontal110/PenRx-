@@ -48,8 +48,10 @@ async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
  */
 export function safeCompare(a: string, b: string): boolean {
   try {
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
+    const normA = (a || "").trim().toLowerCase();
+    const normB = (b || "").trim().toLowerCase();
+    const bufA = Buffer.from(normA);
+    const bufB = Buffer.from(normB);
     if (bufA.length !== bufB.length) return false;
     return timingSafeEqual(bufA, bufB);
   } catch {
@@ -269,10 +271,15 @@ export async function getSubscriptionByMachine(machineId: string): Promise<Subsc
   if (pending) return pending;
   if (matching[0]) return matching[0];
 
-  // Direct Supabase REST targeted query fallback if not in cache
+  // Direct Supabase REST targeted query fallback if not in cache (case-insensitive)
   try {
+    const lowerId = cleanId.toLowerCase();
+    let orFilter = `machineId.ilike.${encodeURIComponent(cleanId)},allowedMachineIds.cs.{${encodeURIComponent(cleanId)}}`;
+    if (lowerId !== cleanId) {
+      orFilter += `,allowedMachineIds.cs.{${encodeURIComponent(lowerId)}}`;
+    }
     const res = await fetchSupabaseRest(
-      `?or=(machineId.eq.${encodeURIComponent(cleanId)},allowedMachineIds.cs.{${encodeURIComponent(cleanId)}})&limit=5`
+      `?or=(${orFilter})&order=updatedAt.desc&limit=5`
     );
     if (res.ok) {
       const records: SubscriptionRecord[] = await res.json();
@@ -304,9 +311,9 @@ export async function getSubscriptionBySubscriberId(subscriberId: string): Promi
   const found = all.find((s) => s.subscriberId?.toUpperCase() === cleanId) || null;
   if (found) return found;
 
-  // Direct Supabase REST fallback if not in cache
+  // Direct Supabase REST fallback if not in cache (case-insensitive)
   try {
-    const res = await fetchSupabaseRest(`?subscriberId=eq.${encodeURIComponent(cleanId)}&limit=1`);
+    const res = await fetchSupabaseRest(`?subscriberId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=1`);
     if (res.ok) {
       const records = await res.json();
       if (Array.isArray(records) && records.length > 0) {
@@ -601,20 +608,35 @@ export async function editAllowedDevice(
  */
 export async function activateSubscription(subscriptionId: string, durationDays: number): Promise<SubscriptionRecord | null> {
   await hydrateCache(true);
-  const sub = globalSubscriptionsCache.get(subscriptionId);
+  let sub = globalSubscriptionsCache.get(subscriptionId);
+  if (!sub) {
+    try {
+      const directRes = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(subscriptionId)}&limit=1`);
+      if (directRes.ok) {
+        const directRecords: SubscriptionRecord[] = await directRes.json();
+        if (Array.isArray(directRecords) && directRecords.length > 0) {
+          sub = directRecords[0];
+          globalSubscriptionsCache.set(sub.id, sub);
+        }
+      }
+    } catch {}
+  }
   if (!sub) return null;
 
   // Auto-suspend any older ACTIVE subscriptions for this machine or subscriber
   for (const [id, s] of globalSubscriptionsCache.entries()) {
     if (id !== subscriptionId && s.status === "ACTIVE") {
-      const matchMachine = s.machineId === sub.machineId || (Array.isArray(s.allowedMachineIds) && s.allowedMachineIds.includes(sub.machineId));
-      const matchSub = s.subscriberId && sub.subscriberId && s.subscriberId === sub.subscriberId;
+      const matchMachine =
+        (s.machineId || "").toUpperCase() === (sub.machineId || "").toUpperCase() ||
+        (Array.isArray(s.allowedMachineIds) &&
+          s.allowedMachineIds.some((m) => (m || "").toUpperCase() === (sub.machineId || "").toUpperCase()));
+      const matchSub = s.subscriberId && sub.subscriberId && s.subscriberId.toUpperCase() === sub.subscriberId.toUpperCase();
       if (matchMachine || matchSub) {
         s.status = "SUSPENDED";
         s.updatedAt = new Date().toISOString();
         globalSubscriptionsCache.set(id, s);
         try {
-          await fetchSupabaseRest(`?id=eq.${id}`, {
+          await fetchSupabaseRest(`?id=eq.${encodeURIComponent(id)}`, {
             method: "PATCH",
             body: JSON.stringify({ status: "SUSPENDED", updatedAt: s.updatedAt }),
           });
@@ -641,8 +663,11 @@ export async function activateSubscription(subscriptionId: string, durationDays:
 
   // Sync to Supabase REST
   try {
-    await fetchSupabaseRest(`?id=eq.${sub.id}`, {
+    const supaRes = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(sub.id)}`, {
       method: "PATCH",
+      headers: {
+        Prefer: "return=representation",
+      },
       body: JSON.stringify({
         status: "ACTIVE",
         durationDays: days,
@@ -652,7 +677,12 @@ export async function activateSubscription(subscriptionId: string, durationDays:
         updatedAt: sub.updatedAt,
       }),
     });
-  } catch {}
+    if (!supaRes.ok) {
+      console.error("[activateSubscription] Supabase PATCH failed:", supaRes.status, await supaRes.text());
+    }
+  } catch (err) {
+    console.error("[activateSubscription] Supabase PATCH exception:", err);
+  }
 
   return sub;
 }

@@ -123,18 +123,21 @@ export default function SubscriptionsPage() {
 
   const TRANSFER_NUMBER = "01094085228";
 
-  // Fast polling sync (every 8 seconds) for instant unlock upon portal action
-  useEffect(() => {
-    setMounted(true);
-    initHardwareId().catch(() => {});
-    syncWithServer();
-    const interval = setInterval(syncWithServer, 8000);
-    return () => clearInterval(interval);
-  }, [syncWithServer, initHardwareId]);
-
   const subDetails = getSubscriptionDetails(subscriptions, machineId);
   const currentSub = subDetails.record || null;
   const trialClaimed = hasUsedFreeTrial(subscriptions, machineId);
+
+  // Fast polling sync (every 3 seconds when pending for instant unlock upon portal action, otherwise 8s)
+  useEffect(() => {
+    setMounted(true);
+    initHardwareId().catch(() => {});
+    syncWithServer(true);
+    const intervalMs = subDetails.isPending ? 3000 : 8000;
+    const interval = setInterval(() => {
+      syncWithServer(true);
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [syncWithServer, initHardwareId, subDetails.isPending]);
 
   // Monitor activation transition (PENDING -> ACTIVE) to show welcome modal reliably
   useEffect(() => {
