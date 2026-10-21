@@ -346,7 +346,7 @@ printStep(
   6,
   "Git Commit & Release Finalization",
   shouldPush
-    ? "Staging, committing, and pushing to GitHub (main & gh-pages)"
+    ? "Staging, committing, and pushing to GitHub (main branch only)"
     : "Staging and committing locally (GitHub Push skipped by user request)"
 );
 
@@ -368,22 +368,13 @@ try {
 }
 
 if (shouldPush) {
-  // Push to main branch first to reliably trigger GitHub Pages deployment
-  console.log("\n🚀 Pushing to GitHub main branch (triggers web & pages build)...");
+  // Push to main branch
+  console.log("\n🚀 Pushing to GitHub main branch...");
   run("git push origin main");
 
   // Push release tags to trigger cloud release builders
   console.log("🏷 Pushing release tags...");
   run("git push origin --tags");
-
-  // Push to gh-pages branch
-  console.log("🚀 Syncing GitHub Pages hosting branch (gh-pages)...");
-  run("git push origin main:gh-pages --force");
-
-  // Align local gh-pages branch pointer directly with main so divergence never occurs
-  try {
-    run("git branch -f gh-pages main");
-  } catch (e) {}
 } else {
   console.log("\n🔒 GitHub push skipped as requested. All release files are ready locally.");
 }
