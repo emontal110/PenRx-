@@ -160,7 +160,7 @@ console.log(`✓ Active version configured: v${activeVersion}`);
 completeStep(1, "Version Configured to v" + activeVersion);
 
 // ====================================================================
-// STEP 2: Build Next.js & Prisma
+// STEP 2: Build Next.js & Supabase
 // ====================================================================
 printStep(
   2,
