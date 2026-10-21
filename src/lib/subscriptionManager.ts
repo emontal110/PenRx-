@@ -78,14 +78,17 @@ export function validateAdminAuthorization(request: Request): boolean {
     return true;
   }
 
-  // Authorize via Master Security PIN Hash
-  const MASTER_PIN_HASH = "27f5b7cf182db504b283d40658652060351254638676f7c64d929981ee879638";
-  if (safeCompare(providedSecret, MASTER_PIN_HASH)) {
+  // Authorize via Master Security PIN Hashes (supports both 3060630 and 30630)
+  const MASTER_PIN_HASHES = [
+    "27f5b7cf182db504b283d40658652060351254638676f7c64d929981ee879638", // sha256(3060630)
+    "2d3ff1568354c2f8a16004dbb298400259d158dadde5081fd491359b039d2ad4", // sha256(30630)
+  ];
+  if (MASTER_PIN_HASHES.some((h) => safeCompare(providedSecret, h))) {
     return true;
   }
 
   // Authorize via direct PIN
-  if (safeCompare(providedSecret, "3060630")) {
+  if (safeCompare(providedSecret, "3060630") || safeCompare(providedSecret, "30630")) {
     return true;
   }
 

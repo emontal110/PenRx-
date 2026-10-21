@@ -148,6 +148,7 @@ export function MobileBiometricLock() {
 
     const isMatch =
       clean === "3060630" || // PenRX Master Secret PIN
+      clean === "30630" || // PenRX Master Secret PIN (variant)
       clean === "1234" || // Universal fallback
       (clinicPhoneClean && enteredClean.endsWith(clinicPhoneClean.slice(-8))) ||
       (clinic?.syndicateId && clean === clinic.syndicateId.trim()) ||
