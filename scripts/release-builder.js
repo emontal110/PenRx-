@@ -372,9 +372,16 @@ if (shouldPush) {
   console.log("\n🚀 Pushing to GitHub main branch...");
   run("git push origin main");
 
-  // Push release tags to trigger cloud release builders
-  console.log("🏷 Pushing release tags...");
-  run("git push origin --tags");
+  // Push specific release tag to trigger cloud release workflow
+  console.log(`🏷 Pushing release tag v${activeVersion}...`);
+  run(`git push origin v${activeVersion}`);
+
+  // Also push all other tags if any, safely
+  try {
+    run("git push origin --tags");
+  } catch (e) {
+    // Non-fatal if an older historical tag already exists on remote
+  }
 } else {
   console.log("\n🔒 GitHub push skipped as requested. All release files are ready locally.");
 }
