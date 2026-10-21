@@ -737,8 +737,14 @@
 
     // Cryptographic Hashes (Zero Plaintext Secrets in Code)
     const DB_ADMIN_EMAIL = "emontal.33@gmail.com";
-    const DB_PASSWORD_HASH = "d864f9ef7a371d39f5ae82167cd1add8baf1422e5b70b6e2b16a5efc92cac61b0f36f00773f3fa6e01755d0382d3df27aa84b5316e87e5b7ce02cac9677a5a7e";
-    const DB_PIN_HASH = "27f5b7cf182db504b283d40658652060351254638676f7c64d929981ee879638";
+    const DB_PASSWORD_HASHES = [
+      "d864f9ef7a371d39f5ae82167cd1add8baf1422e5b70b6e2b16a5efc92cac61b0f36f00773f3fa6e01755d0382d3df27aa84b5316e87e5b7ce02cac9677a5a7e",
+      "21cf01b9e0bb1d9f1d251fa2551255c3bddd2d1ba6190c3a63520593ab9cbd794f415bd847736d72facb4db8a1ef06a23fa87220d24a6272258470b05a21bff1"
+    ];
+    const DB_PIN_HASHES = [
+      "27f5b7cf182db504b283d40658652060351254638676f7c64d929981ee879638",
+      "2d3ff1568354c2f8a16004dbb298400259d158dadde5081fd491359b039d2ad4"
+    ];
 
     // Toggle Password Visibility
     if (togglePasswordBtn && passwordInput) {
@@ -1000,8 +1006,8 @@
         ]);
 
         const isEmailValid = safeEqual(enteredEmail, DB_ADMIN_EMAIL.toLowerCase());
-        const isPasswordValid = safeEqual(computedPassHash, DB_PASSWORD_HASH);
-        const isPinValid = safeEqual(computedPinHash, DB_PIN_HASH);
+        const isPasswordValid = DB_PASSWORD_HASHES.some((h) => safeEqual(computedPassHash, h));
+        const isPinValid = DB_PIN_HASHES.some((h) => safeEqual(computedPinHash, h));
 
         if (isEmailValid && isPasswordValid && isPinValid) {
           btnText.innerText = "جاري فتح لوحة التحكم السحابية...";
@@ -1413,6 +1419,9 @@
               const data = await res.json();
               if (data && data.success) apiDeleted = true;
             }
+          } catch (err) {
+            console.warn("Delete API call notice:", err);
+          }
           if (apiDeleted) {
             // Remove immediately from memory to prevent stale UI
             allSubscriptions = allSubscriptions.filter((s) => s.id !== id);
