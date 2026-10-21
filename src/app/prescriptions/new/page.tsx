@@ -19,10 +19,17 @@ import {
   Plus,
   Settings2,
   History,
+  Eye,
+  ZoomIn,
+  ZoomOut,
+  Pill,
+  Trash2,
+  X,
 } from "lucide-react";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
 import { LivePrescriptionPreview } from "@/components/prescription/LivePrescriptionPreview";
+import { InlineDrugPadInput } from "@/components/prescription/InlineDrugPadInput";
 import { AiInteractionModal, InteractionAlert } from "@/components/prescription/AiInteractionModal";
 import { PrintValidationModal } from "@/components/prescription/PrintValidationModal";
 import { WhatsAppShareModal } from "@/components/prescription/WhatsAppShareModal";
@@ -35,6 +42,7 @@ import {
   searchPatientCatalog,
   normalizePatientName,
 } from "@/lib/patientRegistry";
+import { getApiUrl } from "@/lib/cloudProxy";
 
 export default function NewPrescriptionPage() {
   const {
@@ -90,6 +98,30 @@ export default function NewPrescriptionPage() {
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [isNewRxPromptOpen, setIsNewRxPromptOpen] = useState(false);
   const [isPrescriptionSaved, setIsPrescriptionSaved] = useState(false);
+  const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false);
+  const [mobilePreviewScale, setMobilePreviewScale] = useState(0.85);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const updateScale = () => {
+        const w = window.innerWidth;
+        if (w < 380) {
+          setMobilePreviewScale(0.68);
+        } else if (w < 480) {
+          setMobilePreviewScale(0.76);
+        } else if (w < 640) {
+          setMobilePreviewScale(0.85);
+        } else if (w < 1024) {
+          setMobilePreviewScale(0.92);
+        } else {
+          setMobilePreviewScale(1);
+        }
+      };
+      updateScale();
+      window.addEventListener("resize", updateScale);
+      return () => window.removeEventListener("resize", updateScale);
+    }
+  }, []);
 
   // Background AI interaction alerts & modal state (Silent background engine)
   const [aiAlerts, setAiAlerts] = useState<InteractionAlert[]>([]);
@@ -105,7 +137,7 @@ export default function NewPrescriptionPage() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch("/api/ai/analyze-prescription", {
+        const res = await fetch(getApiUrl("/api/ai/analyze-prescription"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -324,7 +356,7 @@ export default function NewPrescriptionPage() {
     if (typeof window !== "undefined") {
       items.forEach((it) => {
         if (it.isCustom || !it.drugId) {
-          fetch("/api/drugs/custom", {
+          fetch(getApiUrl("/api/drugs/custom"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -404,7 +436,7 @@ export default function NewPrescriptionPage() {
     if (typeof window !== "undefined") {
       items.forEach((it) => {
         if (it.isCustom || !it.drugId) {
-          fetch("/api/drugs/custom", {
+          fetch(getApiUrl("/api/drugs/custom"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -481,9 +513,11 @@ export default function NewPrescriptionPage() {
         </div>
       </div>
 
-      {/* Unified Single-Column Flow: Patient & Clinic Box at Top, Interactive Prescription Sheet Directly Below */}
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Patient Information & Branch Selector Box */}
+      {/* Responsive Grid: Side-by-Side on Desktop (EXE), Clean Dedicated Input Form on Mobile (APK) */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        {/* Column 1: Input Forms (Patient Data + Drug Entry Pad + Diagnosis & Notes + Action Bar) */}
+        <div className="xl:col-span-5 2xl:col-span-5 space-y-6">
+          {/* Patient Information & Branch Selector Box */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <span className="text-xs font-black text-slate-200 flex items-center gap-2">
@@ -942,27 +976,269 @@ export default function NewPrescriptionPage() {
             </div>
           </div>
 
-        {/* Live Interactive Prescription Pad with In-Place Drug Writing & Search */}
-        <LivePrescriptionPreview
-          prescriptionNo={prescriptionNo}
-          patient={patient}
-          diagnosis={diagnosis}
-          notes={notes}
-          setNotes={setNotes}
-          items={items}
-          onAddItem={addItem}
-          onRemoveItem={removeItem}
-          onSaveAndPrint={handlePrintOnly}
-          onShareWhatsApp={handleShareWhatsApp}
-          onSaveOnly={handleSaveOnly}
-          onRequestNewPrescription={handleRequestNewPrescription}
-          aiAlerts={aiAlerts}
-          onOpenAiAlert={(alert) => {
-            setSelectedAiAlert(alert);
-            setIsAiModalOpen(true);
-          }}
-        />
+          {/* In-Place Drug Search & Add Pad */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="text-xs font-black text-slate-200 flex items-center gap-2">
+                <Pill className="w-4 h-4 text-emerald-400" />
+                <span>إضافة دواء جديد للروشتة</span>
+              </span>
+              <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                {items.length} {items.length === 1 ? "دواء" : "أدوية"}
+              </span>
+            </div>
+
+            <InlineDrugPadInput
+              onAddItem={addItem}
+              primaryColor={clinic.primaryColor || "#059669"}
+              currentItems={items}
+            />
+          </div>
+
+          {/* Diagnosis & Instructions Card */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="text-xs font-black text-slate-200 flex items-center gap-2">
+                <Stethoscope className="w-4 h-4 text-cyan-400" />
+                <span>التشخيص الطبي والتعليمات الختامية</span>
+              </span>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-300">التشخيص الطبي (Diagnosis):</label>
+                <input
+                  type="text"
+                  value={diagnosis}
+                  onChange={(e) => setDiagnosis(e.target.value)}
+                  placeholder="اكتب التشخيص الطبي (مثال: التهاب حاد بالحلق، نزلة معوية...)"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-300">تعليمات وإرشادات المريض (تطبع بأسفل الروشتة):</label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع للاطمئنان..."
+                  className="w-full px-4 py-2 rounded-xl bg-slate-950 border border-slate-700/80 font-medium text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Prescribed Items Quick Summary & Action Bar */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="text-xs font-black text-slate-200 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span>قائمة الأدوية بالروشتة ({items.length})</span>
+              </span>
+
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearItems}
+                  className="text-[11px] font-bold text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+                >
+                  مسح الكل
+                </button>
+              )}
+            </div>
+
+            {items.length === 0 ? (
+              <p className="text-xs text-slate-500 text-center py-4">لم يتم إضافة أي أدوية حتى الآن</p>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {items.map((it, idx) => (
+                  <div
+                    key={it.id}
+                    className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/80 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold text-[10px] flex items-center justify-center shrink-0">
+                          {idx + 1}
+                        </span>
+                        <h4 className="font-black text-slate-100 truncate">{it.drugName}</h4>
+                      </div>
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {it.doseForm} • {it.frequency} {it.duration ? `• ${it.duration}` : ""}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeItem(it.id)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      title="حذف هذا الدواء"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Quick Actions Grid */}
+            <div className="pt-2 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={handlePrintOnly}
+                className="py-3 px-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>حفظ وطباعة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShareWhatsApp}
+                className="py-3 px-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-700 hover:brightness-110 text-white font-black text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>واتساب</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveOnly}
+                className="py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-xs border border-slate-700 shadow flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5 text-cyan-400" />
+                <span>حفظ فقط</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRequestNewPrescription}
+                className="py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 shadow flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>جديدة</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Column 2: Live Prescription Sheet (Desktop / EXE Side-by-Side View) */}
+        <div className="hidden xl:block xl:col-span-7 2xl:col-span-7 sticky top-20">
+          <LivePrescriptionPreview
+            prescriptionNo={prescriptionNo}
+            patient={patient}
+            diagnosis={diagnosis}
+            notes={notes}
+            setNotes={setNotes}
+            items={items}
+            onAddItem={addItem}
+            onRemoveItem={removeItem}
+            onSaveAndPrint={handlePrintOnly}
+            onShareWhatsApp={handleShareWhatsApp}
+            onSaveOnly={handleSaveOnly}
+            onRequestNewPrescription={handleRequestNewPrescription}
+            aiAlerts={aiAlerts}
+            onOpenAiAlert={(alert) => {
+              setSelectedAiAlert(alert);
+              setIsAiModalOpen(true);
+            }}
+          />
+        </div>
       </div>
+
+      {/* Mobile Floating Action Button (FAB) for Live Prescription Sheet */}
+      <div className="xl:hidden fixed bottom-20 left-4 z-40 select-none">
+        <button
+          type="button"
+          onClick={() => setIsMobilePreviewOpen(true)}
+          className="flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs shadow-2xl shadow-emerald-950/80 border-2 border-emerald-300 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+          title="معاينة ورقة الروشتة الحية"
+        >
+          <Eye className="w-4 h-4 stroke-[2.5]" />
+          <span>معاينة الروشتة</span>
+          {items.length > 0 && (
+            <span className="w-5 h-5 rounded-full bg-slate-950 text-emerald-400 text-[10px] font-mono flex items-center justify-center font-bold">
+              {items.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Mobile Live Prescription Sheet Modal (with Responsive Scaling & Pinch/Zoom Controls) */}
+      {isMobilePreviewOpen && (
+        <div className="xl:hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex flex-col animate-in fade-in duration-200">
+          {/* Modal Header */}
+          <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4 text-emerald-400" />
+              <h3 className="text-sm font-black text-slate-100">معاينة الروشتة الحية</h3>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                {Math.round(mobilePreviewScale * 100)}%
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Zoom Controls */}
+              <button
+                type="button"
+                onClick={() => setMobilePreviewScale((s) => Math.max(0.5, s - 0.1))}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                title="تصغير"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobilePreviewScale((s) => Math.min(1.2, s + 0.1))}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                title="تكبير"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsMobilePreviewOpen(false)}
+                className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 transition-colors"
+                title="إغلاق المعاينة"
+              >
+                <X className="w-5 h-5 stroke-[2.5]" />
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Content with Responsive Scaling */}
+          <div className="flex-1 overflow-x-auto overflow-y-auto p-4 flex justify-center items-start">
+            <div
+              style={{
+                transform: `scale(${mobilePreviewScale})`,
+                transformOrigin: "top center",
+              }}
+              className="transition-transform duration-150 w-full max-w-4xl"
+            >
+              <LivePrescriptionPreview
+                prescriptionNo={prescriptionNo}
+                patient={patient}
+                diagnosis={diagnosis}
+                notes={notes}
+                setNotes={setNotes}
+                items={items}
+                onAddItem={addItem}
+                onRemoveItem={removeItem}
+                onSaveAndPrint={handlePrintOnly}
+                onShareWhatsApp={handleShareWhatsApp}
+                onSaveOnly={handleSaveOnly}
+                onRequestNewPrescription={handleRequestNewPrescription}
+                aiAlerts={aiAlerts}
+                onOpenAiAlert={(alert) => {
+                  setSelectedAiAlert(alert);
+                  setIsAiModalOpen(true);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modern Print Validation Alert Modal */}
       <PrintValidationModal

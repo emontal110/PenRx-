@@ -15,12 +15,27 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   overflow-x: hidden;
   direction: rtl;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Custom modern scrollbars */
+/* Native App Feel: Eliminate blue tap highlights and disable text selection on UI controls */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+nav,
+[role="button"],
+.select-none {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Custom sleek scrollbars for Desktop EXE and modern browsers */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
   background: #020617;
@@ -28,9 +43,10 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #1e293b;
   border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #059669;
 }
 
 /* Print Specific Rules for Prescription Printing (Strict Single Page Guarantee) */

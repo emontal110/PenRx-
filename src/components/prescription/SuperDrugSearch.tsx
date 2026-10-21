@@ -33,6 +33,7 @@ import { recordDrugPrescribed } from "@/lib/drugTracker";
 import { PrescriptionItem, usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { showGlobalToast } from "@/components/common/GlobalToast";
 import { getSmartDrugDosage, getCleanEnglishDrugName } from "@/lib/smartDrugDosage";
+import { getApiUrl } from "@/lib/cloudProxy";
 
 interface SuperDrugSearchProps {
   onAddItem: (item: Omit<PrescriptionItem, "id">) => void;
@@ -198,7 +199,7 @@ export function SuperDrugSearch({
           `/api/drugs/search?q=${encodeURIComponent(query.trim())}&includeActiveIngredient=${searchByActiveIngredient}`
         );
         const data = await res.json();
-        const resultList = data.results || [];
+        const resultList = (data.results || []).slice(0, 25);
         setResults(resultList);
         setExecutionTime(data.executionTimeMs ?? 0);
         setIsExternalResult(!!data.hasExternalResults);
@@ -208,7 +209,7 @@ export function SuperDrugSearch({
         if (resultList.length === 0 && query.trim().length >= 2) {
           setIsAiLoading(true);
           try {
-            const aiRes = await fetch("/api/drugs/ai-suggest", {
+            const aiRes = await fetch(getApiUrl("/api/drugs/ai-suggest"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ drugName: query.trim() }),
@@ -321,7 +322,7 @@ export function SuperDrugSearch({
     setTimeout(() => inputRef.current?.focus(), 50);
 
     // 3. Auto-save to Supabase DB so ALL doctors see it next time (self-learning)
-    fetch("/api/drugs/custom", {
+    fetch(getApiUrl("/api/drugs/custom"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -342,7 +343,7 @@ export function SuperDrugSearch({
     setIsSavingCustom(true);
 
     try {
-      const res = await fetch("/api/drugs/custom", {
+      const res = await fetch(getApiUrl("/api/drugs/custom"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -421,7 +422,7 @@ export function SuperDrugSearch({
 
     // Auto-learn: If custom item or manual drug, auto-save to cloud repository so all doctors benefit
     if (isCustomItem && finalDrugName) {
-      fetch("/api/drugs/custom", {
+      fetch(getApiUrl("/api/drugs/custom"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -719,7 +720,7 @@ export function SuperDrugSearch({
 
                   {/* Results */}
                   <div className="divide-y divide-slate-800/50">
-                    {results.map((drug) => (
+                    {results.slice(0, 25).map((drug) => (
                       <button
                         key={drug.id}
                         type="button"

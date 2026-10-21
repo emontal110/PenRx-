@@ -543,3 +543,54 @@ export async function authenticateWithBiometrics(
 
   return { success: false, error: "الجهاز لا يدعم المصادقة بالبصمة" };
 }
+
+// ===== CLOCK TAMPERING & SERVER TIME DEFENSE =====
+const LAST_SERVER_TIME_KEY = "penrx_last_verified_server_time";
+
+/**
+ * Persists the latest verified authoritative server time.
+ * Only moves forward to prevent clock rollback exploits.
+ */
+export function recordServerTime(serverTimestampMs: number): void {
+  if (typeof window === "undefined" || !serverTimestampMs || isNaN(serverTimestampMs)) return;
+  try {
+    const currentRecorded = getRecordedServerTime();
+    if (serverTimestampMs > currentRecorded) {
+      localStorage.setItem(LAST_SERVER_TIME_KEY, String(serverTimestampMs));
+    }
+  } catch {}
+}
+
+/**
+ * Retrieves the highest recorded authoritative server timestamp.
+ */
+export function getRecordedServerTime(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const val = localStorage.getItem(LAST_SERVER_TIME_KEY);
+    return val ? parseInt(val, 10) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Validates local device clock against authoritative server time records.
+ * Returns true if the device time was manipulated/rolled backwards.
+ */
+export function detectClockTampering(knownServerTime?: number): { tampered: boolean; reason?: string } {
+  if (typeof window === "undefined") return { tampered: false };
+  const now = Date.now();
+  const recorded = Math.max(getRecordedServerTime(), knownServerTime || 0);
+
+  // If local device time is more than 30 minutes behind the last recorded server time:
+  // User has rolled back their clock to bypass subscription expiry!
+  if (recorded > 0 && now < (recorded - 30 * 60 * 1000)) {
+    return {
+      tampered: true,
+      reason: "تم رصد تقديم أو إرجاع في ساعة الجهاز. يرجى ضبط توقيت الهاتف/الكمبيوتر على الوضع التلقائي للمتابعة.",
+    };
+  }
+  return { tampered: false };
+}
+

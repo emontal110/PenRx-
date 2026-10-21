@@ -22,15 +22,15 @@ echo [i] Opening Admin Portal in your default browser...
 echo [i] Project Directory: %CD%
 echo.
 
-if exist "%CD%\portal.html" (
-    echo [i] Opening file: %CD%\portal.html
-    start "" "%CD%\portal.html"
-) else if exist "%CD%\public\portal.html" (
+if exist "%CD%\public\portal.html" (
     echo [i] Opening file: %CD%\public\portal.html
     start "" "%CD%\public\portal.html"
+) else if exist "%CD%\portal.html" (
+    echo [i] Opening file: %CD%\portal.html
+    start "" "%CD%\portal.html"
 ) else (
-    echo [i] Opening URL: http://localhost:3000/admin/portal
-    start "" "http://localhost:3000/admin/portal"
+    echo [i] Opening URL: http://localhost:3000/portal
+    start "" "http://localhost:3000/portal"
 )
 
 echo [OK] Portal launched.

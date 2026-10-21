@@ -124,6 +124,7 @@ export function Navbar() {
                   alt="PenRX+"
                   fill
                   priority
+                  unoptimized
                   sizes="40px"
                   className="object-cover"
                 />
@@ -281,7 +282,10 @@ export function Navbar() {
       </header>
 
       {/* ===== MOBILE BOTTOM DOCK (Clean, Ergonomic & Modern) ===== */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-2xl border-t border-slate-800/80 px-3 py-2 shadow-2xl safe-area-bottom">
+      <nav
+        aria-label="التنقل الرئيسي"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-2xl border-t border-slate-800/80 px-3 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl select-none"
+      >
         <div className="flex items-center justify-around max-w-md mx-auto">
           {MOBILE_DOCK.map((item) => {
             const Icon = item.icon;
@@ -293,9 +297,10 @@ export function Navbar() {
                   key={item.href}
                   href={item.href}
                   onClick={(e) => handleProtectedNav(e, item.href)}
-                  className="-mt-5 p-3 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 shadow-xl shadow-emerald-950/60 border-2 border-slate-950 active:scale-95 transition-transform flex flex-col items-center justify-center"
+                  className="-mt-6 p-3.5 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 shadow-xl shadow-emerald-950/60 border-4 border-slate-950 active:scale-95 transition-all flex flex-col items-center justify-center hover:brightness-110"
+                  title={item.label}
                 >
-                  <Icon className="w-6 h-6 stroke-[2.5]" />
+                  <Icon className="w-6 h-6 stroke-[3]" />
                 </Link>
               );
             }
@@ -305,9 +310,9 @@ export function Navbar() {
                 key={item.href}
                 href={item.href}
                 onClick={(e) => handleProtectedNav(e, item.href)}
-                className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
+                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-xl transition-all active:scale-95 ${
                   isActive
-                    ? "text-emerald-400 font-black"
+                    ? "text-emerald-400 font-black bg-emerald-500/10"
                     : "text-slate-400 hover:text-slate-200 font-semibold"
                 }`}
               >
@@ -317,7 +322,7 @@ export function Navbar() {
             );
           })}
         </div>
-      </div>
+      </nav>
     </>
   );
 }

@@ -13,6 +13,7 @@
 import { usePrescriptionStore, SavedPrescription, PatientInfo } from "@/store/usePrescriptionStore";
 import { useClinicStore, ClinicSettings } from "@/store/useClinicStore";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
+import { getApiUrl } from "@/lib/cloudProxy";
 
 const MAGIC_HEADER = "PRX_ENC_V2";
 // [SECURITY FIX CRIT-03]: No hardcoded fallback key in source code.
@@ -389,7 +390,7 @@ export async function restoreFromBackupBuffer(
     const subState = useSubscriptionStore.getState();
     const subId = subState.subscriberId || "PRX-BACKUP-RESTORE";
     for (const rx of payload.prescriptions) {
-      fetch("/api/prescriptions/sync", {
+      fetch(getApiUrl("/api/prescriptions/sync"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -464,7 +465,7 @@ export async function uploadBackupToCloud(
     throw new Error("لا يوجد معرف اشتراك مسجل للمزامنة السحابية");
   }
 
-  const res = await fetch("/api/backup/cloud", {
+  const res = await fetch(getApiUrl("/api/backup/cloud"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -511,7 +512,7 @@ export async function fetchLatestCloudBackupInfo(): Promise<{
   }
 
   const res = await fetch(
-    `/api/backup/cloud?subscriberId=${encodeURIComponent(targetKey)}&machineId=${encodeURIComponent(machineId || "")}`
+    getApiUrl(`/api/backup/cloud?subscriberId=${encodeURIComponent(targetKey)}&machineId=${encodeURIComponent(machineId || "")}`)
   );
   if (!res.ok) {
     return { exists: false, message: "تعذر الاتصال بخدمة النسخ السحابي" };

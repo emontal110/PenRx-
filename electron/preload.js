@@ -48,5 +48,10 @@ contextBridge.exposeInMainWorld("penrxDesktop", {
   quitAndInstallUpdate: () => ipcRenderer.invoke("quit-and-install-update"),
   checkDifferentialUpdate: () => ipcRenderer.invoke("check-differential-update"),
   downloadDifferentialUpdate: () => ipcRenderer.invoke("download-differential-update"),
+  /**
+   * Signals the main process that React hydration is complete and UI is ready.
+   * Enables seamless handover from splash screen to main window with zero black screen.
+   */
+  signalReady: () => ipcRenderer.send("app-ready"),
 });
 

@@ -35,6 +35,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" className="dark">
+      <head>
+        <link rel="preload" as="image" href="/logo-penrx.jpg" />
+      </head>
       <body suppressHydrationWarning className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
         <AppHydrationSplash>
           {/* Unified Sticky Header: binds TitleBar + Navbar together so they stick smoothly with zero content clipping on scroll */}

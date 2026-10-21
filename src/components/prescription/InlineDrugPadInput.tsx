@@ -180,7 +180,7 @@ export function InlineDrugPadInput({
           { signal: controller.signal }
         );
         const data = await res.json();
-        const list: DrugRecord[] = data.results || [];
+        const list: DrugRecord[] = (data.results || []).slice(0, 25);
         setResults(list);
         setHighlightedIndex(0);
         setIsOfflineMode(false);
@@ -620,7 +620,7 @@ export function InlineDrugPadInput({
               </div>
 
               {results.length > 0 ? (
-                results.map((drug, idx) => {
+                results.slice(0, 25).map((drug, idx) => {
                   const isSelected = idx === highlightedIndex;
                   const conflict = checkInstantDrugConflict(drug, currentItems);
 

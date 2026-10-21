@@ -40,9 +40,9 @@ jobs:
       - name: Prepare Web Assets for Mobile
         run: |
           mkdir -p out
-          cp mobile.html out/index.html
-          cp docs/logo-penrx.jpg out/logo-penrx.jpg 2>/dev/null || true
-          cp docs/favicon.ico out/favicon.ico 2>/dev/null || true
+          cp public/mobile.html out/index.html 2>/dev/null || cp public/portal.html out/index.html
+          cp public/logo-penrx.jpg out/logo-penrx.jpg 2>/dev/null || true
+          cp public/favicon.ico out/favicon.ico 2>/dev/null || true
           cp public/icon-512.png out/icon-512.png 2>/dev/null || true
           cp public/error.html out/error.html 2>/dev/null || true
 
@@ -51,6 +51,20 @@ jobs:
 
       - name: Sync Android Native Assets
         run: npx cap sync android
+
+      - name: Setup Release Keystore
+        working-directory: android/app
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'penrx123456' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'penrx' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'penrx123456' }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > penrx-release.keystore
+          elif [ ! -f penrx-release.keystore ]; then
+            keytool -genkey -v -keystore penrx-release.keystore -alias "$KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -dname "CN=PenRX+, OU=Medical, O=PenRX, L=Cairo, S=Cairo, C=EG"
+          fi
 
       - name: Build Android Release APK via Gradle
         working-directory: android
@@ -93,9 +107,6 @@ jobs:
             "NEXT_PUBLIC_APP_URL=http://localhost:3000" \
             "PENRX_CLOUD_API_URL=https://pen-rx.vercel.app" \
             "NEXT_TELEMETRY_DISABLED=1" > .env
-
-      - name: Generate Prisma Client
-        run: npx prisma generate
 
       - name: Build Web Application
         run: npx next build

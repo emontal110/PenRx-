@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { PrescriptionItem, PatientInfo } from "@/store/usePrescriptionStore";
+import { getApiUrl } from "@/lib/cloudProxy";
 
 interface AiAdvisorProps {
   items: PrescriptionItem[];
@@ -52,7 +53,7 @@ export function AiPrescriptionInteractionAdvisor({ items, patient, onAlertsChang
 
     setIsScanning(true);
     try {
-      const res = await fetch("/api/ai/analyze-prescription", {
+      const res = await fetch(getApiUrl("/api/ai/analyze-prescription"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

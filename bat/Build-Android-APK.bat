@@ -49,14 +49,12 @@ echo.
 echo 2. Syncing Capacitor Android Assets...
 if not exist "out" mkdir "out"
 if exist "public\error.html" copy /Y "public\error.html" "out\error.html" >nul 2>&1
-if not exist "out\index.html" (
-    if exist "mobile.html" (
-        copy /Y "mobile.html" "out\index.html" >nul 2>&1
-    ) else if exist "docs\index.html" (
-        copy /Y "docs\index.html" "out\index.html" >nul 2>&1
-    ) else (
-        echo ^<!DOCTYPE html^>^<html^>^<head^>^<meta charset="utf-8"^>^<title^>PenRX+^</title^>^</head^>^<body^>PenRX+ Mobile^</body^>^</html^> > "out\index.html"
-    )
+if exist "public\mobile.html" (
+    copy /Y "public\mobile.html" "out\index.html" >nul 2>&1
+) else if exist "public\download.html" (
+    copy /Y "public\download.html" "out\index.html" >nul 2>&1
+) else if not exist "out\index.html" (
+    echo ^<!DOCTYPE html^>^<html^>^<head^>^<meta charset="utf-8"^>^<title^>PenRX+^</title^>^</head^>^<body^>PenRX+ Mobile^</body^>^</html^> > "out\index.html"
 )
 call npx cap sync android
 

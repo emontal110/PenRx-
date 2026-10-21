@@ -81,10 +81,9 @@ if (fs.existsSync(androidGradlePath)) {
   console.log(`✓ Updated android/app/build.gradle (versionCode: ${newVersionCode}, versionName: "${newVersion}")`);
 }
 
-// 4. Update index.html, docs/index.html, portal.html, and docs/portal.html version labels
+// 4. Update download.html and portal HTML files version labels
 const landingFiles = [
-  path.join(rootDir, "index.html"),
-  path.join(rootDir, "docs", "index.html")
+  path.join(rootDir, "public", "download.html")
 ];
 for (const file of landingFiles) {
   if (fs.existsSync(file)) {
@@ -97,11 +96,9 @@ for (const file of landingFiles) {
 }
 
 const portalFiles = [
-  path.join(rootDir, "portal.html"),
-  path.join(rootDir, "docs", "portal.html"),
   path.join(rootDir, "public", "portal.html"),
-  path.join(rootDir, "mobile.html"),
-  path.join(rootDir, "public", "mobile.html")
+  path.join(rootDir, "public", "mobile.html"),
+  path.join(rootDir, "public", "download.html")
 ];
 for (const file of portalFiles) {
   if (fs.existsSync(file)) {

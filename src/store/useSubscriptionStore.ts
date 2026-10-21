@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { getOrCreateMachineId, initializeHardwareMachineId } from "@/lib/deviceSecurity";
+import {
+  getOrCreateMachineId,
+  initializeHardwareMachineId,
+  recordServerTime,
+  detectClockTampering,
+} from "@/lib/deviceSecurity";
+import { getApiUrl } from "@/lib/cloudProxy";
 
 // [SECURITY FIX]: All privileged cloud operations go through the app's own API
 // routes (/api/subscriptions, /api/system/verify) — never direct Supabase calls.
@@ -36,6 +42,7 @@ interface SubscriptionStoreState {
   lastSyncedAt: number;
   signatureToken: string | null;     // HMAC-signed offline token (mirrors Classico)
   lastOnlineCheck: number;           // Timestamp of last successful online verification
+  lastKnownServerTime: number;       // Anti-tamper verified server timestamp
 
   setMachineId: (id: string) => void;
   setSubscriberId: (id: string) => void;
@@ -162,6 +169,29 @@ export function getSubscriptionDetails(
     effectiveLastOnline > 0 &&
     now - effectiveLastOnline > MAX_OFFLINE_GRACE_MS;
 
+  // Anti-Clock Tampering Check (Detect backwards device clock rollback):
+  const clockCheck = detectClockTampering();
+  const isClockTampered = clockCheck.tampered;
+
+  if (isClockTampered) {
+    return {
+      isActive: false,
+      isPending: false,
+      isExpired: false,
+      isSuspended: false,
+      isOfflineGraceExpired: false,
+      isClockTampered: true,
+      tamperReason: clockCheck.reason,
+      daysRemaining: 0,
+      planName: sub ? sub.planName : "غير مسجل",
+      subscriberId: sub?.subscriberId || "SUB-0000",
+      allowedDevicesCount: sub?.allowedMachineIds?.length || 1,
+      statusLabel: "تم رصد تلاعب بتوقيت وساعة الجهاز ⚠️",
+      badgeColor: "bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse",
+      record: sub,
+    };
+  }
+
   // Active only if: status is ACTIVE, not expired by date, and not exceeded 3-day offline grace!
   const isActive = sub.status === "ACTIVE" && !isExpired && !isOfflineGraceExpired;
 
@@ -188,6 +218,7 @@ export function getSubscriptionDetails(
     isExpired,
     isSuspended,
     isOfflineGraceExpired,
+    isClockTampered: false,
     daysRemaining,
     planName: sub.planName,
     subscriberId: sub.subscriberId || "SUB-0000",
@@ -218,6 +249,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       lastSyncedAt: 0,
       signatureToken: null,
       lastOnlineCheck: 0,
+      lastKnownServerTime: 0,
 
       setMachineId: (id: string) => set({ machineId: id }),
       setSubscriberId: (id: string) => set({ subscriberId: id }),
@@ -314,7 +346,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         try {
           let res: Response | null = null;
           try {
-            res = await fetch("/api/subscriptions", {
+            res = await fetch(getApiUrl("/api/subscriptions"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(newRecord),
@@ -323,7 +355,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             // Local server unreachable in some desktop runs — proceed to cloud fallback
           }
 
-          // If local server failed, returned 5xx, or timed out, send directly to Cloud API
+          // If primary failed, returned 5xx, or timed out, send directly to Cloud API
           if (!res || !res.ok) {
             try {
               res = await fetch("https://pen-rx.vercel.app/api/subscriptions", {
@@ -336,6 +368,9 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
 
           if (res && res.ok) {
             const data = await res.json();
+            if (data?.serverTime) {
+              recordServerTime(data.serverTime);
+            }
             if (data && data.subscription) {
               set((state) => ({
                 subscriberId: data.subscription.subscriberId || subscriberId,
@@ -379,7 +414,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           try {
             let res: Response | null = null;
             try {
-              res = await fetch("/api/subscriptions", {
+              res = await fetch(getApiUrl("/api/subscriptions"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(cancelPayload),
@@ -413,7 +448,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         try {
           let res: Response | null = null;
           try {
-            res = await fetch("/api/subscriptions", {
+            res = await fetch(getApiUrl("/api/subscriptions"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(linkPayload),
@@ -468,7 +503,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/system/verify", {
+          await fetch(getApiUrl("/api/system/verify"), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, action: "ACTIVATE", durationDays: duration }),
@@ -484,7 +519,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/system/verify", {
+          await fetch(getApiUrl("/api/system/verify"), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, action: "SUSPEND" }),
@@ -498,7 +533,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch(`/api/system/verify?id=${encodeURIComponent(id)}`, {
+          await fetch(getApiUrl(`/api/system/verify?id=${encodeURIComponent(id)}`), {
             method: "DELETE",
           });
         } catch {}
@@ -521,7 +556,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/system/verify", {
+          await fetch(getApiUrl("/api/system/verify"), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, action: "ADJUST_DAYS", daysDelta }),
@@ -545,7 +580,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/system/verify", {
+          await fetch(getApiUrl("/api/system/verify"), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id: subscriptionId, action: "ADD_DEVICE", machineId: cleanMachine }),
@@ -565,7 +600,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }));
 
         try {
-          await fetch("/api/system/verify", {
+          await fetch(getApiUrl("/api/system/verify"), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id: subscriptionId, action: "REMOVE_DEVICE", machineId: targetMachineId }),
@@ -593,13 +628,22 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           if (subId && subId !== "SUB-0000") {
             query += `&subscriberId=${encodeURIComponent(subId)}`;
           }
-          const res = await fetch(`/api/subscriptions?${query}`, {
+          const res = await fetch(getApiUrl(`/api/subscriptions?${query}`), {
             cache: "no-store",
             signal: AbortSignal.timeout(8000),
           });
           if (res.ok) {
             serverResponded = true;
+            const dateHdr = res.headers.get("date");
+            if (dateHdr) {
+              const dt = new Date(dateHdr).getTime();
+              if (!isNaN(dt) && dt > 0) recordServerTime(dt);
+            }
             const data = await res.json();
+            if (data?.serverTime) {
+              recordServerTime(data.serverTime);
+              set({ lastKnownServerTime: Math.max(get().lastKnownServerTime || 0, data.serverTime) });
+            }
             if (data && data.subscription) {
               confirmedSub = data.subscription;
             } else if (data && data.subscription === null) {
@@ -620,13 +664,22 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             url += `&offlineToken=${encodeURIComponent(offlineToken)}`;
           }
 
-          const res = await fetch(url, {
+          const res = await fetch(getApiUrl(url), {
             cache: "no-store",
             signal: AbortSignal.timeout(8000),
           });
           if (res.ok) {
             serverResponded = true;
+            const dateHdr = res.headers.get("date");
+            if (dateHdr) {
+              const dt = new Date(dateHdr).getTime();
+              if (!isNaN(dt) && dt > 0) recordServerTime(dt);
+            }
             const data = await res.json();
+            if (data?.serverTime) {
+              recordServerTime(data.serverTime);
+              set({ lastKnownServerTime: Math.max(get().lastKnownServerTime || 0, data.serverTime) });
+            }
             if (data.success && data.status === "active") {
               if (data.subscription) {
                 confirmedSub = data.subscription;
@@ -675,6 +728,11 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           });
           if (supaRes.ok) {
             supaResponded = true;
+            const supaDateHdr = supaRes.headers.get("date");
+            if (supaDateHdr) {
+              const dt = new Date(supaDateHdr).getTime();
+              if (!isNaN(dt) && dt > 0) recordServerTime(dt);
+            }
             const supaData = await supaRes.json();
             if (Array.isArray(supaData)) {
               if (supaData.length > 0) {

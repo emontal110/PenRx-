@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 
 // ── Security: secrets are read lazily from the environment only. ──────────────
@@ -225,54 +224,6 @@ async function hydrateCache(force = false): Promise<void> {
   } catch (err: any) {
     console.warn("Supabase REST cache hydration notice:", err.message);
   }
-
-  // 2. Fallback to Prisma if available (with strict 2s timeout to prevent hanging on IPv6-only DB host)
-  try {
-    const prismaPromise = prisma.subscription.findMany({
-      orderBy: { createdAt: "desc" },
-    });
-    const prismaTimeout = new Promise<any[]>((_, reject) =>
-      setTimeout(() => reject(new Error("Prisma timeout")), 2000)
-    );
-    const records = await Promise.race([prismaPromise, prismaTimeout]);
-
-    globalSubscriptionsCache.clear();
-    for (const r of records) {
-      const subId = (r as any).subscriberId || generateSubscriberId();
-      const expiresAtIso = r.expiresAt ? r.expiresAt.toISOString() : undefined;
-      const signatureToken =
-        r.signatureToken ||
-        (r.status === "ACTIVE" && expiresAtIso
-          ? safeGenerateSignedToken(r.machineId, expiresAtIso, subId)
-          : undefined);
-
-      globalSubscriptionsCache.set(r.id, {
-        id: r.id,
-        subscriberId: subId,
-        planId: r.planId,
-        planName: r.planName,
-        price: r.price,
-        paymentMethod: (r.paymentMethod as any) || "vodafone",
-        senderPhone: r.senderPhone,
-        transactionRef: r.transactionRef,
-        status: (r.status as any) || "PENDING",
-        machineId: r.machineId,
-        allowedMachineIds: r.allowedMachineIds || [],
-        doctorName: r.doctorName || undefined,
-        clinicName: r.clinicName || undefined,
-        durationDays: r.durationDays || 30,
-        isTrial: r.isTrial || false,
-        activatedAt: r.activatedAt ? r.activatedAt.toISOString() : undefined,
-        expiresAt: expiresAtIso,
-        signatureToken,
-        createdAt: r.createdAt.toISOString(),
-        updatedAt: r.updatedAt.toISOString(),
-      });
-    }
-    isCacheHydrated = true;
-  } catch (err: any) {
-    console.warn("Notice: Prisma DB hydration deferred, using memory cache:", err.message);
-  }
 }
 
 /**
@@ -281,63 +232,6 @@ async function hydrateCache(force = false): Promise<void> {
 export async function getAllSubscriptions(): Promise<SubscriptionRecord[]> {
   await hydrateCache();
 
-  // If cache is already fresh from Supabase REST, return immediately without stalling on Prisma
-  if (isCacheHydrated && globalSubscriptionsCache.size > 0) {
-    for (const s of globalSubscriptionsCache.values()) {
-      if (s.status === "ACTIVE" && s.expiresAt && !s.signatureToken) {
-        s.signatureToken = safeGenerateSignedToken(s.machineId, s.expiresAt, s.subscriberId);
-      }
-    }
-    return Array.from(globalSubscriptionsCache.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }
-
-  // Try DB update with safe 2s timeout
-  try {
-    const prismaPromise = prisma.subscription.findMany({
-      orderBy: { createdAt: "desc" },
-    });
-    const prismaTimeout = new Promise<any[]>((_, reject) =>
-      setTimeout(() => reject(new Error("Prisma timeout")), 2000)
-    );
-    const records = await Promise.race([prismaPromise, prismaTimeout]);
-    for (const r of records) {
-      const existing = globalSubscriptionsCache.get(r.id);
-      const subId = (r as any).subscriberId || existing?.subscriberId || generateSubscriberId();
-      const expiresAtIso = r.expiresAt ? r.expiresAt.toISOString() : undefined;
-      const signatureToken =
-        r.signatureToken ||
-        (r.status === "ACTIVE" && expiresAtIso
-          ? safeGenerateSignedToken(r.machineId, expiresAtIso, subId)
-          : undefined);
-
-      globalSubscriptionsCache.set(r.id, {
-        id: r.id,
-        subscriberId: subId,
-        planId: r.planId,
-        planName: r.planName,
-        price: r.price,
-        paymentMethod: (r.paymentMethod as any) || "vodafone",
-        senderPhone: r.senderPhone,
-        transactionRef: r.transactionRef,
-        status: (r.status as any) || "PENDING",
-        machineId: r.machineId,
-        allowedMachineIds: r.allowedMachineIds || [],
-        doctorName: r.doctorName || undefined,
-        clinicName: r.clinicName || undefined,
-        durationDays: r.durationDays || 30,
-        isTrial: r.isTrial || false,
-        activatedAt: r.activatedAt ? r.activatedAt.toISOString() : undefined,
-        expiresAt: expiresAtIso,
-        signatureToken,
-        createdAt: r.createdAt.toISOString(),
-        updatedAt: r.updatedAt.toISOString(),
-      });
-    }
-  } catch {}
-
-  // Guarantee every active subscription in cache has a signature token
   for (const s of globalSubscriptionsCache.values()) {
     if (s.status === "ACTIVE" && s.expiresAt && !s.signatureToken) {
       s.signatureToken = safeGenerateSignedToken(s.machineId, s.expiresAt, s.subscriberId);
@@ -488,50 +382,6 @@ export async function submitSubscription(data: {
     console.warn("Supabase REST persist notice:", err.message);
   }
 
-  // Also persist to PostgreSQL via Prisma if reachable (with 2s timeout guard)
-  try {
-    await Promise.race([
-      prisma.subscription.upsert({
-        where: { id },
-        update: {
-          subscriberId,
-          planId: record.planId,
-          planName: record.planName,
-          price: record.price,
-          paymentMethod: record.paymentMethod,
-          senderPhone: record.senderPhone,
-          transactionRef: record.transactionRef,
-          doctorName: record.doctorName || null,
-          clinicName: record.clinicName || null,
-          durationDays: record.durationDays,
-          isTrial: record.isTrial || false,
-          allowedMachineIds: record.allowedMachineIds,
-          updatedAt: new Date(),
-        },
-        create: {
-          id,
-          subscriberId,
-          planId: record.planId,
-          planName: record.planName,
-          price: record.price,
-          paymentMethod: record.paymentMethod,
-          senderPhone: record.senderPhone,
-          transactionRef: record.transactionRef,
-          status: "PENDING",
-          machineId: record.machineId,
-          allowedMachineIds: record.allowedMachineIds,
-          doctorName: record.doctorName || null,
-          clinicName: record.clinicName || null,
-          durationDays: record.durationDays,
-          isTrial: record.isTrial || false,
-        },
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Prisma upsert timeout")), 2000)),
-    ]);
-  } catch (err: any) {
-    console.warn("DB subscription persist notice:", err.message);
-  }
-
   return record;
 }
 
@@ -582,16 +432,6 @@ export async function linkDeviceToSubscriber(
   globalSubscriptionsCache.set(sub.id, sub);
 
   try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: {
-        allowedMachineIds: existingAllowed,
-        updatedAt: new Date(),
-      },
-    });
-  } catch {}
-
-  try {
     await fetchSupabaseRest(`?id=eq.${sub.id}`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -621,13 +461,6 @@ export async function addAllowedDevice(subscriptionId: string, newMachineId: str
   sub.allowedMachineIds = list;
   sub.updatedAt = new Date().toISOString();
   globalSubscriptionsCache.set(sub.id, sub);
-
-  try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { allowedMachineIds: list, updatedAt: new Date() },
-    });
-  } catch {}
 
   try {
     await fetchSupabaseRest(`?id=eq.${sub.id}`, {
@@ -661,13 +494,6 @@ export async function removeAllowedDevice(subscriptionId: string, targetMachineI
   }
   sub.updatedAt = new Date().toISOString();
   globalSubscriptionsCache.set(sub.id, sub);
-
-  try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { machineId: sub.machineId, allowedMachineIds: list, updatedAt: new Date() },
-    });
-  } catch {}
 
   try {
     await fetchSupabaseRest(`?id=eq.${sub.id}`, {
@@ -704,13 +530,6 @@ export async function setPrimaryDevice(subscriptionId: string, machineId: string
   }
   sub.updatedAt = new Date().toISOString();
   globalSubscriptionsCache.set(sub.id, sub);
-
-  try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { machineId: sub.machineId, allowedMachineIds: sub.allowedMachineIds, updatedAt: new Date() },
-    });
-  } catch {}
 
   try {
     await fetchSupabaseRest(`?id=eq.${sub.id}`, {
@@ -761,13 +580,6 @@ export async function editAllowedDevice(
   globalSubscriptionsCache.set(sub.id, sub);
 
   try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { machineId: sub.machineId, allowedMachineIds: sub.allowedMachineIds, updatedAt: new Date() },
-    });
-  } catch {}
-
-  try {
     await fetchSupabaseRest(`?id=eq.${sub.id}`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -803,10 +615,6 @@ export async function activateSubscription(subscriptionId: string, durationDays:
             method: "PATCH",
             body: JSON.stringify({ status: "SUSPENDED", updatedAt: s.updatedAt }),
           });
-          await prisma.subscription.update({
-            where: { id },
-            data: { status: "SUSPENDED", updatedAt: new Date() },
-          });
         } catch {}
       }
     }
@@ -840,20 +648,6 @@ export async function activateSubscription(subscriptionId: string, durationDays:
         signatureToken,
         updatedAt: sub.updatedAt,
       }),
-    });
-  } catch {}
-
-  try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: {
-        status: "ACTIVE",
-        durationDays: days,
-        activatedAt: now,
-        expiresAt: expires,
-        signatureToken,
-        updatedAt: now,
-      },
     });
   } catch {}
 
@@ -896,19 +690,6 @@ export async function adjustSubscriptionDays(subscriptionId: string, daysDelta: 
     });
   } catch {}
 
-  try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: {
-        status: "ACTIVE",
-        expiresAt: newExpiry,
-        durationDays: newDays,
-        signatureToken,
-        updatedAt: new Date(),
-      },
-    });
-  } catch {}
-
   return sub;
 }
 
@@ -934,13 +715,6 @@ export async function suspendSubscription(subscriptionId: string): Promise<Subsc
     });
   } catch {}
 
-  try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { status: "SUSPENDED", updatedAt: new Date() },
-    });
-  } catch {}
-
   return sub;
 }
 
@@ -950,18 +724,11 @@ export async function suspendSubscription(subscriptionId: string): Promise<Subsc
  */
 export async function deleteSubscription(subscriptionId: string): Promise<boolean> {
   await hydrateCache();
-  const sub =
-    globalSubscriptionsCache.get(subscriptionId) ||
-    (await prisma.subscription.findUnique({ where: { id: subscriptionId } }).catch(() => null));
+  const sub = globalSubscriptionsCache.get(subscriptionId);
   const subscriberId = sub?.subscriberId;
   const machineId = sub?.machineId;
 
   globalSubscriptionsCache.delete(subscriptionId);
-
-  // 1. Delete subscription from Prisma & Supabase
-  try {
-    await prisma.subscription.deleteMany({ where: { id: subscriptionId } });
-  } catch {}
 
   try {
     await fetchSupabaseRest(`?id=eq.${encodeURIComponent(subscriptionId)}`, {
@@ -970,7 +737,7 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
     });
   } catch {}
 
-  // 2. Cascade delete all prescriptions & backups belonging to this subscriber
+  // Cascade delete all prescriptions & backups belonging to this subscriber
   const SUPABASE_BASE_ROOT = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
   const supabaseHeaders = {
     apikey: SUPABASE_KEY,
@@ -1002,13 +769,6 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
         `${SUPABASE_BASE_ROOT}/Subscription?subscriberId=eq.${encodeURIComponent(subscriberId)}`,
         { method: "DELETE", headers: supabaseHeaders }
       );
-    } catch {}
-
-    // Delete relational prescriptions from Prisma safely
-    try {
-      await prisma.prescription.deleteMany({
-        where: { subscriberId },
-      });
     } catch {}
   }
 
@@ -1051,7 +811,6 @@ export async function updateSubscriptionDoctorProfile(
       ? `${clinicName.trim()} • 📞 ${phone.trim()}`
       : clinicName.trim();
   sub.clinicName = formattedClinicName;
-  // senderPhone is the payment phone number — keep it intact!
   sub.updatedAt = new Date().toISOString();
   globalSubscriptionsCache.set(sub.id, sub);
 
@@ -1064,17 +823,6 @@ export async function updateSubscriptionDoctorProfile(
         clinicName: formattedClinicName,
         updatedAt: sub.updatedAt,
       }),
-    });
-  } catch {}
-
-  try {
-    await prisma.subscription.update({
-      where: { id: sub.id },
-      data: {
-        doctorName,
-        clinicName: formattedClinicName,
-        updatedAt: new Date(),
-      },
     });
   } catch {}
 

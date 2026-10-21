@@ -267,11 +267,11 @@ export async function POST(request: Request) {
       // Store in subscriber bucket
       subscriberMap.set(data.id, data);
 
-      // Relational persistence in PostgreSQL via Prisma (Clinic -> Patient -> Prescription -> Items)
+      // Relational persistence in PostgreSQL via Supabase REST (Clinic -> Patient -> Prescription -> Items)
       try {
         const richRx = decompressPrescription(data);
         savePrescriptionRelational(richRx, undefined, subscriberId).catch((err) => {
-          console.warn("[SyncAPI] Prisma relational save deferred:", err.message);
+          console.warn("[SyncAPI] Supabase relational save deferred:", err.message);
         });
       } catch {}
 
@@ -320,7 +320,7 @@ export async function POST(request: Request) {
 
       subscriberMap.delete(prescriptionId);
 
-      // Delete from Prisma relational tables
+      // Delete from Supabase relational tables
       try {
         deletePrescriptionRelational(prescriptionId).catch(() => {});
       } catch {}

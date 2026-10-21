@@ -649,10 +649,10 @@ function getAppIconPath() {
 
 function getLogoBase64() {
   const candidates = [
+    path.join(__dirname, "../public/logo-penrx.jpg"),
     path.join(__dirname, "../public/icon-512.png"),
-    path.join(__dirname, "../logo-penrx.jpg"),
+    path.join(process.resourcesPath, "public/logo-penrx.jpg"),
     path.join(process.resourcesPath, "public/icon-512.png"),
-    path.join(process.resourcesPath, "logo-penrx.jpg"),
   ];
   for (const c of candidates) {
     try {
@@ -834,6 +834,11 @@ function buildSplashHtml(logoBase64) {
 }
 
 function createSplashWindow() {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.focus();
+    return splashWindow;
+  }
+
   const iconPath = getAppIconPath();
   const logoBase64 = getLogoBase64();
 
@@ -850,6 +855,7 @@ function createSplashWindow() {
     icon: iconPath,
     backgroundColor: "#00000000",
     show: false,
+    paintWhenInitiallyHidden: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -890,6 +896,7 @@ function createMainWindow(targetUrl) {
     icon: iconPath,
     backgroundColor: "#0b1329",
     show: false,
+    paintWhenInitiallyHidden: true, // Prevents black screen by rendering in memory before display
     ...(isWindows
       ? {
           titleBarStyle: "hidden",
@@ -914,23 +921,26 @@ function createMainWindow(targetUrl) {
     if (hasRevealed) return;
     hasRevealed = true;
 
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.maximize();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+
+    // Smooth handover: Splash closes only AFTER main window is visibly displayed on screen
     setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.maximize();
-        mainWindow.show();
-        mainWindow.focus();
-      }
       if (splashWindow && !splashWindow.isDestroyed()) {
         splashWindow.close();
         splashWindow = null;
       }
-    }, 250);
+    }, 280);
   };
 
-  mainWindow.webContents.once("did-finish-load", revealMainWindow);
+  // Wait for React hydration signal from frontend
+  ipcMain.once("app-ready", revealMainWindow);
 
-  // Safety fallback: if did-finish-load doesn't fire within 8s, show anyway
-  setTimeout(revealMainWindow, 8000);
+  // Safety fallback: if app-ready doesn't fire within 5.5s, reveal anyway
+  setTimeout(revealMainWindow, 5500);
 
   // Support F11 keyboard shortcut to toggle borderless full screen mode anytime
   mainWindow.webContents.on("before-input-event", (event, input) => {

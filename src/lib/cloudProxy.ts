@@ -18,6 +18,41 @@ export const CLOUD_API_BASE = (
   DEFAULT_CLOUD_API_URL
 ).replace(/\/+$/, "");
 
+/**
+ * Universal API URL Resolver for Capacitor APK, Electron EXE, and Web
+ * Converts relative `/api/...` endpoints to absolute Vercel cloud URLs
+ * when running in Capacitor native WebView or static origins.
+ */
+export function getApiUrl(endpoint: string): string {
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+
+  if (typeof window === "undefined") {
+    const base = process.env.NEXT_PUBLIC_APP_URL || process.env.PENRX_CLOUD_API_URL || DEFAULT_CLOUD_API_URL;
+    return `${base.replace(/\/+$/, "")}${cleanEndpoint}`;
+  }
+
+  // Check if running inside Capacitor Android/iOS Native, localhost, or file://
+  const isCapacitor =
+    window.location.protocol === "capacitor:" ||
+    window.location.protocol === "file:" ||
+    Boolean((window as any).Capacitor?.isNativePlatform?.()) ||
+    Boolean((window as any).Capacitor?.getPlatform?.() === "android") ||
+    Boolean((window as any).Capacitor?.getPlatform?.() === "ios") ||
+    (typeof navigator !== "undefined" && /capacitor/i.test(navigator.userAgent));
+
+  const isStaticHost = window.location.origin.includes("github.io");
+
+  if (isCapacitor || isStaticHost) {
+    const cloudBase = (
+      process.env.NEXT_PUBLIC_APP_URL ||
+      DEFAULT_CLOUD_API_URL
+    ).replace(/\/+$/, "");
+    return `${cloudBase}${cleanEndpoint}`;
+  }
+
+  return cleanEndpoint;
+}
+
 const PROXY_TIMEOUT_MS = 20_000;
 
 const PROXY_CORS_HEADERS = {

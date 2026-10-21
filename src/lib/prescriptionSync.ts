@@ -13,6 +13,7 @@
 
 import { SavedPrescription, PrescriptionItem } from "@/store/usePrescriptionStore";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
+import { getApiUrl } from "@/lib/cloudProxy";
 
 export const RETENTION_DAYS = 365; // 1 full year retention
 export const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -212,7 +213,7 @@ export async function processSyncQueue(): Promise<void> {
   try {
     const item = queue[0];
     const machineId = useSubscriptionStore.getState().machineId;
-    const res = await fetch("/api/prescriptions/sync", {
+    const res = await fetch(getApiUrl("/api/prescriptions/sync"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -268,7 +269,7 @@ export async function pullCloudPrescriptions(
   try {
     const machineId = useSubscriptionStore.getState().machineId;
     const res = await fetch(
-      `/api/prescriptions/sync?subscriberId=${encodeURIComponent(subscriberId)}&machineId=${encodeURIComponent(machineId || "")}`,
+      getApiUrl(`/api/prescriptions/sync?subscriberId=${encodeURIComponent(subscriberId)}&machineId=${encodeURIComponent(machineId || "")}`),
       { cache: "no-store" }
     );
 
@@ -354,7 +355,7 @@ export function runSmartCacheCleanup(
   localStorage.setItem(LAST_CLEANUP_KEY, now.toString());
 
   // Trigger server-side purge of expired records in background
-  fetch("/api/prescriptions/sync?action=PURGE_OLD", { method: "POST" }).catch(() => {});
+  fetch(getApiUrl("/api/prescriptions/sync?action=PURGE_OLD"), { method: "POST" }).catch(() => {});
 
   const freedEstimateKb = Math.round(purgedCount * 0.8);
   return { purgedCount, freedEstimateKb };

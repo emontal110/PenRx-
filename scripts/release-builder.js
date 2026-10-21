@@ -164,8 +164,8 @@ completeStep(1, "Version Configured to v" + activeVersion);
 // ====================================================================
 printStep(
   2,
-  "Build Core Application Engine (Next.js & Prisma)",
-  "Generating database client and building production pages & API routes"
+  "Build Core Application Engine (Next.js & Supabase)",
+  "Compiling production pages, server routes, and static assets"
 );
 const buildSuccess = run("npm run build");
 if (!buildSuccess) {
@@ -188,23 +188,19 @@ if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
 }
 const outIndex = path.join(outDir, "index.html");
-const mobileSource = path.join(rootDir, "mobile.html");
+const mobileSource = path.join(rootDir, "public", "mobile.html");
+const fallbackSource = path.join(rootDir, "public", "portal.html");
 if (fs.existsSync(mobileSource)) {
   fs.copyFileSync(mobileSource, outIndex);
-} else {
-  const portalSource = path.join(rootDir, "portal.html");
-  if (fs.existsSync(portalSource)) {
-    fs.copyFileSync(portalSource, outIndex);
-  }
+} else if (fs.existsSync(fallbackSource)) {
+  fs.copyFileSync(fallbackSource, outIndex);
 }
 // Copy supporting assets for portal
 const assetsToCopy = ["logo-penrx.jpg", "favicon.ico", "icon-512.png", "error.html"];
 for (const a of assetsToCopy) {
-  const srcDoc = path.join(rootDir, "docs", a);
   const srcPub = path.join(rootDir, "public", a);
   const dst = path.join(outDir, a);
-  if (fs.existsSync(srcDoc)) fs.copyFileSync(srcDoc, dst);
-  else if (fs.existsSync(srcPub)) fs.copyFileSync(srcPub, dst);
+  if (fs.existsSync(srcPub)) fs.copyFileSync(srcPub, dst);
 }
 const iconScript = path.join(rootDir, "scripts", "generate-android-icons.ps1");
 if (fs.existsSync(iconScript) && process.platform === "win32") {

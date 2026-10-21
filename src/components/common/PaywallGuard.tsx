@@ -106,6 +106,48 @@ export function PaywallGuard({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  // 0. BLOCKING SCREEN: Clock Tampering Detected (Anti-Rollback Defense)
+  if ((subDetails as any).isClockTampered) {
+    return (
+      <div className="min-h-[85vh] flex items-center justify-center p-4">
+        <div className="w-full max-w-lg bg-slate-900/95 border-2 border-rose-500/50 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-2xl text-center relative overflow-hidden">
+          <div className="w-16 h-16 rounded-3xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto shadow-inner">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2.5">
+            <span className="px-3 py-1 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 text-xs font-black">
+              أمان النظام • تحذير تلاعب بالساعة ⏳
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-100">
+              توقيت الجهاز غير متطابق مع الخادم
+            </h2>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {(subDetails as any).tamperReason ||
+                "تم رصد تراجع في تاريخ أو وقت جهازك مقارنة بآخر توقيت موثق لدى السيرفر. يرجى تفعيل (التوقيت التلقائي من الشبكة / Automatic Time) في إعدادات جهازك والمزامنة للتمكن من المتابعة."}
+            </p>
+          </div>
+
+          <button
+            onClick={async () => {
+              setIsCheckingOnline(true);
+              try {
+                await syncWithServer();
+              } finally {
+                setIsCheckingOnline(false);
+              }
+            }}
+            disabled={isCheckingOnline}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-500 to-rose-600 hover:brightness-110 text-white font-black text-sm shadow-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isCheckingOnline ? "animate-spin" : ""}`} />
+            <span>{isCheckingOnline ? "جارٍ التحقق من السيرفر..." : "🔄 إعادة الفحص والمزامنة الآن"}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // 1. BLOCKING SCREEN: 3-Day Offline Grace Limit Exceeded (Strict Anti-Tamper & Security)
   if (subDetails.isOfflineGraceExpired) {
     return (

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { searchComprehensiveDrugs, DrugRecord } from "@/lib/drugSearchEngine";
-import { prisma } from "@/lib/prisma";
+
+const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
+const SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
 
 export const dynamic = "force-dynamic";
 
@@ -50,31 +54,37 @@ export async function GET(request: Request) {
     searchActiveIngredient: true,
   });
 
-  // 2. Find matches in Prisma/Supabase community drugs
+  // 2. Find matches in Supabase community drugs
   let communityMatches: DrugRecord[] = [];
   try {
-    const dbRows = await prisma.drug.findMany({
-      where: {
-        OR: [
-          { activeIngredient: { contains: searchKey, mode: "insensitive" } },
-          { name: { contains: searchKey, mode: "insensitive" } },
-        ],
-      },
-      take: 15,
-    });
-
-    communityMatches = dbRows.map((d) => ({
-      id: d.id,
-      name: d.name,
-      nameAr: d.nameAr || undefined,
-      activeIngredient: d.activeIngredient,
-      company: d.company || "شركة أدوية",
-      price: d.price || undefined,
-      dosageForm: d.dosageForm || "Tablet",
-      category: d.category || "عام",
-      isControlled: d.isControlled || false,
-      sourceOrigin: "Doctor Community",
-    }));
+    const encodedKey = encodeURIComponent(searchKey);
+    const sRes = await fetch(
+      `${SUPABASE_REST_URL}/Drug?or=(activeIngredient.ilike.*${encodedKey}*,name.ilike.*${encodedKey}*)&limit=15`,
+      {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        signal: AbortSignal.timeout(1500),
+      }
+    );
+    if (sRes.ok) {
+      const dbRows = await sRes.json();
+      if (Array.isArray(dbRows)) {
+        communityMatches = dbRows.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          nameAr: d.nameAr || undefined,
+          activeIngredient: d.activeIngredient,
+          company: d.company || "شركة أدوية",
+          price: d.price || undefined,
+          dosageForm: d.dosageForm || "Tablet",
+          category: d.category || "عام",
+          isControlled: d.isControlled || false,
+          sourceOrigin: "Doctor Community",
+        }));
+      }
+    }
   } catch {
     // fallback to catalog
   }

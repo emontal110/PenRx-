@@ -45,8 +45,17 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
       return subHydrated && clinicHydrated && rxHydrated;
     };
 
-    if (checkAllHydrated()) {
+    const markAppReady = () => {
       setIsReady(true);
+      if (typeof window !== "undefined" && (window as any).penrxDesktop?.signalReady) {
+        try {
+          (window as any).penrxDesktop.signalReady();
+        } catch {}
+      }
+    };
+
+    if (checkAllHydrated()) {
+      markAppReady();
       // Fade out splash gracefully
       const fadeTimer = setTimeout(() => setShouldRenderSplash(false), 200);
       return () => clearTimeout(fadeTimer);
@@ -55,7 +64,7 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
     // Subscribe to hydration completion
     const markReadyIfDone = () => {
       if (checkAllHydrated()) {
-        setIsReady(true);
+        markAppReady();
         setTimeout(() => setShouldRenderSplash(false), 200);
       }
     };
@@ -66,7 +75,7 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
 
     // Safety timeout: Maximum 220ms so user is never blocked even if an issue occurs
     const safetyTimer = setTimeout(() => {
-      setIsReady(true);
+      markAppReady();
       setTimeout(() => setShouldRenderSplash(false), 200);
     }, 220);
 
@@ -111,6 +120,7 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
                   alt="PenRX+"
                   fill
                   priority
+                  unoptimized
                   sizes="96px"
                   className="object-cover"
                 />

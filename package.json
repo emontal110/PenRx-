@@ -1,15 +1,14 @@
 {
   "name": "penrx-plus",
-  "version": "1.37.0",
+  "version": "1.38.0",
   "private": true,
   "description": "PenRX+ - The Ultimate Next-Gen Medical Prescription & Clinic Management Suite",
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate",
     "electron:dev": "concurrently -k \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:build": "npm run build && electron-builder --win",
     "cap:add:android": "cap add android",
@@ -19,7 +18,6 @@
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^8.0.2",
     "@capacitor/app": "^6.0.3",
-    "@prisma/client": "^5.19.1",
     "@tanstack/react-query": "^5.56.2",
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.9",
@@ -47,7 +45,6 @@
     "electron": "^31.3.1",
     "electron-builder": "^24.13.3",
     "postcss": "^8.4.45",
-    "prisma": "^5.19.1",
     "tailwindcss": "^3.4.11",
     "typescript": "^5.6.2",
     "wait-on": "^7.2.0"
@@ -57,11 +54,6 @@
     "productName": "PenRX+",
     "compression": "normal",
     "asar": true,
-    "asarUnpack": [
-      "prisma/**/*",
-      "**/node_modules/.prisma/**/*",
-      "**/node_modules/@prisma/client/**/*"
-    ],
     "publish": [
       {
         "provider": "github",
@@ -76,7 +68,6 @@
       "electron/**/*",
       "public/**/*",
       "!public/downloads/**",
-      "prisma/**/*",
       "src/config/version.json",
       "next.config.mjs",
       "package.json"

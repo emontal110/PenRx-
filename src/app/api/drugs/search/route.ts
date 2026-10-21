@@ -5,9 +5,13 @@ import {
   updateDrugPricesFromCloud,
   DrugRecord,
 } from "@/lib/drugSearchEngine";
-import { prisma } from "@/lib/prisma";
 import { suggestDrugWithGemini } from "@/lib/gemini";
 import { synthesizeClinicalAiDrug } from "@/lib/clinicalAiSynthesis";
+
+const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
+const SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
 
 export const dynamic = "force-dynamic";
 
@@ -36,38 +40,40 @@ async function syncCommunityDrugsInBackground() {
   lastCommunitySync = Date.now();
 
   try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Timeout")), 700)
-    );
-    const queryPromise = prisma.drug.findMany({
-      take: 200,
-      orderBy: { createdAt: "desc" },
+    const res = await fetch(`${SUPABASE_REST_URL}/Drug?select=*&order=createdAt.desc&limit=200`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      signal: AbortSignal.timeout(1200),
     });
 
-    const dbMatches = (await Promise.race([queryPromise, timeoutPromise])) as any[];
-    if (dbMatches && dbMatches.length > 0) {
-      COMMUNITY_CACHE = dbMatches.map((d) => ({
-        id: d.id,
-        name: d.name,
-        nameAr: d.nameAr || undefined,
-        activeIngredient: d.activeIngredient,
-        company: d.company || "مساهمة من طبيب",
-        price: d.price || undefined,
-        dosageForm: d.dosageForm || "Tablet",
-        category: d.category || "عام",
-        isControlled: d.isControlled || false,
-        sourceOrigin: "Doctor Community" as const,
-        isCrowdSourced: true,
-      }));
-
-      // Automatically persist cloud price updates into in-memory engine
-      updateDrugPricesFromCloud(
-        COMMUNITY_CACHE.map((d) => ({
+    if (res.ok) {
+      const dbMatches = await res.json();
+      if (Array.isArray(dbMatches) && dbMatches.length > 0) {
+        COMMUNITY_CACHE = dbMatches.map((d: any) => ({
+          id: d.id,
           name: d.name,
-          price: d.price,
-          dosageForm: d.dosageForm,
-        }))
-      );
+          nameAr: d.nameAr || undefined,
+          activeIngredient: d.activeIngredient,
+          company: d.company || "مساهمة من طبيب",
+          price: d.price || undefined,
+          dosageForm: d.dosageForm || "Tablet",
+          category: d.category || "عام",
+          isControlled: d.isControlled || false,
+          sourceOrigin: "Doctor Community" as const,
+          isCrowdSourced: true,
+        }));
+
+        // Automatically persist cloud price updates into in-memory engine
+        updateDrugPricesFromCloud(
+          COMMUNITY_CACHE.map((d) => ({
+            name: d.name,
+            price: d.price,
+            dosageForm: d.dosageForm,
+          }))
+        );
+      }
     }
   } catch {
     // Supabase offline or slow — proceed cleanly with memory

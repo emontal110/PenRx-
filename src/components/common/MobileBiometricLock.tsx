@@ -65,7 +65,8 @@ export function MobileBiometricLock() {
       checkingRef.current = true;
 
       try {
-        const avail = await isBiometricAvailable();
+        const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2500));
+        const avail = await Promise.race([isBiometricAvailable(), timeoutPromise]);
 
         if (!avail) {
           // If phone has no biometric hardware or none enrolled, safely unlock & disable to avoid lock-out

@@ -19,22 +19,29 @@ export function CapacitorNativeBridge() {
         const { Capacitor } = await import("@capacitor/core");
         if (!Capacitor.isNativePlatform()) return;
 
-        // 1. Android Hardware Back Button Handling
-        const { App } = await import("@capacitor/app");
-        const backHandle = await App.addListener("backButton", ({ canGoBack }) => {
-          if (pathname === "/" || pathname === "/subscriptions") {
-            // Exit app if on root page
-            App.exitApp();
-          } else if (canGoBack || window.history.length > 1) {
-            window.history.back();
-          } else {
-            router.push("/");
-          }
-        });
+        // 1. Android Hardware Back Button Handling with 2500ms safety timeout
+        const nativeInitPromise = (async () => {
+          const { App } = await import("@capacitor/app");
+          const backHandle = await App.addListener("backButton", ({ canGoBack }) => {
+            if (pathname === "/" || pathname === "/subscriptions") {
+              // Exit app if on root page
+              App.exitApp();
+            } else if (canGoBack || window.history.length > 1) {
+              window.history.back();
+            } else {
+              router.push("/");
+            }
+          });
 
-        unlistenBackButton = () => {
-          backHandle.remove();
-        };
+          unlistenBackButton = () => {
+            try {
+              backHandle.remove();
+            } catch {}
+          };
+        })();
+
+        const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 2500));
+        await Promise.race([nativeInitPromise, timeoutPromise]);
 
         // 2. Network connectivity listeners (attach only once to prevent accumulation)
         if (!listenersAttached.current) {
