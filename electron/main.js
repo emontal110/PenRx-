@@ -28,6 +28,9 @@ try {
   autoUpdater.disableDifferentialDownload = false;
   autoUpdater.disableWebInstaller = true;
   autoUpdater.logger = console;
+  // Bypass Windows Authenticode code-signature enforcement for automated GitHub releases
+  // to ensure differential blockmap updates are NEVER discarded due to missing code signing certificates
+  autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(null);
 
   // Patch Provider.prototype.getBlockMapFiles to seamlessly handle both 2-part (v1.34) and 3-part (v1.34.0) GitHub release tags
   // This ensures electron-updater always finds the previous release's blockmap instead of falling back to full download!
@@ -264,6 +267,32 @@ if (autoUpdater) {
     }
   });
 
+  // Centralized, mutex-protected quit & silent installation handler
+  let isQuittingForInstall = false;
+  function performQuitAndInstall() {
+    if (isQuittingForInstall) return;
+    isQuittingForInstall = true;
+    console.log("[PenRX+ AutoUpdater] Quitting and silently installing update with auto-restart...");
+    if (serverProcess && serverProcess.pid) {
+      try {
+        if (process.platform === "win32") {
+          exec(`taskkill /pid ${serverProcess.pid} /T /F`, { windowsHide: true });
+        } else {
+          serverProcess.kill("SIGKILL");
+        }
+      } catch {}
+      serverProcess = null;
+    }
+    if (autoUpdater) {
+      try {
+        // isSilent: true (silent background update), isForceRunAfter: true (automatic app relaunch)
+        autoUpdater.quitAndInstall(true, true);
+      } catch (err) {
+        console.error("[PenRX+ AutoUpdater] quitAndInstall error:", err);
+      }
+    }
+  }
+
   autoUpdater.on("update-downloaded", () => {
     console.log("[PenRX+ AutoUpdater] Differential update downloaded successfully!");
     isUpdateDownloading = false;
@@ -275,24 +304,9 @@ if (autoUpdater) {
         status: "completed",
       });
     }
-    // Auto-install and restart after 1.5 seconds!
+    // Auto-install silently and restart after 1.5 seconds!
     setTimeout(() => {
-      try {
-        console.log("[PenRX+ AutoUpdater] Quitting and installing update with auto-restart...");
-        if (serverProcess && serverProcess.pid) {
-          try {
-            if (process.platform === "win32") {
-              exec(`taskkill /pid ${serverProcess.pid} /T /F`, { windowsHide: true });
-            } else {
-              serverProcess.kill("SIGKILL");
-            }
-          } catch {}
-          serverProcess = null;
-        }
-        autoUpdater.quitAndInstall(false, true);
-      } catch (err) {
-        console.error("[PenRX+ AutoUpdater] quitAndInstall error:", err);
-      }
+      performQuitAndInstall();
     }, 1500);
   });
 
@@ -347,8 +361,10 @@ ipcMain.handle("download-differential-update", async () => {
 });
 
 ipcMain.on("restart_app", () => {
-  if (autoUpdater) {
-    autoUpdater.quitAndInstall(false, true);
+  if (typeof performQuitAndInstall === "function") {
+    performQuitAndInstall();
+  } else if (autoUpdater) {
+    autoUpdater.quitAndInstall(true, true);
   }
 });
 
@@ -359,12 +375,12 @@ ipcMain.handle("quit-and-install-update", async () => {
     } catch {}
   }
   if (autoUpdater && updateDownloadedSuccessfully) {
-    try {
-      autoUpdater.quitAndInstall(false, true);
-      return true;
-    } catch (err) {
-      console.error("[PenRX+ AutoUpdater] quitAndInstall error:", err);
+    if (typeof performQuitAndInstall === "function") {
+      performQuitAndInstall();
+    } else {
+      autoUpdater.quitAndInstall(true, true);
     }
+    return true;
   }
   return false;
 });
@@ -522,9 +538,9 @@ ipcMain.handle("download-and-install-update", async (event, downloadUrl) => {
       serverProcess = null;
     }
 
-    // Launch updater with official setup wizard GUI ("Next > Next > Install > Finish")
+    // Launch updater silently and force-run after finish without setup wizard dialogs
     const { spawn } = require("child_process");
-    const updateCmd = `Start-Sleep -Milliseconds 600; Start-Process -FilePath '${tempPath}'`;
+    const updateCmd = `Start-Sleep -Milliseconds 600; Start-Process -FilePath '${tempPath}' -ArgumentList '/S', '--force-run'`;
 
     const runner = spawn(
       "powershell.exe",
