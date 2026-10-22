@@ -67,6 +67,7 @@ export default function SubscriptionsPage() {
   const {
     subscriptions,
     machineId,
+    subscriberId,
     submitSubscriptionRequest,
     cancelPendingRequest,
     syncWithServer,
@@ -75,6 +76,7 @@ export default function SubscriptionsPage() {
   const { clinic } = useClinicStore();
 
   const [mounted, setMounted] = useState(false);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string>("trial");
 
   // Modal & Flow states
@@ -123,7 +125,7 @@ export default function SubscriptionsPage() {
 
   const TRANSFER_NUMBER = "01094085228";
 
-  const subDetails = getSubscriptionDetails(subscriptions, machineId);
+  const subDetails = getSubscriptionDetails(subscriptions, machineId, subscriberId);
   const currentSub = subDetails.record || null;
   const trialClaimed = hasUsedFreeTrial(subscriptions, machineId);
 
@@ -846,12 +848,31 @@ export default function SubscriptionsPage() {
               </p>
             </div>
 
-            {/* Live Auto-Sync Beacon */}
-            <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs text-slate-400 flex items-center justify-center gap-2.5">
-              <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin" />
-              <span className="text-[11px] sm:text-xs">
-                فحص التفعيل اللحظي نشط: <strong className="text-emerald-400">ستظهر لك نافذة الترحيب فوراً</strong> عند تفعيل حسابك من البورتال!
-              </span>
+            {/* Live Auto-Sync Beacon & Instant Refresh Action */}
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs text-slate-400 flex items-center justify-center gap-2.5">
+                <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin" />
+                <span className="text-[11px] sm:text-xs">
+                  فحص التفعيل اللحظي نشط: <strong className="text-emerald-400">ستظهر لك نافذة الترحيب فوراً</strong> عند تفعيل حسابك من البورتال!
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsManualSyncing(true);
+                  try {
+                    await syncWithServer(true);
+                  } finally {
+                    setTimeout(() => setIsManualSyncing(false), 800);
+                  }
+                }}
+                disabled={isManualSyncing}
+                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/50 flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer disabled:opacity-75"
+              >
+                <RefreshCw className={`w-4 h-4 ${isManualSyncing ? "animate-spin" : ""}`} />
+                <span>{isManualSyncing ? "جاري الفحص المباشر لقاعدة البيانات..." : "تم التفعيل من الإدارة؟ اضغط هنا للتحقق الفوري ⚡"}</span>
+              </button>
             </div>
           </div>
 

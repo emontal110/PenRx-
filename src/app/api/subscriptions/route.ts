@@ -34,7 +34,12 @@ function jsonResponse(data: any, init?: { status?: number }) {
     { ...data, serverTime: Date.now() },
     {
       status: init?.status || 200,
-      headers: CORS_HEADERS,
+      headers: {
+        ...CORS_HEADERS,
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
     }
   );
 }
@@ -45,8 +50,8 @@ export async function GET(request: Request) {
     return proxyToCloud(request, "/api/subscriptions");
   }
 
-  // Rate Limit: 30 requests per minute per IP (prevent subscription enumeration)
-  if (!checkRateLimit(request, { maxRequests: 30, windowMs: 60_000, prefix: "sub-get" })) {
+  // Rate Limit: 120 requests per minute per IP (allows fast mobile polling without 429 errors)
+  if (!checkRateLimit(request, { maxRequests: 120, windowMs: 60_000, prefix: "sub-get" })) {
     return rateLimitExceededResponse(60);
   }
 

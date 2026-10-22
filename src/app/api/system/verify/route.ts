@@ -14,6 +14,7 @@ import {
   generateSignedToken,
   verifySignedToken,
   validateAdminAuthorization,
+  forceHydrateCache,
 } from "@/lib/subscriptionManager";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
@@ -38,7 +39,12 @@ function jsonResponse(data: any, init?: { status?: number }) {
     { ...data, serverTime: Date.now() },
     {
       status: init?.status || 200,
-      headers: CORS_HEADERS,
+      headers: {
+        ...CORS_HEADERS,
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
     }
   );
 }
@@ -62,8 +68,8 @@ export async function GET(request: Request) {
     return proxyToCloud(request, "/api/system/verify");
   }
 
-  // Rate Limit: 20 verify requests per minute per IP (prevent brute-force on machineId)
-  if (!checkRateLimit(request, { maxRequests: 20, windowMs: 60_000, prefix: "verify-get" })) {
+  // Rate Limit: 120 verify requests per minute per IP (prevents rate limiting mobile polling)
+  if (!checkRateLimit(request, { maxRequests: 120, windowMs: 60_000, prefix: "verify-get" })) {
     return rateLimitExceededResponse(60);
   }
 
@@ -79,6 +85,9 @@ export async function GET(request: Request) {
   const now = new Date();
 
   try {
+    // Force refresh cache so portal activations are visible immediately
+    await forceHydrateCache();
+
     let sub = await getSubscriptionByMachine(machineId);
     if (!sub && subscriberId) {
       sub = await getSubscriptionBySubscriberId(subscriberId);

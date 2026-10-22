@@ -322,13 +322,58 @@ export async function getAllSubscriptions(): Promise<SubscriptionRecord[]> {
 }
 
 /**
- * Find subscription by device Machine ID (either primary or in allowedMachineIds)
+ * Find subscription by device Machine ID (either primary or in allowedMachineIds).
+ * ALWAYS queries Supabase directly first — Vercel serverless instances have isolated
+ * in-memory caches that go stale when the portal activates via a different instance.
  */
 export async function getSubscriptionByMachine(machineId: string): Promise<SubscriptionRecord | null> {
-  const all = await getAllSubscriptions();
   const cleanId = (machineId || "").trim().toUpperCase();
   if (!cleanId) return null;
 
+  // ─── PRIMARY PATH: Always go directly to Supabase REST ────────────────────
+  // This bypasses stale serverless-instance caches entirely.
+  // The portal activates subscriptions via PATCH on Supabase REST; reading from
+  // the same source guarantees we always see the latest status immediately.
+  try {
+    const res = await fetchSupabaseRest(
+      `?machineId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=5`
+    );
+    if (res.ok) {
+      const records: SubscriptionRecord[] = await res.json();
+      if (Array.isArray(records) && records.length > 0) {
+        // Also check allowedMachineIds for multi-device subscriptions
+        let matched = records.filter((r) => {
+          const primary = (r.machineId || "").trim().toUpperCase();
+          const allowed = Array.isArray(r.allowedMachineIds)
+            ? r.allowedMachineIds.map((m) => (m || "").trim().toUpperCase())
+            : [];
+          return primary === cleanId || allowed.includes(cleanId);
+        });
+        if (matched.length === 0) matched = records; // fallback: return all if none match allowed
+
+        for (const r of matched) {
+          if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
+            r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
+          }
+          globalSubscriptionsCache.set(r.id, r);
+        }
+
+        const directActive = matched.find((s) => s.status === "ACTIVE");
+        if (directActive) return directActive;
+        const directPending = matched.find((s) => s.status === "PENDING");
+        if (directPending) return directPending;
+        return matched[0];
+      }
+      // Supabase responded but found nothing for this machineId
+      // Fall through to try allowedMachineIds query below
+    }
+  } catch (err) {
+    console.warn("[getSubscriptionByMachine] Supabase direct query failed, falling back to cache:", err);
+  }
+
+  // ─── FALLBACK PATH: Search cache (offline or Supabase unreachable) ─────────
+  await hydrateCache(true);
+  const all = Array.from(globalSubscriptionsCache.values());
   const matching = all.filter((s) => {
     const primary = (s.machineId || "").trim().toUpperCase();
     const allowed = Array.isArray(s.allowedMachineIds)
@@ -337,51 +382,13 @@ export async function getSubscriptionByMachine(machineId: string): Promise<Subsc
     return primary === cleanId || allowed.includes(cleanId);
   });
 
-  // Prioritize ACTIVE first!
   const active = matching.find((s) => s.status === "ACTIVE");
   if (active) return active;
   const pending = matching.find((s) => s.status === "PENDING");
   if (pending) return pending;
-  if (matching[0]) return matching[0];
-
-  // Direct Supabase REST targeted query fallback if not in cache (safe PostgREST syntax without braces in or)
-  try {
-    const res = await fetchSupabaseRest(
-      `?machineId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=5`
-    );
-    if (res.ok) {
-      const records: SubscriptionRecord[] = await res.json();
-      if (Array.isArray(records) && records.length > 0) {
-        for (const r of records) {
-          if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
-            r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
-          }
-          globalSubscriptionsCache.set(r.id, r);
-        }
-        const directActive = records.find((s) => s.status === "ACTIVE");
-        if (directActive) return directActive;
-        const directPending = records.find((s) => s.status === "PENDING");
-        if (directPending) return directPending;
-        return records[0];
-      }
-    }
-  } catch {}
-
-  // Force cache hydration once in case a secondary device was recently linked into allowedMachineIds
-  await hydrateCache(true);
-  const refreshedMatching = Array.from(globalSubscriptionsCache.values()).filter((s) => {
-    const primary = (s.machineId || "").trim().toUpperCase();
-    const allowed = Array.isArray(s.allowedMachineIds)
-      ? s.allowedMachineIds.map((m) => (m || "").trim().toUpperCase())
-      : [];
-    return primary === cleanId || allowed.includes(cleanId);
-  });
-  const refreshedActive = refreshedMatching.find((s) => s.status === "ACTIVE");
-  if (refreshedActive) return refreshedActive;
-  const refreshedPending = refreshedMatching.find((s) => s.status === "PENDING");
-  if (refreshedPending) return refreshedPending;
-  return refreshedMatching[0] || null;
+  return matching[0] || null;
 }
+
 
 /**
  * Find subscription by unique Subscriber ID (prioritizes ACTIVE first)

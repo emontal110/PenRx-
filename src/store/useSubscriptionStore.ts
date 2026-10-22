@@ -661,12 +661,16 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
 
         // 1. Fetch this machine's subscription from the app API
         try {
-          let query = `machineId=${encodeURIComponent(machineId)}`;
+          let query = `machineId=${encodeURIComponent(machineId)}&_t=${Date.now()}`;
           if (subId && subId !== "SUB-0000") {
             query += `&subscriberId=${encodeURIComponent(subId)}`;
           }
+          if (currentLocalSub?.id) {
+            query += `&id=${encodeURIComponent(currentLocalSub.id)}`;
+          }
           const res = await fetch(getApiUrl(`/api/subscriptions?${query}`), {
             cache: "no-store",
+            headers: { "Pragma": "no-cache", "Cache-Control": "no-cache, no-store, must-revalidate" },
             signal: AbortSignal.timeout(8000),
           });
           if (res.ok) {
@@ -693,7 +697,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
 
         // 2. Refresh HMAC signature token (also re-verifies license state online)
         try {
-          let url = `/api/system/verify?machineId=${encodeURIComponent(machineId)}`;
+          let url = `/api/system/verify?machineId=${encodeURIComponent(machineId)}&_t=${Date.now()}`;
           if (subId) {
             url += `&subscriberId=${encodeURIComponent(subId)}`;
           }
@@ -703,6 +707,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
 
           const res = await fetch(getApiUrl(url), {
             cache: "no-store",
+            headers: { "Pragma": "no-cache", "Cache-Control": "no-cache, no-store, must-revalidate" },
             signal: AbortSignal.timeout(8000),
           });
           if (res.ok) {
@@ -763,11 +768,13 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             orParts.push(`subscriberId.ilike.${encodeURIComponent(currentLocalSub.subscriberId)}`);
           }
 
-          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orParts.join(",")})&order=updatedAt.desc&limit=5`;
+          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orParts.join(",")})&order=updatedAt.desc&limit=5&_t=${Date.now()}`;
           const supaRes = await fetch(supaUrl, {
             headers: {
               apikey: supaKey,
               Authorization: "Bearer " + supaKey,
+              "Pragma": "no-cache",
+              "Cache-Control": "no-cache, no-store, must-revalidate",
             },
             cache: "no-store",
             signal: AbortSignal.timeout(6000),
@@ -808,20 +815,29 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             if (typeof window !== "undefined") {
               try {
                 localStorage.removeItem("penrx_pending_sub_id");
+                localStorage.removeItem("penrx_was_pending");
               } catch {}
             }
           }
-          set((state) => ({
-            subscriptions: [
-              fresh,
-              ...state.subscriptions.filter((s) => s.id !== fresh.id),
-            ],
-            currentSubscription: fresh,
-            subscriberId: fresh.subscriberId || state.subscriberId,
-            signatureToken: fresh.signatureToken || state.signatureToken,
-            lastSyncedAt: Date.now(),
-            lastOnlineCheck: Date.now(), // Resets 3-day offline countdown
-          }));
+          set((state) => {
+            // When fresh is ACTIVE, remove any stale PENDING records for this machine
+            const otherSubs = (state.subscriptions || []).filter((s) => {
+              if (s.id === fresh.id) return false;
+              if (fresh.status === "ACTIVE" && s.status === "PENDING" && (s.machineId === fresh.machineId || s.subscriberId === fresh.subscriberId)) {
+                return false;
+              }
+              return true;
+            });
+
+            return {
+              subscriptions: [fresh, ...otherSubs],
+              currentSubscription: fresh,
+              subscriberId: fresh.subscriberId || state.subscriberId,
+              signatureToken: fresh.signatureToken || state.signatureToken,
+              lastSyncedAt: Date.now(),
+              lastOnlineCheck: Date.now(), // Resets 3-day offline countdown
+            };
+          });
           return;
         }
 
