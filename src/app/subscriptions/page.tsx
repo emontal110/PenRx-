@@ -130,31 +130,29 @@ export default function SubscriptionsPage() {
   const currentSub = subDetails.record || null;
   const trialClaimed = hasUsedFreeTrial(subscriptions, machineId);
 
-  // Fast polling sync (every 3 seconds when pending for instant unlock upon portal action, otherwise 8s)
+  // Initialize hardware ID once on mount, then trigger immediate server sync
   useEffect(() => {
     setMounted(true);
-    initHardwareId().catch(() => {});
+    initHardwareId()
+      .catch(() => {})
+      .finally(() => {
+        syncWithServer(true);
+      });
+  }, [initHardwareId, syncWithServer]);
+
+  // Fast polling sync (every 2.5 seconds when pending for instant unlock upon portal action, otherwise 8s)
+  useEffect(() => {
     syncWithServer(true);
-    const intervalMs = subDetails.isPending ? 3000 : 8000;
+    const intervalMs = subDetails.isPending ? 2500 : 8000;
     const interval = setInterval(() => {
       syncWithServer(true);
     }, intervalMs);
     return () => clearInterval(interval);
-  }, [syncWithServer, initHardwareId, subDetails.isPending]);
+  }, [syncWithServer, subDetails.isPending]);
 
-  // Auto-redirect to dashboard when subscription is active
+  // Monitor activation transition (PENDING -> ACTIVE) to show welcome modal and redirect reliably
   useEffect(() => {
-    if (mounted && subDetails.isActive) {
-      const timer = setTimeout(() => {
-        router.push("/");
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [mounted, subDetails.isActive, router]);
-
-  // Monitor activation transition (PENDING -> ACTIVE) to show welcome modal reliably
-  useEffect(() => {
-    if (subDetails.isPending) {
+    if (subDetails.isPending && !subDetails.isActive) {
       wasPendingRef.current = true;
       try {
         localStorage.setItem("penrx_was_pending", "true");
@@ -162,9 +160,14 @@ export default function SubscriptionsPage() {
     } else if (subDetails.isActive) {
       let isNewlyActivated = wasPendingRef.current;
       try {
-        if (localStorage.getItem("penrx_was_pending") === "true") {
+        if (
+          localStorage.getItem("penrx_was_pending") === "true" ||
+          localStorage.getItem("penrx_just_activated") === "true"
+        ) {
           isNewlyActivated = true;
           localStorage.removeItem("penrx_was_pending");
+          localStorage.removeItem("penrx_just_activated");
+          localStorage.removeItem("penrx_pending_sub_id");
         }
       } catch {}
 
@@ -174,6 +177,17 @@ export default function SubscriptionsPage() {
       }
     }
   }, [subDetails.isPending, subDetails.isActive]);
+
+  // Auto-redirect when subscription is active (waits for welcome modal countdown if newly activated)
+  useEffect(() => {
+    if (mounted && subDetails.isActive && !showWelcomeModal) {
+      const targetRoute = clinic.isProfileSaved ? "/" : "/settings";
+      const timer = setTimeout(() => {
+        router.push(targetRoute);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [mounted, subDetails.isActive, showWelcomeModal, clinic.isProfileSaved, router]);
 
   // Manual button check with direct feedback and instant entry
   const handleManualActivationCheck = async () => {
@@ -851,7 +865,7 @@ export default function SubscriptionsPage() {
       {/* ============================================================ */}
       {/* CASE 1: WAITING FOR ACTIVATION SCREEN (صفحة انتظار التفعيل) */}
       {/* ============================================================ */}
-      {subDetails.isPending && (
+      {subDetails.isPending && !subDetails.isActive && (
         <div className="rounded-3xl bg-slate-900/95 border-2 border-amber-500/40 p-6 sm:p-10 shadow-2xl backdrop-blur-2xl relative overflow-hidden animate-in fade-in duration-300">
           {/* Ambient Glows */}
           <div className="absolute -top-32 -left-32 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />

@@ -13,41 +13,67 @@
 
 const DEFAULT_CLOUD_API_URL = "https://pen-rx.vercel.app";
 
-export const CLOUD_API_BASE = (
-  process.env.PENRX_CLOUD_API_URL ||
-  DEFAULT_CLOUD_API_URL
-).replace(/\/+$/, "");
+function getSafeCloudBaseUrl(): string {
+  const candidate = (
+    process.env.PENRX_CLOUD_API_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    DEFAULT_CLOUD_API_URL
+  ).trim().replace(/\/+$/, "");
+
+  // Never allow localhost, 127.0.0.1, or placeholder URLs to be used as the remote cloud base URL
+  if (
+    !candidate ||
+    candidate.includes("localhost") ||
+    candidate.includes("127.0.0.1") ||
+    candidate.includes("your-penrx-app")
+  ) {
+    return DEFAULT_CLOUD_API_URL;
+  }
+  return candidate;
+}
+
+export const CLOUD_API_BASE = getSafeCloudBaseUrl();
 
 /**
- * Universal API URL Resolver for Capacitor APK, Electron EXE, and Web
- * Converts relative `/api/...` endpoints to absolute Vercel cloud URLs
- * when running in Capacitor native WebView or static origins.
+ * Universal API URL Resolver for Capacitor APK, Electron EXE, and Web.
+ * Ensures Mobile APK, Desktop EXE, and Web Browser all hit the exact same authoritative API.
  */
 export function getApiUrl(endpoint: string): string {
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
 
   if (typeof window === "undefined") {
-    const base = process.env.NEXT_PUBLIC_APP_URL || process.env.PENRX_CLOUD_API_URL || DEFAULT_CLOUD_API_URL;
-    return `${base.replace(/\/+$/, "")}${cleanEndpoint}`;
+    return `${CLOUD_API_BASE}${cleanEndpoint}`;
   }
 
-  // Check if running inside Capacitor Android/iOS Native, localhost, or file://
-  const isCapacitor =
-    window.location.protocol === "capacitor:" ||
-    window.location.protocol === "file:" ||
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  const origin = window.location.origin || "";
+
+  // When loaded directly from the live Vercel domain (in Browser OR inside Capacitor APK via server.url),
+  // use same-origin relative path so it never gets misrouted by env variables.
+  if (
+    (protocol === "https:" || protocol === "http:") &&
+    hostname &&
+    hostname !== "localhost" &&
+    hostname !== "127.0.0.1" &&
+    !origin.includes("github.io")
+  ) {
+    return cleanEndpoint;
+  }
+
+  // Check if running inside Capacitor local assets (https://localhost / capacitor:// / file://) or static host
+  const isCapacitorLocal =
+    protocol === "capacitor:" ||
+    protocol === "file:" ||
     Boolean((window as any).Capacitor?.isNativePlatform?.()) ||
     Boolean((window as any).Capacitor?.getPlatform?.() === "android") ||
     Boolean((window as any).Capacitor?.getPlatform?.() === "ios") ||
     (typeof navigator !== "undefined" && /capacitor/i.test(navigator.userAgent));
 
-  const isStaticHost = window.location.origin.includes("github.io");
+  const isStaticHost = origin.includes("github.io");
 
-  if (isCapacitor || isStaticHost) {
-    const cloudBase = (
-      process.env.NEXT_PUBLIC_APP_URL ||
-      DEFAULT_CLOUD_API_URL
-    ).replace(/\/+$/, "");
-    return `${cloudBase}${cleanEndpoint}`;
+  if (isCapacitorLocal || isStaticHost) {
+    return `${CLOUD_API_BASE}${cleanEndpoint}`;
   }
 
   return cleanEndpoint;
@@ -59,7 +85,7 @@ const PROXY_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, x-admin-key, x-master-secret, apikey",
+    "Content-Type, Authorization, x-admin-key, x-master-secret, apikey, Pragma, Cache-Control",
 };
 
 /**
