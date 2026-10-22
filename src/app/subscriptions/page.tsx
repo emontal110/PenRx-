@@ -47,6 +47,7 @@ import {
 } from "@/store/useSubscriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
 import { NewRxGuard } from "@/components/prescription/NewRxGuard";
+import { showGlobalToast } from "@/components/common/GlobalToast";
 
 interface PaidPlan {
   id: string;
@@ -141,6 +142,16 @@ export default function SubscriptionsPage() {
     return () => clearInterval(interval);
   }, [syncWithServer, initHardwareId, subDetails.isPending]);
 
+  // Auto-redirect to dashboard when subscription is active
+  useEffect(() => {
+    if (mounted && subDetails.isActive) {
+      const timer = setTimeout(() => {
+        router.push("/");
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [mounted, subDetails.isActive, router]);
+
   // Monitor activation transition (PENDING -> ACTIVE) to show welcome modal reliably
   useEffect(() => {
     if (subDetails.isPending) {
@@ -163,6 +174,28 @@ export default function SubscriptionsPage() {
       }
     }
   }, [subDetails.isPending, subDetails.isActive]);
+
+  // Manual button check with direct feedback and instant entry
+  const handleManualActivationCheck = async () => {
+    setIsManualSyncing(true);
+    try {
+      await syncWithServer(true);
+      const state = useSubscriptionStore.getState();
+      const details = getSubscriptionDetails(state.subscriptions, state.machineId, state.subscriberId);
+      if (details.isActive) {
+        showGlobalToast("تم تأكيد وتفعيل اشتراكك بنجاح! مرحباً بك 🌿", "success");
+        setTimeout(() => {
+          router.push("/");
+        }, 500);
+      } else {
+        showGlobalToast("الطلب مسجل ونظام البورتال يؤكد المراجعة ⏳", "info");
+      }
+    } catch {
+      showGlobalToast("جاري فحص حالة التفعيل تلقائياً...", "info");
+    } finally {
+      setTimeout(() => setIsManualSyncing(false), 600);
+    }
+  };
 
   // Countdown timer for auto-redirect when welcome modal is open
   useEffect(() => {
@@ -859,14 +892,7 @@ export default function SubscriptionsPage() {
 
               <button
                 type="button"
-                onClick={async () => {
-                  setIsManualSyncing(true);
-                  try {
-                    await syncWithServer(true);
-                  } finally {
-                    setTimeout(() => setIsManualSyncing(false), 800);
-                  }
-                }}
+                onClick={handleManualActivationCheck}
                 disabled={isManualSyncing}
                 className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/50 flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer disabled:opacity-75"
               >

@@ -247,6 +247,14 @@ function generateLocalSubscriberId(): string {
 // triggering syncWithServer at the same time (PaywallGuard + SubscriptionsPage + Navbar)
 let _lastSyncTime = 0;
 const SYNC_THROTTLE_MS = 5000; // Minimum 5 seconds between sync calls
+function safeTimeoutSignal(ms: number): AbortSignal | undefined {
+  try {
+    if (typeof AbortSignal !== "undefined" && typeof (AbortSignal as any).timeout === "function") {
+      return (AbortSignal as any).timeout(ms);
+    }
+  } catch {}
+  return undefined;
+}
 
 export const useSubscriptionStore = create<SubscriptionStoreState>()(
   persist(
@@ -671,7 +679,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           const res = await fetch(getApiUrl(`/api/subscriptions?${query}`), {
             cache: "no-store",
             headers: { "Pragma": "no-cache", "Cache-Control": "no-cache, no-store, must-revalidate" },
-            signal: AbortSignal.timeout(8000),
+            signal: safeTimeoutSignal(8000),
           });
           if (res.ok) {
             serverResponded = true;
@@ -708,7 +716,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           const res = await fetch(getApiUrl(url), {
             cache: "no-store",
             headers: { "Pragma": "no-cache", "Cache-Control": "no-cache, no-store, must-revalidate" },
-            signal: AbortSignal.timeout(8000),
+            signal: safeTimeoutSignal(8000),
           });
           if (res.ok) {
             serverResponded = true;
@@ -777,7 +785,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               "Cache-Control": "no-cache, no-store, must-revalidate",
             },
             cache: "no-store",
-            signal: AbortSignal.timeout(6000),
+            signal: safeTimeoutSignal(6000),
           });
           if (supaRes.ok) {
             supaResponded = true;
@@ -820,10 +828,10 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             }
           }
           set((state) => {
-            // When fresh is ACTIVE, remove any stale PENDING records for this machine
+            // When fresh is ACTIVE, completely remove any stale PENDING records
             const otherSubs = (state.subscriptions || []).filter((s) => {
               if (s.id === fresh.id) return false;
-              if (fresh.status === "ACTIVE" && s.status === "PENDING" && (s.machineId === fresh.machineId || s.subscriberId === fresh.subscriberId)) {
+              if (fresh.status === "ACTIVE" && s.status === "PENDING") {
                 return false;
               }
               return true;

@@ -64,27 +64,35 @@ export async function GET(request: Request) {
     const redactPaymentFields = (sub: any) =>
       sub ? { ...sub, senderPhone: undefined, transactionRef: undefined } : sub;
 
-    // Machine-specific or Subscriber-specific lookup
-    if (machineId) {
-      const cleanMachineId = machineId.trim();
+    const subIdParam = searchParams.get("id");
 
-      // Force-refresh the in-memory cache from Supabase on every machineId lookup.
-      // This is critical: the Portal activates subscriptions by PATCHing Supabase directly,
-      // bypassing the in-memory cache on this serverless instance.
+    // Machine-specific or Subscriber-specific or Order ID lookup
+    if (machineId || subscriberId || subIdParam) {
+      const cleanMachineId = (machineId || "").trim();
+
+      // Force-refresh the in-memory cache from Supabase on every lookup.
       await forceHydrateCache();
 
-      let match = await getSubscriptionByMachine(cleanMachineId);
+      let match: any = null;
+
+      if (cleanMachineId) {
+        match = await getSubscriptionByMachine(cleanMachineId);
+      }
 
       // If not matched directly by machine, check subscriberId
       if (!match && subscriberId) {
         match = await getSubscriptionBySubscriberId(subscriberId.trim());
-        if (match && !machineOwnsSubscription(match, cleanMachineId)) {
-          match = redactPaymentFields(match);
-        }
       }
 
-      // [SECURITY FIX CRIT-02]: Auto-linking unknown devices has been REMOVED.
-      // Devices must now be explicitly linked by an admin or via the link_device flow.
+      // If not matched yet, check order ID
+      if (!match && subIdParam) {
+        const all = await getAllSubscriptions();
+        match = all.find((s) => s.id === subIdParam.trim()) || null;
+      }
+
+      if (match && cleanMachineId && !machineOwnsSubscription(match, cleanMachineId)) {
+        match = redactPaymentFields(match);
+      }
 
       return jsonResponse({ subscription: match });
     }
