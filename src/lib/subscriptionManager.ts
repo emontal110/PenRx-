@@ -272,7 +272,8 @@ function safeGenerateSignedToken(
  */
 async function hydrateCache(force = false): Promise<void> {
   const now = Date.now();
-  if (isCacheHydrated && !force && (now - lastHydrateTime < 5000)) return;
+  // Reduced TTL to 2s: Portal activates directly in Supabase; API must re-fetch quickly
+  if (isCacheHydrated && !force && (now - lastHydrateTime < 2000)) return;
 
   // 1. Try Supabase REST Cloud First (Fast and works over standard HTTPS port 443)
   try {
@@ -293,6 +294,14 @@ async function hydrateCache(force = false): Promise<void> {
   } catch (err: any) {
     console.warn("Supabase REST cache hydration notice:", err.message);
   }
+}
+
+/**
+ * Public export: force-invalidate the in-memory cache and re-hydrate from Supabase.
+ * Call this before any subscription lookup where freshness is critical (e.g. after portal activation).
+ */
+export async function forceHydrateCache(): Promise<void> {
+  return hydrateCache(true);
 }
 
 /**

@@ -135,7 +135,7 @@
         <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           <span>بوابة الأمان والتحكم • MASTER ADMIN</span>
-          <span class="portal-pkg-version font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 text-[9px]">v1.41</span>
+          <span class="portal-pkg-version font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 text-[9px]">v1.42</span>
         </div>
 
         <h1 class="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight leading-snug">
@@ -266,7 +266,7 @@
                 <span class="hidden xs:inline-block px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[9px] sm:text-[10px] font-black border border-emerald-500/40 whitespace-nowrap">
                   MASTER ADMIN
                 </span>
-                <span class="portal-pkg-version px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] border border-emerald-500/40 whitespace-nowrap">v1.41</span>
+                <span class="portal-pkg-version px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] border border-emerald-500/40 whitespace-nowrap">v1.42</span>
               </div>
               <p class="text-[10px] sm:text-[11px] text-slate-400 font-bold truncate">لوحة إدارة تراخيص الأطباء وتعدد الأجهزة</p>
             </div>
@@ -1235,16 +1235,30 @@
       if (action === "ACTIVATE") {
         const days = Number(params.durationDays) || current.durationDays || 30;
         const expiresIso = (serverSub && serverSub.expiresAt) || new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+        // Ensure allowedMachineIds always contains the primary machineId on activation
+        const primaryMid = (serverSub && serverSub.machineId) || current.machineId || "";
+        const existingAllowed = (serverSub && Array.isArray(serverSub.allowedMachineIds) && serverSub.allowedMachineIds.length > 0)
+          ? serverSub.allowedMachineIds
+          : (Array.isArray(current.allowedMachineIds) && current.allowedMachineIds.length > 0)
+            ? current.allowedMachineIds
+            : (primaryMid ? [primaryMid] : []);
+        const normalizedAllowed = existingAllowed.includes(primaryMid) || !primaryMid
+          ? existingAllowed
+          : [...existingAllowed, primaryMid];
+
         patchBody = {
           status: "ACTIVE",
           durationDays: days,
           activatedAt: (serverSub && serverSub.activatedAt) || nowIso,
           expiresAt: expiresIso,
-          updatedAt: nowIso
+          updatedAt: nowIso,
+          allowedMachineIds: normalizedAllowed
         };
         if (serverSub && serverSub.signatureToken) {
           patchBody.signatureToken = serverSub.signatureToken;
         }
+
       } else if (action === "SUSPEND") {
         patchBody = {
           status: "SUSPENDED",

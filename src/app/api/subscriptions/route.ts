@@ -9,6 +9,7 @@ import {
   deleteSubscription,
   validateAdminAuthorization,
   machineOwnsSubscription,
+  forceHydrateCache,
 } from "@/lib/subscriptionManager";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
@@ -61,6 +62,12 @@ export async function GET(request: Request) {
     // Machine-specific or Subscriber-specific lookup
     if (machineId) {
       const cleanMachineId = machineId.trim();
+
+      // Force-refresh the in-memory cache from Supabase on every machineId lookup.
+      // This is critical: the Portal activates subscriptions by PATCHing Supabase directly,
+      // bypassing the in-memory cache on this serverless instance.
+      await forceHydrateCache();
+
       let match = await getSubscriptionByMachine(cleanMachineId);
 
       // If not matched directly by machine, check subscriberId

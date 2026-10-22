@@ -1520,6 +1520,7 @@
 
         const res = await fetch(url, {
           cache: "no-store",
+          headers: { "Pragma": "no-cache", "Cache-Control": "no-cache, no-store, must-revalidate" },
           signal: AbortSignal.timeout(5000),
         });
 
@@ -1574,7 +1575,8 @@
             if (list.length > 0) {
               const activeMatch = list.find((r) => r.status === "ACTIVE");
               const bestMatch = activeMatch || list[0];
-              if (!confirmedSub || (bestMatch.status === "ACTIVE" && confirmedSub.status !== "ACTIVE")) {
+              // Always prefer Supabase Direct ACTIVE over a stale Cloud API PENDING response
+              if (!confirmedSub || bestMatch.status === "ACTIVE") {
                 confirmedSub = bestMatch;
               }
             } else {
@@ -1762,7 +1764,7 @@
       renderHomeStats();
 
       checkSubscriptionStatus();
-      setInterval(checkSubscriptionStatus, 8000); // Live poll cloud portal smoothly
+      setInterval(checkSubscriptionStatus, 4000); // Reduced to 4s for faster post-activation detection
 
       lucide.createIcons();
     });

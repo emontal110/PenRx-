@@ -176,7 +176,7 @@ export function ClinicAndTemplateSettings() {
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-300 flex items-center justify-between">
                   <span>اسم المركز / العيادة بالعربية: <span className="text-rose-400 font-black">*</span></span>
-                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي للبورتال</span>
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي</span>
                 </label>
                 <input
                   type="text"
@@ -207,7 +207,7 @@ export function ClinicAndTemplateSettings() {
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-300 flex items-center justify-between">
                   <span>اسم الطبيب المعالج: <span className="text-rose-400 font-black">*</span></span>
-                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي للبورتال</span>
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي</span>
                 </label>
                 <input
                   type="text"
@@ -259,7 +259,7 @@ export function ClinicAndTemplateSettings() {
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-300 flex items-center justify-between">
                   <span>هاتف العيادة / الواتساب: <span className="text-rose-400 font-black">*</span></span>
-                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي للبورتال</span>
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">إلزامي</span>
                 </label>
                 <input
                   type="tel"
