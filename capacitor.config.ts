@@ -31,9 +31,14 @@ const config: CapacitorConfig = {
     androidScheme: "https",
     errorPath: "/error.html",
   },
+  android: {
+    allowMixedContent: true,
+  },
   plugins: {
+    // Disable CapacitorHttp fetch interception so Android WebView uses standard Chromium fetch
+    // (identical to Browser & Electron EXE), preserving cache: "no-store", AbortSignal, and PostgREST query syntax.
     CapacitorHttp: {
-      enabled: true,
+      enabled: false,
     },
   },
 };

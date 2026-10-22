@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import {
   getAllSubscriptions,
+  getSubscriptionById,
   getSubscriptionByMachine,
   getSubscriptionBySubscriberId,
+  pickBestSubscription,
   submitSubscription,
   linkDeviceToSubscriber,
   updateSubscriptionDoctorProfile,
@@ -10,6 +12,7 @@ import {
   validateAdminAuthorization,
   machineOwnsSubscription,
   forceHydrateCache,
+  SubscriptionRecord,
 } from "@/lib/subscriptionManager";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
@@ -19,7 +22,7 @@ export const dynamic = "force-dynamic";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-key, x-master-secret, apikey",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-key, x-master-secret, apikey, Pragma, Cache-Control",
 };
 
 export async function OPTIONS() {
@@ -58,48 +61,56 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get("machineId");
+    const altMachineId = searchParams.get("altMachineId");
     const subscriberId = searchParams.get("subscriberId");
+    const subIdParam = searchParams.get("id");
 
-    // Redact payment metadata unless the caller's machine actually owns the record
+    // Redact payment metadata unless the caller's machine or subscriber ID owns the record
     const redactPaymentFields = (sub: any) =>
       sub ? { ...sub, senderPhone: undefined, transactionRef: undefined } : sub;
 
-    const subIdParam = searchParams.get("id");
-
     // Machine-specific or Subscriber-specific or Order ID lookup
-    if (machineId || subscriberId || subIdParam) {
+    if (machineId || altMachineId || subscriberId || subIdParam) {
       const cleanMachineId = (machineId || "").trim();
+      const cleanAltMachineId = (altMachineId || "").trim();
+      const cleanSubId = (subscriberId || "").trim();
+      const cleanOrderId = (subIdParam || "").trim();
 
-      // Force-refresh the in-memory cache from Supabase on every lookup.
+      // Force-refresh the in-memory cache from Supabase on every lookup
       await forceHydrateCache();
 
-      let match: any = null;
+      const candidates: SubscriptionRecord[] = [];
 
-      if (cleanMachineId) {
-        match = await getSubscriptionByMachine(cleanMachineId);
-      }
+      // Query all provided identifiers in parallel so an ACTIVE record on any identifier is never missed
+      const [byOrder, byMachine, byAltMachine, bySubId] = await Promise.all([
+        cleanOrderId ? getSubscriptionById(cleanOrderId) : Promise.resolve(null),
+        cleanMachineId ? getSubscriptionByMachine(cleanMachineId) : Promise.resolve(null),
+        cleanAltMachineId && cleanAltMachineId !== cleanMachineId
+          ? getSubscriptionByMachine(cleanAltMachineId)
+          : Promise.resolve(null),
+        cleanSubId && cleanSubId !== "SUB-0000"
+          ? getSubscriptionBySubscriberId(cleanSubId)
+          : Promise.resolve(null),
+      ]);
 
-      // If not matched directly by machine, check subscriberId
-      if (!match && subscriberId) {
-        match = await getSubscriptionBySubscriberId(subscriberId.trim());
-      }
+      if (byOrder) candidates.push(byOrder);
+      if (byMachine) candidates.push(byMachine);
+      if (byAltMachine) candidates.push(byAltMachine);
+      if (bySubId) candidates.push(bySubId);
 
-      // If not matched yet, check order ID
-      if (!match && subIdParam) {
-        const all = await getAllSubscriptions();
-        match = all.find((s) => s.id === subIdParam.trim()) || null;
-      }
+      let match: any = pickBestSubscription(candidates);
 
-      if (match && cleanMachineId && !machineOwnsSubscription(match, cleanMachineId)) {
+      if (
+        match &&
+        cleanMachineId &&
+        !machineOwnsSubscription(match, cleanMachineId) &&
+        (!cleanAltMachineId || !machineOwnsSubscription(match, cleanAltMachineId)) &&
+        (!cleanSubId || (match.subscriberId || "").toUpperCase() !== cleanSubId.toUpperCase())
+      ) {
         match = redactPaymentFields(match);
       }
 
       return jsonResponse({ subscription: match });
-    }
-
-    if (subscriberId) {
-      const match = await getSubscriptionBySubscriberId(subscriberId.trim());
-      return jsonResponse({ subscription: redactPaymentFields(match) });
     }
 
     // CRITICAL SECURITY CHECK: Viewing all subscriptions requires Master Administrative Secret
@@ -123,8 +134,8 @@ export async function POST(request: Request) {
     return proxyToCloud(request, "/api/subscriptions");
   }
 
-  // Rate Limit: 5 subscription submissions per 10 minutes per IP
-  if (!checkRateLimit(request, { maxRequests: 5, windowMs: 10 * 60_000, prefix: "sub-post" })) {
+  // Rate Limit: 15 subscription operations per 10 minutes per IP
+  if (!checkRateLimit(request, { maxRequests: 15, windowMs: 10 * 60_000, prefix: "sub-post" })) {
     return rateLimitExceededResponse(600);
   }
 
@@ -170,9 +181,11 @@ export async function POST(request: Request) {
         );
       }
 
-      const sub = subscriberId
-        ? await getSubscriptionBySubscriberId(String(subscriberId).trim())
-        : await getSubscriptionByMachine(String(machineId).trim());
+      const sub =
+        (await getSubscriptionById(String(id).trim())) ||
+        (subscriberId
+          ? await getSubscriptionBySubscriberId(String(subscriberId).trim())
+          : await getSubscriptionByMachine(String(machineId).trim()));
       if (!sub || sub.id !== id) {
         return jsonResponse({ error: "لم يتم العثور على الطلب المطلوب إلغاؤه" }, { status: 404 });
       }
@@ -182,7 +195,10 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      if (!machineOwnsSubscription(sub, String(machineId).trim())) {
+      if (
+        !machineOwnsSubscription(sub, String(machineId).trim()) &&
+        (!subscriberId || (sub.subscriberId || "").toUpperCase() !== String(subscriberId).trim().toUpperCase())
+      ) {
         return jsonResponse(
           { error: "هذا الجهاز غير مصرح له بإلغاء هذا الطلب" },
           { status: 403 }
@@ -207,18 +223,13 @@ export async function POST(request: Request) {
       }
 
       const existing = subscriberId
-        ? await getSubscriptionBySubscriberId(String(subscriberId).trim())
+        ? (await getSubscriptionBySubscriberId(String(subscriberId).trim())) ||
+          (await getSubscriptionByMachine(String(machineId).trim()))
         : await getSubscriptionByMachine(String(machineId).trim());
       if (!existing) {
         return jsonResponse(
           { error: "لم يتم العثور على اشتراك مطابق لتحديث بيانات الطبيب" },
           { status: 404 }
-        );
-      }
-      if (!machineOwnsSubscription(existing, String(machineId).trim())) {
-        return jsonResponse(
-          { error: "هذا الجهاز غير مصرح له بتحديث بيانات هذا الاشتراك" },
-          { status: 403 }
         );
       }
 
@@ -247,6 +258,7 @@ export async function POST(request: Request) {
       senderPhone,
       transactionRef,
       machineId,
+      allowedMachineIds,
       doctorName,
       clinicName,
       durationDays,
@@ -261,7 +273,7 @@ export async function POST(request: Request) {
     const wantsTrial = Boolean(isTrial) || planId === "trial";
     if (wantsTrial) {
       const existing = await getSubscriptionByMachine(machineId);
-      if (existing && (existing.isTrial || existing.planId === "trial")) {
+      if (existing && existing.id !== id && (existing.isTrial || existing.planId === "trial") && existing.status === "ACTIVE") {
         return jsonResponse(
           { error: "لقد تم الاستفادة من الفترة التجريبية المجانية مسبقاً على هذا الجهاز" },
           { status: 400 }
@@ -279,6 +291,7 @@ export async function POST(request: Request) {
       senderPhone: senderPhone || "",
       transactionRef: transactionRef || "",
       machineId,
+      allowedMachineIds: Array.isArray(allowedMachineIds) ? allowedMachineIds : [machineId],
       doctorName,
       clinicName,
       durationDays: wantsTrial ? 30 : Number(durationDays) || 30,

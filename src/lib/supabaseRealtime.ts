@@ -5,6 +5,7 @@
  */
 
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
+import { getKnownDeviceMachineIds } from "@/lib/deviceSecurity";
 
 const SUPABASE_PROJECT_REF = "qspaigplwyvpqbmszpgc";
 const SUPABASE_ANON_KEY =
@@ -82,19 +83,29 @@ export function initSubscriptionRealtimeListener(): () => void {
             const eventType = payload?.type; // 'INSERT' | 'UPDATE' | 'DELETE'
             const record = payload?.record || payload?.old;
 
-            const currentSub = useSubscriptionStore.getState().currentSubscription;
-            const currentSubId = useSubscriptionStore.getState().subscriberId;
-            const currentMachine = useSubscriptionStore.getState().machineId;
+            const state = useSubscriptionStore.getState();
+            const currentSub = state.currentSubscription;
+            const currentSubId = (state.subscriberId || "").trim().toUpperCase();
+            const knownMids = getKnownDeviceMachineIds(state.machineId);
+            const pendingId = localStorage.getItem("penrx_pending_sub_id");
+            const savedSubId = (localStorage.getItem("penrx_last_subscriber_id") || "").trim().toUpperCase();
+
+            const recMid = (record?.machineId || "").trim().toUpperCase();
+            const recSubId = (record?.subscriberId || "").trim().toUpperCase();
+            const recAllowed = Array.isArray(record?.allowedMachineIds)
+              ? record.allowedMachineIds.map((m: string) => (m || "").trim().toUpperCase())
+              : [];
 
             // Check if this event affects current device/subscriber
             const matchesCurrent =
               !record ||
               record.id === currentSub?.id ||
-              record.subscriberId === currentSubId ||
-              record.machineId === currentMachine ||
-              (Array.isArray(record.allowedMachineIds) && record.allowedMachineIds.includes(currentMachine));
+              (pendingId && record.id === pendingId) ||
+              (recSubId && (recSubId === currentSubId || recSubId === savedSubId)) ||
+              (recMid && knownMids.includes(recMid)) ||
+              recAllowed.some((m: string) => knownMids.includes(m));
 
-            if (matchesCurrent || eventType === "DELETE") {
+            if (matchesCurrent || eventType === "DELETE" || eventType === "UPDATE") {
               // Trigger immediate synchronization with authoritative cloud database
               useSubscriptionStore.getState().syncWithServer(true);
             }
@@ -110,13 +121,13 @@ export function initSubscriptionRealtimeListener(): () => void {
         isConnecting = false;
         realtimeSocket = null;
         clearInterval(heartbeatTimer);
-        // Attempt reconnect after 10 seconds if online
+        // Attempt reconnect after 5 seconds if online
         clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(() => {
           if (typeof window !== "undefined" && navigator.onLine) {
             connect();
           }
-        }, 10000);
+        }, 5000);
       };
     } catch {
       isConnecting = false;
@@ -128,7 +139,7 @@ export function initSubscriptionRealtimeListener(): () => void {
     connect();
   }
 
-  // Listen to network status changes
+  // Listen to network status & app foreground resume changes (critical on Android APK)
   const handleOnline = () => {
     connect();
     useSubscriptionStore.getState().syncWithServer(true);
@@ -143,11 +154,17 @@ export function initSubscriptionRealtimeListener(): () => void {
     }
   };
 
+  const handleFocus = () => {
+    useSubscriptionStore.getState().syncWithServer(true);
+  };
+
   window.addEventListener("online", handleOnline);
+  window.addEventListener("focus", handleFocus);
   document.addEventListener("visibilitychange", handleVisibility);
 
   return () => {
     window.removeEventListener("online", handleOnline);
+    window.removeEventListener("focus", handleFocus);
     document.removeEventListener("visibilitychange", handleVisibility);
     clearInterval(heartbeatTimer);
     clearTimeout(reconnectTimer);

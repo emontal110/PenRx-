@@ -3,7 +3,8 @@
  *
  * Priority chain for machine ID generation:
  *   1. Electron Desktop: Real hardware ID via IPC (Motherboard Serial → Windows GUID → MAC → Hostname)
- *   2. Web Browser:      Stable FNV-1a hash of screen + navigator + timezone attributes
+ *   2. Capacitor Mobile: Native Android hardware ID (SSAID)
+ *   3. Web Browser:      Stable FNV-1a hash of screen + navigator + timezone attributes
  *
  * The resulting ID is always in the format: PRX-XXXX-XXXX-XXXX
  * and is persisted in localStorage under "penrx_unique_machine_id".
@@ -18,6 +19,36 @@ export interface DeviceInfo {
   isElectron: boolean;
 }
 
+const PRIMARY_STORAGE_KEY = "penrx_unique_machine_id";
+const INITIAL_STORAGE_KEY = "penrx_initial_machine_id";
+const LEGACY_MOBILE_KEY = "penrx_machine_id";
+
+/**
+ * Returns all known Machine IDs associated with this device installation
+ * (primary hardware ID, initial pre-hydration browser ID, and legacy mobile ID).
+ * This guarantees that even if an Android APK transitions from a temporary browser ID
+ * to a native SSAID (PRX-ANDR-...), any subscription created under either ID is always matched.
+ */
+export function getKnownDeviceMachineIds(currentId?: string): string[] {
+  const ids = new Set<string>();
+  const add = (val?: string | null) => {
+    const clean = (val || "").trim().toUpperCase();
+    if (clean && clean.startsWith("PRX-") && clean !== "PRX-INIT-0000" && clean !== "PENRX-SERVER-INSTANCE") {
+      ids.add(clean);
+    }
+  };
+
+  add(currentId);
+  if (typeof window !== "undefined") {
+    try {
+      add(localStorage.getItem(PRIMARY_STORAGE_KEY));
+      add(localStorage.getItem(INITIAL_STORAGE_KEY));
+      add(localStorage.getItem(LEGACY_MOBILE_KEY));
+    } catch {}
+  }
+  return Array.from(ids);
+}
+
 /**
  * Generates or retrieves a stable, unique machine ID for the current installation.
  * In Electron desktop mode, this calls the main process for true hardware fingerprinting.
@@ -28,13 +59,9 @@ export async function getOrCreateMachineIdAsync(): Promise<string> {
     return "PENRX-SERVER-INSTANCE";
   }
 
-  const STORAGE_KEY = "penrx_unique_machine_id";
-  const existing = localStorage.getItem(STORAGE_KEY);
-
-  // Return if already have a valid ID
-  if (existing && existing.startsWith("PRX-")) {
-    return existing;
-  }
+  const existing =
+    localStorage.getItem(PRIMARY_STORAGE_KEY) ||
+    localStorage.getItem(LEGACY_MOBILE_KEY);
 
   // --- ELECTRON DESKTOP: Request real hardware ID from main process ---
   const w = window as any;
@@ -42,7 +69,11 @@ export async function getOrCreateMachineIdAsync(): Promise<string> {
     try {
       const hwId: string = await w.penrxDesktop.getHardwareMachineId();
       if (hwId && hwId.startsWith("PRX-")) {
-        localStorage.setItem(STORAGE_KEY, hwId);
+        if (existing && existing.startsWith("PRX-") && existing !== hwId) {
+          localStorage.setItem(INITIAL_STORAGE_KEY, existing);
+        }
+        localStorage.setItem(PRIMARY_STORAGE_KEY, hwId);
+        localStorage.setItem(LEGACY_MOBILE_KEY, hwId);
         return hwId;
       }
     } catch (err) {
@@ -66,12 +97,23 @@ export async function getOrCreateMachineIdAsync(): Promise<string> {
         const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, "0");
         const suffix = idInfo.identifier.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase().padStart(4, "A");
         const androidId = `PRX-ANDR-${hex.substring(0, 4)}-${suffix}`;
-        localStorage.setItem(STORAGE_KEY, androidId);
+        if (existing && existing.startsWith("PRX-") && existing !== androidId) {
+          localStorage.setItem(INITIAL_STORAGE_KEY, existing);
+        }
+        localStorage.setItem(PRIMARY_STORAGE_KEY, androidId);
+        localStorage.setItem(LEGACY_MOBILE_KEY, androidId);
         return androidId;
       }
     }
   } catch (capErr) {
     // Not in Capacitor or mobile runtime
+  }
+
+  // Return if already have a valid ID
+  if (existing && existing.startsWith("PRX-")) {
+    localStorage.setItem(PRIMARY_STORAGE_KEY, existing);
+    localStorage.setItem(LEGACY_MOBILE_KEY, existing);
+    return existing;
   }
 
   // --- BROWSER / WEB FALLBACK: Deterministic FNV-1a 32-bit hash ---
@@ -91,7 +133,8 @@ export async function getOrCreateMachineIdAsync(): Promise<string> {
   const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
   const machineId = `PRX-${hexHash.substring(0, 4)}-${hexHash.substring(4, 8)}-${randomSuffix}`;
 
-  localStorage.setItem(STORAGE_KEY, machineId);
+  localStorage.setItem(PRIMARY_STORAGE_KEY, machineId);
+  localStorage.setItem(LEGACY_MOBILE_KEY, machineId);
   return machineId;
 }
 
@@ -104,14 +147,17 @@ export function getOrCreateMachineId(): string {
     return "PENRX-SERVER-INSTANCE";
   }
 
-  const STORAGE_KEY = "penrx_unique_machine_id";
-  const existing = localStorage.getItem(STORAGE_KEY);
+  const existing =
+    localStorage.getItem(PRIMARY_STORAGE_KEY) ||
+    localStorage.getItem(LEGACY_MOBILE_KEY);
 
   if (existing && existing.startsWith("PRX-")) {
+    localStorage.setItem(PRIMARY_STORAGE_KEY, existing);
+    localStorage.setItem(LEGACY_MOBILE_KEY, existing);
     return existing;
   }
 
-  // Generate a temporary browser-based ID synchronously
+  // Generate a deterministic/browser-based ID synchronously
   const screenInfo = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
   const navInfo = `${navigator.userAgent}-${navigator.language}-${navigator.hardwareConcurrency || 4}`;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Cairo";
@@ -127,20 +173,22 @@ export function getOrCreateMachineId(): string {
   const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
   const machineId = `PRX-${hexHash.substring(0, 4)}-${hexHash.substring(4, 8)}-${randomSuffix}`;
 
-  localStorage.setItem(STORAGE_KEY, machineId);
+  localStorage.setItem(PRIMARY_STORAGE_KEY, machineId);
+  localStorage.setItem(INITIAL_STORAGE_KEY, machineId);
+  localStorage.setItem(LEGACY_MOBILE_KEY, machineId);
   return machineId;
 }
 
 /**
- * Initializes the hardware machine ID in Electron mode and updates the store if needed.
- * Call this once on app mount, after the store is ready.
+ * Initializes the hardware machine ID in Electron or Capacitor mode and updates the store.
+ * Always invokes `onUpdate` when a hardware ID is resolved so Zustand state is guaranteed
+ * to stay in sync with localStorage even across rehydrations.
  */
 export async function initializeHardwareMachineId(
   onUpdate: (newId: string) => void
 ): Promise<void> {
   if (typeof window === "undefined") return;
 
-  const STORAGE_KEY = "penrx_unique_machine_id";
   const w = window as any;
 
   // 1. Electron Desktop Native Hardware ID
@@ -148,11 +196,13 @@ export async function initializeHardwareMachineId(
     try {
       const hwId: string = await w.penrxDesktop.getHardwareMachineId();
       if (hwId && hwId.startsWith("PRX-")) {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored !== hwId) {
-          localStorage.setItem(STORAGE_KEY, hwId);
-          onUpdate(hwId);
+        const stored = localStorage.getItem(PRIMARY_STORAGE_KEY);
+        if (stored && stored.startsWith("PRX-") && stored !== hwId) {
+          localStorage.setItem(INITIAL_STORAGE_KEY, stored);
         }
+        localStorage.setItem(PRIMARY_STORAGE_KEY, hwId);
+        localStorage.setItem(LEGACY_MOBILE_KEY, hwId);
+        onUpdate(hwId);
         return;
       }
     } catch (err) {
@@ -176,14 +226,23 @@ export async function initializeHardwareMachineId(
         const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, "0");
         const suffix = idInfo.identifier.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase().padStart(4, "A");
         const androidId = `PRX-ANDR-${hex.substring(0, 4)}-${suffix}`;
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored !== androidId) {
-          localStorage.setItem(STORAGE_KEY, androidId);
-          onUpdate(androidId);
+        const stored = localStorage.getItem(PRIMARY_STORAGE_KEY);
+        if (stored && stored.startsWith("PRX-") && stored !== androidId) {
+          localStorage.setItem(INITIAL_STORAGE_KEY, stored);
         }
+        localStorage.setItem(PRIMARY_STORAGE_KEY, androidId);
+        localStorage.setItem(LEGACY_MOBILE_KEY, androidId);
+        onUpdate(androidId);
+        return;
       }
     }
   } catch (capErr) {}
+
+  // 3. Fallback: ensure Zustand store matches localStorage if already present
+  const fallbackStored = localStorage.getItem(PRIMARY_STORAGE_KEY) || localStorage.getItem(LEGACY_MOBILE_KEY);
+  if (fallbackStored && fallbackStored.startsWith("PRX-")) {
+    onUpdate(fallbackStored);
+  }
 }
 
 /**
@@ -593,4 +652,3 @@ export function detectClockTampering(knownServerTime?: number): { tampered: bool
   }
   return { tampered: false };
 }
-

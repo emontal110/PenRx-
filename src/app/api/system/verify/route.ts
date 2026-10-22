@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import {
+  getSubscriptionById,
   getSubscriptionByMachine,
   getSubscriptionBySubscriberId,
-  getAllSubscriptions,
+  pickBestSubscription,
   activateSubscription,
   suspendSubscription,
   deleteSubscription,
@@ -15,6 +16,7 @@ import {
   verifySignedToken,
   validateAdminAuthorization,
   forceHydrateCache,
+  SubscriptionRecord,
 } from "@/lib/subscriptionManager";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
@@ -24,7 +26,7 @@ export const dynamic = "force-dynamic";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-key, x-master-secret, apikey",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-key, x-master-secret, apikey, Pragma, Cache-Control",
 };
 
 export async function OPTIONS() {
@@ -76,10 +78,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   const machineId = searchParams.get("machineId");
+  const altMachineId = searchParams.get("altMachineId");
   const subscriberId = searchParams.get("subscriberId");
+  const subIdParam = searchParams.get("id");
 
-  if (!machineId) {
-    return jsonResponse({ error: "machineId is required" }, { status: 400 });
+  if (!machineId && !subscriberId && !subIdParam) {
+    return jsonResponse({ error: "machineId, subscriberId, or id is required" }, { status: 400 });
   }
 
   const now = new Date();
@@ -88,13 +92,29 @@ export async function GET(request: Request) {
     // Force refresh cache so portal activations are visible immediately
     await forceHydrateCache();
 
-    let sub = await getSubscriptionByMachine(machineId);
-    if (!sub && subscriberId) {
-      sub = await getSubscriptionBySubscriberId(subscriberId);
-    }
+    const cleanMachineId = (machineId || "").trim();
+    const cleanAltMachineId = (altMachineId || "").trim();
+    const cleanSubId = (subscriberId || "").trim();
+    const cleanOrderId = (subIdParam || "").trim();
 
-    // [SECURITY FIX CRIT-02]: Removed auto-selection of the sole active subscription.
-    // A device must be explicitly registered before it can use the system.
+    const candidates: SubscriptionRecord[] = [];
+    const [byOrder, byMachine, byAltMachine, bySubId] = await Promise.all([
+      cleanOrderId ? getSubscriptionById(cleanOrderId) : Promise.resolve(null),
+      cleanMachineId ? getSubscriptionByMachine(cleanMachineId) : Promise.resolve(null),
+      cleanAltMachineId && cleanAltMachineId !== cleanMachineId
+        ? getSubscriptionByMachine(cleanAltMachineId)
+        : Promise.resolve(null),
+      cleanSubId && cleanSubId !== "SUB-0000"
+        ? getSubscriptionBySubscriberId(cleanSubId)
+        : Promise.resolve(null),
+    ]);
+
+    if (byOrder) candidates.push(byOrder);
+    if (byMachine) candidates.push(byMachine);
+    if (byAltMachine) candidates.push(byAltMachine);
+    if (bySubId) candidates.push(bySubId);
+
+    const sub = pickBestSubscription(candidates);
 
     if (!sub) {
       return jsonResponse({ success: false, status: "none", machineId });
@@ -108,12 +128,16 @@ export async function GET(request: Request) {
       status = "EXPIRED";
     }
 
-    if (status === "ACTIVE" && expiry && expiry > now) {
-      const daysRemaining = Math.max(
-        0,
-        Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    if (status === "ACTIVE" && (!expiry || expiry > now)) {
+      const daysRemaining = expiry
+        ? Math.max(0, Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        : sub.durationDays || 30;
+      const effectiveMachine = cleanMachineId || sub.machineId;
+      const token = safeSignedToken(
+        effectiveMachine,
+        sub.expiresAt || new Date(now.getTime() + daysRemaining * 86400000).toISOString(),
+        sub.subscriberId
       );
-      const token = safeSignedToken(machineId, sub.expiresAt!, sub.subscriberId);
       return jsonResponse({
         success: true,
         status: "active",
@@ -134,14 +158,13 @@ export async function GET(request: Request) {
     console.error("[SystemVerify GET] Database query failed:", err.message);
 
     // Fallback: If DB is unreachable, check client-provided offlineToken
-    // Accept both param names — newer clients send "offlineToken", legacy clients send "token"
     const offlineToken = searchParams.get("offlineToken") || searchParams.get("token");
-    if (offlineToken) {
+    if (offlineToken && machineId) {
       const parsed = verifySignedToken(offlineToken);
       if (
         parsed &&
         parsed.status === "active" &&
-        parsed.machineId === machineId.trim() // ← Machine binding check
+        parsed.machineId.trim().toUpperCase() === machineId.trim().toUpperCase()
       ) {
         const expiry = new Date(parsed.expiresAt);
         if (expiry > now) {

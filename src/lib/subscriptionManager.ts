@@ -29,6 +29,8 @@ async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
     apikey: key,
     Authorization: "Bearer " + key,
     "Content-Type": "application/json",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    Pragma: "no-cache",
     ...((options.headers as any) || {}),
   });
   const getSignal = () =>
@@ -39,6 +41,7 @@ async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
 
   const res = await fetch(`${SUPABASE_REST_URL}${endpoint}`, {
     ...options,
+    cache: "no-store",
     headers: buildHeaders(SUPABASE_KEY),
     signal: getSignal(),
   });
@@ -47,6 +50,7 @@ async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
   if ((res.status === 401 || res.status === 403) && SUPABASE_KEY !== DEFAULT_SUPABASE_ANON_KEY) {
     return fetch(`${SUPABASE_REST_URL}${endpoint}`, {
       ...options,
+      cache: "no-store",
       headers: buildHeaders(DEFAULT_SUPABASE_ANON_KEY),
       signal: getSignal(),
     });
@@ -238,17 +242,17 @@ function generateSubscriberId(): string {
 
 /**
  * Ownership check: does the given hardware machine ID belong to this subscription?
- * Used by sync/backup/profile routes to enforce multi-tenant isolation without
- * relying on the (short, guessable) subscriber ID alone.
+ * Case-insensitive comparison across primary machineId and allowedMachineIds.
  */
 export function machineOwnsSubscription(sub: SubscriptionRecord, machineId: string): boolean {
   if (!sub || !machineId) return false;
-  const clean = machineId.trim();
+  const clean = machineId.trim().toUpperCase();
   if (!clean) return false;
-  return (
-    sub.machineId === clean ||
-    (Array.isArray(sub.allowedMachineIds) && sub.allowedMachineIds.includes(clean))
-  );
+  const primary = (sub.machineId || "").trim().toUpperCase();
+  const allowed = Array.isArray(sub.allowedMachineIds)
+    ? sub.allowedMachineIds.map((m) => (m || "").trim().toUpperCase())
+    : [];
+  return primary === clean || allowed.includes(clean);
 }
 
 /**
@@ -268,28 +272,59 @@ function safeGenerateSignedToken(
 }
 
 /**
+ * Helper: Select best subscription from a list (prioritizing non-expired ACTIVE, then PENDING, then most recent)
+ */
+export function pickBestSubscription(records: SubscriptionRecord[]): SubscriptionRecord | null {
+  if (!Array.isArray(records) || records.length === 0) return null;
+  const now = Date.now();
+
+  for (const r of records) {
+    if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
+      r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
+    }
+    if (r.id) {
+      globalSubscriptionsCache.set(r.id, r);
+    }
+  }
+
+  const activeValid = records.find(
+    (s) => s.status === "ACTIVE" && (!s.expiresAt || new Date(s.expiresAt).getTime() > now)
+  );
+  if (activeValid) return activeValid;
+
+  const anyActive = records.find((s) => s.status === "ACTIVE");
+  if (anyActive) return anyActive;
+
+  const pending = records.find((s) => s.status === "PENDING");
+  if (pending) return pending;
+
+  return records[0];
+}
+
+/**
  * Hydrate in-memory cache from PostgreSQL DB if available
  */
 async function hydrateCache(force = false): Promise<void> {
   const now = Date.now();
-  // Reduced TTL to 2s: Portal activates directly in Supabase; API must re-fetch quickly
-  if (isCacheHydrated && !force && (now - lastHydrateTime < 2000)) return;
+  // Reduced TTL to 1.5s: Portal activates directly in Supabase; API must re-fetch quickly
+  if (isCacheHydrated && !force && (now - lastHydrateTime < 1500)) return;
 
-  // 1. Try Supabase REST Cloud First (Fast and works over standard HTTPS port 443)
   try {
-    const res = await fetchSupabaseRest("?select=*&order=createdAt.desc");
+    const res = await fetchSupabaseRest("?select=*&order=updatedAt.desc,createdAt.desc&limit=500");
     if (res.ok) {
       const records = await res.json();
-      globalSubscriptionsCache.clear();
-      for (const r of records) {
-        if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
-          r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
+      if (Array.isArray(records)) {
+        globalSubscriptionsCache.clear();
+        for (const r of records) {
+          if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
+            r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
+          }
+          globalSubscriptionsCache.set(r.id, r);
         }
-        globalSubscriptionsCache.set(r.id, r);
+        isCacheHydrated = true;
+        lastHydrateTime = now;
+        return;
       }
-      isCacheHydrated = true;
-      lastHydrateTime = now;
-      return;
     }
   } catch (err: any) {
     console.warn("Supabase REST cache hydration notice:", err.message);
@@ -322,6 +357,37 @@ export async function getAllSubscriptions(): Promise<SubscriptionRecord[]> {
 }
 
 /**
+ * Find subscription by exact Order/Record ID (`sub-...` or `trial-...`).
+ * Queries Supabase directly first so portal activations on that exact record are seen immediately.
+ */
+export async function getSubscriptionById(id: string): Promise<SubscriptionRecord | null> {
+  const cleanId = (id || "").trim();
+  if (!cleanId) return null;
+
+  try {
+    const res = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(cleanId)}&limit=1`);
+    if (res.ok) {
+      const records: SubscriptionRecord[] = await res.json();
+      if (Array.isArray(records) && records.length > 0) {
+        return pickBestSubscription(records);
+      }
+    }
+  } catch (err) {
+    console.warn("[getSubscriptionById] Supabase direct query notice:", err);
+  }
+
+  await hydrateCache(true);
+  const cached = globalSubscriptionsCache.get(cleanId);
+  if (cached) {
+    if (cached.status === "ACTIVE" && cached.expiresAt && !cached.signatureToken) {
+      cached.signatureToken = safeGenerateSignedToken(cached.machineId, cached.expiresAt, cached.subscriberId);
+    }
+    return cached;
+  }
+  return null;
+}
+
+/**
  * Find subscription by device Machine ID (either primary or in allowedMachineIds).
  * ALWAYS queries Supabase directly first — Vercel serverless instances have isolated
  * in-memory caches that go stale when the portal activates via a different instance.
@@ -331,102 +397,63 @@ export async function getSubscriptionByMachine(machineId: string): Promise<Subsc
   if (!cleanId) return null;
 
   // ─── PRIMARY PATH: Always go directly to Supabase REST ────────────────────
-  // This bypasses stale serverless-instance caches entirely.
-  // The portal activates subscriptions via PATCH on Supabase REST; reading from
-  // the same source guarantees we always see the latest status immediately.
   try {
     const res = await fetchSupabaseRest(
-      `?machineId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=5`
+      `?machineId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=10`
     );
     if (res.ok) {
       const records: SubscriptionRecord[] = await res.json();
       if (Array.isArray(records) && records.length > 0) {
-        // Also check allowedMachineIds for multi-device subscriptions
-        let matched = records.filter((r) => {
-          const primary = (r.machineId || "").trim().toUpperCase();
-          const allowed = Array.isArray(r.allowedMachineIds)
-            ? r.allowedMachineIds.map((m) => (m || "").trim().toUpperCase())
-            : [];
-          return primary === cleanId || allowed.includes(cleanId);
-        });
-        if (matched.length === 0) matched = records; // fallback: return all if none match allowed
-
-        for (const r of matched) {
-          if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
-            r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
-          }
-          globalSubscriptionsCache.set(r.id, r);
+        const best = pickBestSubscription(records);
+        if (best && best.status === "ACTIVE") {
+          return best;
         }
-
-        const directActive = matched.find((s) => s.status === "ACTIVE");
-        if (directActive) return directActive;
-        const directPending = matched.find((s) => s.status === "PENDING");
-        if (directPending) return directPending;
-        return matched[0];
+        // If only PENDING/other found on primary machineId, also check cache for any ACTIVE allowedMachineIds match
+        await hydrateCache(true);
+        const allCached = Array.from(globalSubscriptionsCache.values()).filter((s) =>
+          machineOwnsSubscription(s, cleanId)
+        );
+        const bestCombined = pickBestSubscription([...records, ...allCached]);
+        if (bestCombined) return bestCombined;
       }
-      // Supabase responded but found nothing for this machineId
-      // Fall through to try allowedMachineIds query below
     }
   } catch (err) {
     console.warn("[getSubscriptionByMachine] Supabase direct query failed, falling back to cache:", err);
   }
 
-  // ─── FALLBACK PATH: Search cache (offline or Supabase unreachable) ─────────
+  // ─── FALLBACK PATH: Search cache (also covers secondary devices in allowedMachineIds) ───
   await hydrateCache(true);
   const all = Array.from(globalSubscriptionsCache.values());
-  const matching = all.filter((s) => {
-    const primary = (s.machineId || "").trim().toUpperCase();
-    const allowed = Array.isArray(s.allowedMachineIds)
-      ? s.allowedMachineIds.map((m) => (m || "").trim().toUpperCase())
-      : [];
-    return primary === cleanId || allowed.includes(cleanId);
-  });
+  const matching = all.filter((s) => machineOwnsSubscription(s, cleanId));
 
-  const active = matching.find((s) => s.status === "ACTIVE");
-  if (active) return active;
-  const pending = matching.find((s) => s.status === "PENDING");
-  if (pending) return pending;
-  return matching[0] || null;
+  return pickBestSubscription(matching);
 }
 
-
 /**
- * Find subscription by unique Subscriber ID (prioritizes ACTIVE first)
+ * Find subscription by unique Subscriber ID (prioritizes ACTIVE first).
+ * Queries Supabase directly first to avoid stale serverless instance memory caches.
  */
 export async function getSubscriptionBySubscriberId(subscriberId: string): Promise<SubscriptionRecord | null> {
-  const all = await getAllSubscriptions();
-  const cleanId = subscriberId.toUpperCase().trim();
-  const matching = all.filter((s) => s.subscriberId?.toUpperCase() === cleanId);
-  if (matching.length > 0) {
-    const active = matching.find((s) => s.status === "ACTIVE");
-    if (active) return active;
-    const pending = matching.find((s) => s.status === "PENDING");
-    if (pending) return pending;
-    return matching[0];
-  }
+  const cleanId = (subscriberId || "").toUpperCase().trim();
+  if (!cleanId || cleanId === "SUB-0000") return null;
 
-  // Direct Supabase REST fallback if not in cache (case-insensitive, prioritizing ACTIVE)
+  // 1. Direct Supabase REST query FIRST (authoritative, bypasses stale serverless RAM)
   try {
-    const res = await fetchSupabaseRest(`?subscriberId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=5`);
+    const res = await fetchSupabaseRest(
+      `?subscriberId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=10`
+    );
     if (res.ok) {
       const records: SubscriptionRecord[] = await res.json();
       if (Array.isArray(records) && records.length > 0) {
-        for (const r of records) {
-          if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
-            r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
-          }
-          globalSubscriptionsCache.set(r.id, r);
-        }
-        const directActive = records.find((s) => s.status === "ACTIVE");
-        if (directActive) return directActive;
-        const directPending = records.find((s) => s.status === "PENDING");
-        if (directPending) return directPending;
-        return records[0];
+        return pickBestSubscription(records);
       }
     }
   } catch {}
 
-  return null;
+  // 2. Fallback to hydrated cache
+  const all = await getAllSubscriptions();
+  const matching = all.filter((s) => s.subscriberId?.toUpperCase().trim() === cleanId);
+  return pickBestSubscription(matching);
 }
 
 /**
@@ -442,6 +469,7 @@ export async function submitSubscription(data: {
   senderPhone: string;
   transactionRef: string;
   machineId: string;
+  allowedMachineIds?: string[];
   doctorName?: string;
   clinicName?: string;
   durationDays?: number;
@@ -450,8 +478,24 @@ export async function submitSubscription(data: {
   await hydrateCache();
 
   const id = data.id || `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+  // If this exact subscription ID was already submitted via direct Supabase REST and already activated,
+  // never overwrite its ACTIVE status back to PENDING!
+  const existingById = globalSubscriptionsCache.get(id);
+  if (existingById && existingById.status === "ACTIVE") {
+    return existingById;
+  }
+
   const subscriberId = data.subscriberId || generateSubscriberId();
   const nowIso = new Date().toISOString();
+  const cleanPrimaryMachine = (data.machineId || "").trim();
+  const mergedAllowed = Array.from(
+    new Set(
+      [cleanPrimaryMachine, ...(Array.isArray(data.allowedMachineIds) ? data.allowedMachineIds : [])]
+        .map((m) => (m || "").trim())
+        .filter(Boolean)
+    )
+  );
 
   const record: SubscriptionRecord = {
     id,
@@ -463,8 +507,8 @@ export async function submitSubscription(data: {
     senderPhone: data.senderPhone,
     transactionRef: data.transactionRef,
     status: "PENDING",
-    machineId: data.machineId,
-    allowedMachineIds: [data.machineId],
+    machineId: cleanPrimaryMachine,
+    allowedMachineIds: mergedAllowed.length > 0 ? mergedAllowed : [cleanPrimaryMachine],
     doctorName: data.doctorName,
     clinicName: data.clinicName,
     durationDays: data.durationDays || 30,
@@ -476,16 +520,22 @@ export async function submitSubscription(data: {
   // Update in-memory instantly
   globalSubscriptionsCache.set(id, record);
 
-  // Persist directly to Supabase REST Cloud for instant Portal visibility
+  // Persist directly to Supabase REST Cloud with merge-duplicates so dual-write from client + API never conflicts
   try {
-    const supaRes = await fetchSupabaseRest("", {
+    const supaRes = await fetchSupabaseRest("?on_conflict=id", {
       method: "POST",
-      headers: { Prefer: "return=representation" },
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
       body: JSON.stringify(record),
     });
-    if (!supaRes.ok) {
+    if (supaRes.ok) {
+      const savedRows = await supaRes.json().catch(() => null);
+      if (Array.isArray(savedRows) && savedRows.length > 0) {
+        globalSubscriptionsCache.set(id, savedRows[0]);
+        return savedRows[0];
+      }
+    } else {
       const errText = await supaRes.text().catch(() => "");
-      console.warn(`[Supabase REST Error ${supaRes.status}]:`, errText);
+      console.warn(`[Supabase REST Notice ${supaRes.status}]:`, errText);
     }
   } catch (err: any) {
     console.warn("Supabase REST persist notice:", err.message);
@@ -502,7 +552,7 @@ export async function linkDeviceToSubscriber(
   newMachineId: string,
   verificationPhone?: string
 ): Promise<{ success: boolean; error?: string; subscription?: SubscriptionRecord }> {
-  await hydrateCache();
+  await hydrateCache(true);
   const sub = await getSubscriptionBySubscriberId(subscriberId);
   if (!sub) {
     return { success: false, error: "لم يتم العثور على حساب مشترك بهذا المعرّف" };
@@ -557,12 +607,12 @@ export async function linkDeviceToSubscriber(
  * Add an allowed device to a subscription by subscription ID
  */
 export async function addAllowedDevice(subscriptionId: string, newMachineId: string): Promise<SubscriptionRecord | null> {
-  await hydrateCache();
-  const sub = globalSubscriptionsCache.get(subscriptionId);
+  await hydrateCache(true);
+  let sub = globalSubscriptionsCache.get(subscriptionId) || (await getSubscriptionById(subscriptionId));
   if (!sub) return null;
 
   const cleanMachine = newMachineId.trim();
-  const list = sub.allowedMachineIds || [];
+  const list = Array.isArray(sub.allowedMachineIds) ? [...sub.allowedMachineIds] : [];
   if (!list.includes(cleanMachine)) {
     list.push(cleanMachine);
   }
@@ -588,8 +638,8 @@ export async function addAllowedDevice(subscriptionId: string, newMachineId: str
  * Remove an allowed device from a subscription
  */
 export async function removeAllowedDevice(subscriptionId: string, targetMachineId: string): Promise<SubscriptionRecord | null> {
-  await hydrateCache();
-  const sub = globalSubscriptionsCache.get(subscriptionId);
+  await hydrateCache(true);
+  let sub = globalSubscriptionsCache.get(subscriptionId) || (await getSubscriptionById(subscriptionId));
   if (!sub) return null;
 
   const target = targetMachineId.trim();
@@ -622,8 +672,8 @@ export async function removeAllowedDevice(subscriptionId: string, targetMachineI
  * Set primary device machine ID
  */
 export async function setPrimaryDevice(subscriptionId: string, machineId: string): Promise<SubscriptionRecord | null> {
-  await hydrateCache();
-  const sub = globalSubscriptionsCache.get(subscriptionId);
+  await hydrateCache(true);
+  let sub = globalSubscriptionsCache.get(subscriptionId) || (await getSubscriptionById(subscriptionId));
   if (!sub) return null;
 
   const target = machineId.trim();
@@ -662,8 +712,8 @@ export async function editAllowedDevice(
   oldMachineId: string,
   newMachineId: string
 ): Promise<SubscriptionRecord | null> {
-  await hydrateCache();
-  const sub = globalSubscriptionsCache.get(subscriptionId);
+  await hydrateCache(true);
+  let sub = globalSubscriptionsCache.get(subscriptionId) || (await getSubscriptionById(subscriptionId));
   if (!sub) return null;
 
   const oldTarget = oldMachineId.trim();
@@ -707,39 +757,39 @@ export async function editAllowedDevice(
  */
 export async function activateSubscription(subscriptionId: string, durationDays: number): Promise<SubscriptionRecord | null> {
   await hydrateCache(true);
-  let sub = globalSubscriptionsCache.get(subscriptionId);
-  if (!sub) {
-    try {
-      const directRes = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(subscriptionId)}&limit=1`);
-      if (directRes.ok) {
-        const directRecords: SubscriptionRecord[] = await directRes.json();
-        if (Array.isArray(directRecords) && directRecords.length > 0) {
-          sub = directRecords[0];
-          globalSubscriptionsCache.set(sub.id, sub);
-        }
-      }
-    } catch {}
-  }
+  let sub = globalSubscriptionsCache.get(subscriptionId) || (await getSubscriptionById(subscriptionId));
   if (!sub) return null;
 
-  // Auto-suspend any older ACTIVE subscriptions for this machine or subscriber
+  // Auto-suspend any older ACTIVE subscriptions and clean up any duplicate PENDING subscriptions for this machine or subscriber
   for (const [id, s] of globalSubscriptionsCache.entries()) {
-    if (id !== subscriptionId && s.status === "ACTIVE") {
+    if (id !== subscriptionId && (s.status === "ACTIVE" || s.status === "PENDING")) {
       const matchMachine =
-        (s.machineId || "").toUpperCase() === (sub.machineId || "").toUpperCase() ||
+        (s.machineId || "").trim().toUpperCase() === (sub.machineId || "").trim().toUpperCase() ||
         (Array.isArray(s.allowedMachineIds) &&
-          s.allowedMachineIds.some((m) => (m || "").toUpperCase() === (sub.machineId || "").toUpperCase()));
-      const matchSub = s.subscriberId && sub.subscriberId && s.subscriberId.toUpperCase() === sub.subscriberId.toUpperCase();
+          s.allowedMachineIds.some((m) => (m || "").trim().toUpperCase() === (sub.machineId || "").trim().toUpperCase()));
+      const matchSub =
+        s.subscriberId &&
+        sub.subscriberId &&
+        s.subscriberId.trim().toUpperCase() === sub.subscriberId.trim().toUpperCase();
       if (matchMachine || matchSub) {
-        s.status = "SUSPENDED";
-        s.updatedAt = new Date().toISOString();
-        globalSubscriptionsCache.set(id, s);
-        try {
-          await fetchSupabaseRest(`?id=eq.${encodeURIComponent(id)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ status: "SUSPENDED", updatedAt: s.updatedAt }),
-          });
-        } catch {}
+        if (s.status === "PENDING") {
+          globalSubscriptionsCache.delete(id);
+          try {
+            await fetchSupabaseRest(`?id=eq.${encodeURIComponent(id)}`, {
+              method: "DELETE",
+            });
+          } catch {}
+        } else {
+          s.status = "SUSPENDED";
+          s.updatedAt = new Date().toISOString();
+          globalSubscriptionsCache.set(id, s);
+          try {
+            await fetchSupabaseRest(`?id=eq.${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              body: JSON.stringify({ status: "SUSPENDED", updatedAt: s.updatedAt }),
+            });
+          } catch {}
+        }
       }
     }
   }
@@ -748,6 +798,13 @@ export async function activateSubscription(subscriptionId: string, durationDays:
   const now = new Date();
   const expires = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
+  // Ensure primary machineId is always in allowedMachineIds
+  const primaryMid = (sub.machineId || "").trim();
+  const existingAllowed = Array.isArray(sub.allowedMachineIds) ? [...sub.allowedMachineIds] : [];
+  if (primaryMid && !existingAllowed.includes(primaryMid)) {
+    existingAllowed.push(primaryMid);
+  }
+
   // Generate HMAC-signed token for secure validation
   const signatureToken = safeGenerateSignedToken(sub.machineId, expires.toISOString(), sub.subscriberId);
 
@@ -755,6 +812,7 @@ export async function activateSubscription(subscriptionId: string, durationDays:
   sub.durationDays = days;
   sub.activatedAt = now.toISOString();
   sub.expiresAt = expires.toISOString();
+  sub.allowedMachineIds = existingAllowed;
   sub.signatureToken = signatureToken;
   sub.updatedAt = now.toISOString();
 
@@ -766,6 +824,7 @@ export async function activateSubscription(subscriptionId: string, durationDays:
     durationDays: days,
     activatedAt: sub.activatedAt,
     expiresAt: sub.expiresAt,
+    allowedMachineIds: existingAllowed,
     signatureToken,
     updatedAt: sub.updatedAt,
   });
@@ -778,19 +837,7 @@ export async function activateSubscription(subscriptionId: string, durationDays:
  */
 export async function adjustSubscriptionDays(subscriptionId: string, daysDelta: number): Promise<SubscriptionRecord | null> {
   await hydrateCache(true);
-  let sub = globalSubscriptionsCache.get(subscriptionId);
-  if (!sub) {
-    try {
-      const directRes = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(subscriptionId)}&limit=1`);
-      if (directRes.ok) {
-        const directRecords: SubscriptionRecord[] = await directRes.json();
-        if (Array.isArray(directRecords) && directRecords.length > 0) {
-          sub = directRecords[0];
-          globalSubscriptionsCache.set(sub.id, sub);
-        }
-      }
-    } catch {}
-  }
+  let sub = globalSubscriptionsCache.get(subscriptionId) || (await getSubscriptionById(subscriptionId));
   if (!sub) return null;
 
   const currentExpiry = sub.expiresAt ? new Date(sub.expiresAt).getTime() : Date.now();
@@ -823,8 +870,8 @@ export async function adjustSubscriptionDays(subscriptionId: string, daysDelta: 
  * Suspend subscription
  */
 export async function suspendSubscription(subscriptionId: string): Promise<SubscriptionRecord | null> {
-  await hydrateCache();
-  const sub = globalSubscriptionsCache.get(subscriptionId);
+  await hydrateCache(true);
+  const sub = globalSubscriptionsCache.get(subscriptionId) || (await getSubscriptionById(subscriptionId));
   if (!sub) return null;
 
   sub.status = "SUSPENDED";
@@ -849,8 +896,8 @@ export async function suspendSubscription(subscriptionId: string): Promise<Subsc
  * ONLY executed on explicit subscription deletion by admin (NOT on expiration!)
  */
 export async function deleteSubscription(subscriptionId: string): Promise<boolean> {
-  await hydrateCache();
-  const sub = globalSubscriptionsCache.get(subscriptionId);
+  await hydrateCache(true);
+  const sub = globalSubscriptionsCache.get(subscriptionId) || (await getSubscriptionById(subscriptionId));
   const subscriberId = sub?.subscriberId;
   const machineId = sub?.machineId;
 
@@ -873,7 +920,6 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
   };
 
   if (subscriberId && subscriberId !== "SUB") {
-    // Delete CloudPrescription from Supabase
     try {
       await fetch(
         `${SUPABASE_BASE_ROOT}/CloudPrescription?subscriberId=eq.${encodeURIComponent(subscriberId)}`,
@@ -881,7 +927,6 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
       );
     } catch {}
 
-    // Delete CloudBackup from Supabase
     try {
       await fetch(
         `${SUPABASE_BASE_ROOT}/CloudBackup?subscriberId=eq.${encodeURIComponent(subscriberId)}`,
@@ -889,7 +934,6 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
       );
     } catch {}
 
-    // Clean up any remaining records in Subscription for this subscriberId
     try {
       await fetch(
         `${SUPABASE_BASE_ROOT}/Subscription?subscriberId=eq.${encodeURIComponent(subscriberId)}`,
@@ -898,7 +942,6 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
     } catch {}
   }
 
-  // Also clean up any extra duplicate subscription records tied to machineId
   if (machineId) {
     try {
       await fetch(
@@ -920,13 +963,13 @@ export async function updateSubscriptionDoctorProfile(
   clinicName: string,
   phone?: string
 ): Promise<SubscriptionRecord | null> {
-  await hydrateCache();
+  await hydrateCache(true);
   const all = Array.from(globalSubscriptionsCache.values());
+  const cleanKey = (subscriberIdOrMachineId || "").trim().toUpperCase();
   const sub = all.find(
     (s) =>
-      s.subscriberId === subscriberIdOrMachineId ||
-      s.machineId === subscriberIdOrMachineId ||
-      (s.allowedMachineIds && s.allowedMachineIds.includes(subscriberIdOrMachineId))
+      (s.subscriberId || "").trim().toUpperCase() === cleanKey ||
+      machineOwnsSubscription(s, cleanKey)
   );
 
   if (!sub) return null;

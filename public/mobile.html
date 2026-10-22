@@ -682,15 +682,16 @@
     let currentSubscription = null;
     let currentRxMeds = [];
 
-    // 1. Machine ID Generator & Storage
+    // 1. Unified Machine ID Generator & Storage (shared across APK, Web, and Desktop)
     function getOrCreateMachineId() {
-      let id = localStorage.getItem("penrx_machine_id");
-      if (!id) {
+      let id = localStorage.getItem("penrx_unique_machine_id") || localStorage.getItem("penrx_machine_id");
+      if (!id || !id.startsWith("PRX-")) {
         const r1 = Math.random().toString(36).substring(2, 6).toUpperCase();
         const r2 = Math.random().toString(36).substring(2, 6).toUpperCase();
         id = `PRX-MOB-${r1}-${r2}`;
-        localStorage.setItem("penrx_machine_id", id);
       }
+      localStorage.setItem("penrx_unique_machine_id", id);
+      localStorage.setItem("penrx_machine_id", id);
       return id;
     }
 
@@ -1393,6 +1394,26 @@
         updatedAt: new Date().toISOString()
       };
 
+      const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
+      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+      localStorage.setItem("penrx_pending_sub_id", record.id);
+      localStorage.setItem("penrx_last_subscriber_id", record.subscriberId);
+      localStorage.setItem("penrx_was_pending", "true");
+
+      // Direct Supabase REST persist (unified with desktop/web store)
+      try {
+        await fetch(`${SUPABASE_REST_URL}?on_conflict=id`, {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=representation",
+          },
+          body: JSON.stringify(record),
+        });
+      } catch (e) {}
+
       try {
         const res = await fetch(`${API_BASE}/api/subscriptions`, {
           method: "POST",
@@ -1587,8 +1608,22 @@
       } catch {}
 
       if (confirmedSub) {
+        const wasPending =
+          (currentSubscription && currentSubscription.status === "PENDING") ||
+          localStorage.getItem("penrx_was_pending") === "true";
         currentSubscription = confirmedSub;
         localStorage.setItem("penrx_last_sub", JSON.stringify(currentSubscription));
+        if (confirmedSub.subscriberId) {
+          localStorage.setItem("penrx_last_subscriber_id", confirmedSub.subscriberId);
+        }
+        if (confirmedSub.status === "ACTIVE") {
+          localStorage.removeItem("penrx_pending_sub_id");
+          if (wasPending) {
+            localStorage.removeItem("penrx_was_pending");
+            showToast("🎉 تم تفعيل وتنشيط اشتراكك بنجاح! يمكنك الآن استخدام المنظومة بالكامل.", "success");
+            switchTab("home");
+          }
+        }
         updateUiForSubscription(currentSubscription);
         return;
       }
@@ -1682,7 +1717,7 @@
               <span class="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 font-bold text-[10px]">${sub.planName}</span>
             </div>
             <p class="text-[11px] text-slate-300">انتهت مدة اشتراكك. يرجى تجديد الاشتراك لمتابعة إنشاء الروشتات وإدارة العيادة.</p>
-            <button type="button" onclick="switchTab('pricing')" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+            <button type="button" onclick="switchTab('subscriptions')" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
               <span>تجديد الاشتراك الآن ⚡</span>
             </button>
           `;
