@@ -298,7 +298,7 @@ if (fs.existsSync(distElectron)) {
 }
 
 console.log("⚡ Compressing and packaging Windows Setup installer (optimized fast build)...");
-run("npx electron-builder --win");
+run("npx electron-builder --win --publish never");
 
 if (fs.existsSync(distElectron)) {
   // Check for unpacked direct EXE

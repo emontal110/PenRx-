@@ -288,6 +288,10 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                 : null,
             };
           });
+          // Trigger immediate server sync once true hardware ID is resolved
+          setTimeout(() => {
+            get().syncWithServer(true);
+          }, 150);
         });
       },
 
@@ -733,7 +737,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           }
         } catch {}
 
-        // 3. Direct Supabase Cloud REST verification (ensures instant sync even if serverless is cold/sleeping)
+        // 3. Direct Supabase Cloud REST verification (safe PostgREST syntax without unquoted braces inside or)
         let supaResponded = false;
         let supaReportedNoSub = false;
         try {
@@ -741,34 +745,31 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
             "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
 
-          let orConditions = `machineId.ilike.${encodeURIComponent(machineId)},allowedMachineIds.cs.{${encodeURIComponent(machineId)}}`;
-          const mUpper = machineId.toUpperCase();
-          const mLower = machineId.toLowerCase();
-          if (mUpper !== machineId) {
-            orConditions += `,allowedMachineIds.cs.{${encodeURIComponent(mUpper)}}`;
-          }
-          if (mLower !== machineId) {
-            orConditions += `,allowedMachineIds.cs.{${encodeURIComponent(mLower)}}`;
-          }
+          const orParts: string[] = [`machineId.ilike.${encodeURIComponent(machineId)}`];
           if (subId && subId !== "SUB-0000") {
-            orConditions += `,subscriberId.ilike.${encodeURIComponent(subId)}`;
+            orParts.push(`subscriberId.ilike.${encodeURIComponent(subId)}`);
           }
           if (currentLocalSub?.id) {
-            orConditions += `,id.eq.${encodeURIComponent(currentLocalSub.id)}`;
+            orParts.push(`id.eq.${encodeURIComponent(currentLocalSub.id)}`);
           }
           if (savedPendingId && savedPendingId !== currentLocalSub?.id) {
-            orConditions += `,id.eq.${encodeURIComponent(savedPendingId)}`;
+            orParts.push(`id.eq.${encodeURIComponent(savedPendingId)}`);
           }
-          if (currentLocalSub?.subscriberId && currentLocalSub.subscriberId !== subId && currentLocalSub.subscriberId !== "SUB-0000") {
-            orConditions += `,subscriberId.ilike.${encodeURIComponent(currentLocalSub.subscriberId)}`;
+          if (
+            currentLocalSub?.subscriberId &&
+            currentLocalSub.subscriberId !== subId &&
+            currentLocalSub.subscriberId !== "SUB-0000"
+          ) {
+            orParts.push(`subscriberId.ilike.${encodeURIComponent(currentLocalSub.subscriberId)}`);
           }
 
-          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orConditions})&order=updatedAt.desc&limit=1`;
+          const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orParts.join(",")})&order=updatedAt.desc&limit=5`;
           const supaRes = await fetch(supaUrl, {
             headers: {
               apikey: supaKey,
               Authorization: "Bearer " + supaKey,
             },
+            cache: "no-store",
             signal: AbortSignal.timeout(6000),
           });
           if (supaRes.ok) {
@@ -781,9 +782,11 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             const supaData = await supaRes.json();
             if (Array.isArray(supaData)) {
               if (supaData.length > 0) {
+                const activeMatch = supaData.find((r: any) => r.status === "ACTIVE");
+                const bestMatch = activeMatch || supaData[0];
                 // If confirmedSub from server was not active, but Supabase returned active, prefer active!
-                if (!confirmedSub || (supaData[0].status === "ACTIVE" && confirmedSub.status !== "ACTIVE")) {
-                  confirmedSub = supaData[0];
+                if (!confirmedSub || (bestMatch.status === "ACTIVE" && confirmedSub.status !== "ACTIVE")) {
+                  confirmedSub = bestMatch;
                 }
               } else {
                 supaReportedNoSub = true;

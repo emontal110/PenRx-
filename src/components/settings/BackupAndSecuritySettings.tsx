@@ -611,7 +611,7 @@ export function BackupAndSecuritySettings() {
                     setIsImporting(true);
                     setImportResult(null);
                     try {
-                      const res = await importEncryptedBackup(selectedBackupFile, importMode);
+                      const res = await importEncryptedBackup(selectedBackupFile, undefined, importMode);
                       setImportResult(res);
                       if (res.success) {
                         showGlobalToast(`✅ ${res.message}`, "success");

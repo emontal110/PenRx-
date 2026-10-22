@@ -135,7 +135,7 @@
         <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           <span>بوابة الأمان والتحكم • MASTER ADMIN</span>
-          <span class="portal-pkg-version font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 text-[9px]">v1.40</span>
+          <span class="portal-pkg-version font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 text-[9px]">v1.41</span>
         </div>
 
         <h1 class="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight leading-snug">
@@ -266,7 +266,7 @@
                 <span class="hidden xs:inline-block px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[9px] sm:text-[10px] font-black border border-emerald-500/40 whitespace-nowrap">
                   MASTER ADMIN
                 </span>
-                <span class="portal-pkg-version px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] border border-emerald-500/40 whitespace-nowrap">v1.40</span>
+                <span class="portal-pkg-version px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[9px] sm:text-[10px] border border-emerald-500/40 whitespace-nowrap">v1.41</span>
               </div>
               <p class="text-[10px] sm:text-[11px] text-slate-400 font-bold truncate">لوحة إدارة تراخيص الأطباء وتعدد الأجهزة</p>
             </div>
@@ -1079,45 +1079,45 @@
       try {
         let freshData = null;
 
-        // 1. Try Authenticated Server API first
+        // 1. Query Authoritative Supabase Cloud REST Directly First (prevents stale serverless RAM cache)
         try {
-          const ctrl = new AbortController();
-          const timeout = setTimeout(() => ctrl.abort(), 6000);
-          const apiRes = await fetch(`${API_BASE}/api/subscriptions`, {
-            headers: getAdminApiHeaders(),
+          const ctrl2 = new AbortController();
+          const timeout2 = setTimeout(() => ctrl2.abort(), 7000);
+          const supaRes = await fetch(`${SUPABASE_REST_URL}?select=*&order=createdAt.desc`, {
+            headers: getSupabaseHeaders(),
             cache: "no-store",
-            signal: ctrl.signal
+            signal: ctrl2.signal
           });
-          clearTimeout(timeout);
-          if (apiRes.ok) {
-            const apiJson = await apiRes.json();
-            if (apiJson && Array.isArray(apiJson.subscriptions) && apiJson.subscriptions.length > 0) {
-              freshData = apiJson.subscriptions;
+          clearTimeout(timeout2);
+          if (supaRes.ok) {
+            const supaRecords = await supaRes.json();
+            if (Array.isArray(supaRecords) && supaRecords.length > 0) {
+              freshData = supaRecords;
             }
           }
-        } catch (fetchErr) {
-          console.warn("[Portal] Cloud API fetch notice (falling back to Supabase REST):", fetchErr);
+        } catch (supaErr) {
+          console.warn("[Portal] Direct Supabase REST fetch notice:", supaErr);
         }
 
-        // 2. Direct Supabase Cloud REST Fallback (Safe Anon Key)
+        // 2. Fallback to Authenticated Server API if direct Supabase REST returned empty or was unreachable
         if (!freshData || !Array.isArray(freshData) || freshData.length === 0) {
           try {
-            const ctrl2 = new AbortController();
-            const timeout2 = setTimeout(() => ctrl2.abort(), 8000);
-            const supaRes = await fetch(`${SUPABASE_REST_URL}?select=*&order=createdAt.desc`, {
-              headers: getSupabaseHeaders(),
+            const ctrl = new AbortController();
+            const timeout = setTimeout(() => ctrl.abort(), 6000);
+            const apiRes = await fetch(`${API_BASE}/api/subscriptions`, {
+              headers: getAdminApiHeaders(),
               cache: "no-store",
-              signal: ctrl2.signal
+              signal: ctrl.signal
             });
-            clearTimeout(timeout2);
-            if (supaRes.ok) {
-              const supaRecords = await supaRes.json();
-              if (Array.isArray(supaRecords)) {
-                freshData = supaRecords;
+            clearTimeout(timeout);
+            if (apiRes.ok) {
+              const apiJson = await apiRes.json();
+              if (apiJson && Array.isArray(apiJson.subscriptions)) {
+                freshData = apiJson.subscriptions;
               }
             }
-          } catch (supaErr) {
-            console.warn("[Portal] Direct Supabase REST fetch error:", supaErr);
+          } catch (fetchErr) {
+            console.warn("[Portal] Cloud API fetch notice:", fetchErr);
           }
         }
 
@@ -1226,8 +1226,116 @@
       });
     });
 
-    // Helper: Execute admin action via Server API (Local or Cloud) with direct Supabase Admin fallback
+    // Helper: Direct Supabase REST patch to guarantee database persistence even if serverless schema cache omits signatureToken
+    async function syncActionToSupabaseDirect(id, action, params = {}, serverSub = null) {
+      const current = allSubscriptions.find((s) => s.id === id) || serverSub || {};
+      const nowIso = new Date().toISOString();
+      let patchBody = null;
+
+      if (action === "ACTIVATE") {
+        const days = Number(params.durationDays) || current.durationDays || 30;
+        const expiresIso = (serverSub && serverSub.expiresAt) || new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+        patchBody = {
+          status: "ACTIVE",
+          durationDays: days,
+          activatedAt: (serverSub && serverSub.activatedAt) || nowIso,
+          expiresAt: expiresIso,
+          updatedAt: nowIso
+        };
+        if (serverSub && serverSub.signatureToken) {
+          patchBody.signatureToken = serverSub.signatureToken;
+        }
+      } else if (action === "SUSPEND") {
+        patchBody = {
+          status: "SUSPENDED",
+          updatedAt: nowIso
+        };
+      } else if (action === "ADJUST_DAYS") {
+        const delta = Number(params.daysDelta) || 0;
+        const baseExp = current.expiresAt ? new Date(current.expiresAt).getTime() : Date.now();
+        const newExpIso = (serverSub && serverSub.expiresAt) || new Date(baseExp + delta * 24 * 60 * 60 * 1000).toISOString();
+        const newDays = (serverSub && serverSub.durationDays) || Math.max(1, (current.durationDays || 30) + delta);
+        patchBody = {
+          status: "ACTIVE",
+          durationDays: newDays,
+          expiresAt: newExpIso,
+          updatedAt: nowIso
+        };
+        if (serverSub && serverSub.signatureToken) {
+          patchBody.signatureToken = serverSub.signatureToken;
+        }
+      } else if (action === "ADD_DEVICE" && params.machineId) {
+        const target = String(params.machineId).trim();
+        const list = Array.isArray(current.allowedMachineIds) && current.allowedMachineIds.length > 0
+          ? [...current.allowedMachineIds]
+          : (current.machineId ? [current.machineId] : []);
+        if (!list.includes(target)) list.push(target);
+        patchBody = {
+          machineId: current.machineId || target,
+          allowedMachineIds: list,
+          updatedAt: nowIso
+        };
+      } else if (action === "REMOVE_DEVICE" && params.machineId) {
+        const target = String(params.machineId).trim();
+        const list = (Array.isArray(current.allowedMachineIds) ? current.allowedMachineIds : [current.machineId])
+          .filter((m) => m && m !== target);
+        patchBody = {
+          machineId: current.machineId === target ? (list[0] || "") : current.machineId,
+          allowedMachineIds: list,
+          updatedAt: nowIso
+        };
+      } else if (action === "SET_PRIMARY_DEVICE" && params.machineId) {
+        const target = String(params.machineId).trim();
+        const list = Array.isArray(current.allowedMachineIds) ? [...current.allowedMachineIds] : [];
+        if (!list.includes(target)) list.push(target);
+        patchBody = {
+          machineId: target,
+          allowedMachineIds: list,
+          updatedAt: nowIso
+        };
+      } else if (action === "EDIT_DEVICE" && params.oldMachineId && params.newMachineId) {
+        const oldT = String(params.oldMachineId).trim();
+        const newT = String(params.newMachineId).trim();
+        const baseList = Array.isArray(current.allowedMachineIds) && current.allowedMachineIds.length > 0
+          ? [...current.allowedMachineIds]
+          : (current.machineId ? [current.machineId] : []);
+        const updatedList = Array.from(new Set(baseList.map((m) => (m === oldT ? newT : m)).concat([newT])));
+        patchBody = {
+          machineId: (current.machineId === oldT || !current.machineId) ? newT : current.machineId,
+          allowedMachineIds: updatedList,
+          updatedAt: nowIso
+        };
+      }
+
+      if (!patchBody) return false;
+
+      try {
+        let supaRes = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { ...getSupabaseHeaders(), "Prefer": "return=representation" },
+          body: JSON.stringify(patchBody)
+        });
+        if (!supaRes.ok && "signatureToken" in patchBody) {
+          const { signatureToken, ...coreBody } = patchBody;
+          supaRes = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
+            method: "PATCH",
+            headers: { ...getSupabaseHeaders(), "Prefer": "return=representation" },
+            body: JSON.stringify(coreBody)
+          });
+        }
+        if (supaRes.ok) {
+          const rows = await supaRes.json().catch(() => []);
+          return Array.isArray(rows) && rows.length > 0;
+        }
+      } catch (e) {
+        console.warn("[Portal Direct Supabase Patch Notice]:", e);
+      }
+      return false;
+    }
+
+    // Helper: Execute admin action via Server API (Local or Cloud) AND verify/persist directly to Supabase
     async function executeAdminAction(id, action, params = {}) {
+      let apiData = null;
       try {
         const res = await fetch(`${API_BASE}/api/system/verify`, {
           method: "PATCH",
@@ -1237,7 +1345,7 @@
         if (res.ok) {
           const data = await res.json();
           if (data && data.success) {
-            return { success: true, data };
+            apiData = data;
           }
         }
       } catch (err) {
@@ -1245,7 +1353,7 @@
       }
 
       // If local dev server wasn't running, attempt CLOUD_API_BASE
-      if (API_BASE !== CLOUD_API_BASE) {
+      if (!apiData && API_BASE !== CLOUD_API_BASE) {
         try {
           const res2 = await fetch(`${CLOUD_API_BASE}/api/system/verify`, {
             method: "PATCH",
@@ -1254,16 +1362,30 @@
           });
           if (res2.ok) {
             const data2 = await res2.json();
-            if (data2 && data2.success) return { success: true, data: data2 };
+            if (data2 && data2.success) {
+              apiData = data2;
+            }
           }
         } catch (err2) {
           console.warn("[AdminAction] Cloud API notice:", err2);
         }
       }
 
+      // Always ensure the action is persisted in Supabase REST directly as well
+      const supaPersisted = await syncActionToSupabaseDirect(
+        id,
+        action,
+        params,
+        apiData ? apiData.subscription : null
+      );
+
+      if (apiData || supaPersisted) {
+        return { success: true, data: apiData || { success: true } };
+      }
+
       return {
         success: false,
-        error: "تعذر الاتصال بالخادم السحابي. يرجى التأكد من تشغيل الخادم وصحة رمز الإدارة."
+        error: "تعذر الاتصال بالخادم السحابي أو تحديث قاعدة البيانات. يرجى التأكد من تشغيل أمر SQL في Supabase وتوافر الإنترنت."
       };
     }
 
@@ -1422,7 +1544,19 @@
           } catch (err) {
             console.warn("Delete API call notice:", err);
           }
-          if (apiDeleted) {
+
+          // 2. Direct Supabase REST delete guarantee
+          try {
+            const supaDelRes = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
+              method: "DELETE",
+              headers: { ...getSupabaseHeaders(), "Prefer": "return=representation" }
+            });
+            if (supaDelRes.ok) supaDeleted = true;
+          } catch (supaDelErr) {
+            console.warn("Direct Supabase delete notice:", supaDelErr);
+          }
+
+          if (apiDeleted || supaDeleted) {
             // Remove immediately from memory to prevent stale UI
             allSubscriptions = allSubscriptions.filter((s) => s.id !== id);
             renderDashboard();

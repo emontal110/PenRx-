@@ -48,17 +48,24 @@ export async function GET(req: Request) {
 
       let desktopUrl = `https://github.com/${repo}/releases/latest/download/PenRX+-Setup.exe`;
       let androidUrl = `https://github.com/${repo}/releases/latest/download/PenRX+.apk`;
+      let hasReadyInstallerAsset = false;
 
       if (Array.isArray(releaseData.assets)) {
         const exeAsset = releaseData.assets.find((a: any) => a.name?.endsWith(".exe"));
-        if (exeAsset?.browser_download_url) desktopUrl = exeAsset.browser_download_url;
+        if (exeAsset?.browser_download_url) {
+          desktopUrl = exeAsset.browser_download_url;
+          hasReadyInstallerAsset = true;
+        }
 
         const apkAsset = releaseData.assets.find((a: any) => a.name?.endsWith(".apk"));
-        if (apkAsset?.browser_download_url) androidUrl = apkAsset.browser_download_url;
+        if (apkAsset?.browser_download_url) {
+          androidUrl = apkAsset.browser_download_url;
+          hasReadyInstallerAsset = true;
+        }
       }
 
       return NextResponse.json({
-        hasUpdate,
+        hasUpdate: hasUpdate && hasReadyInstallerAsset && !releaseData.draft,
         currentVersion,
         latestVersion,
         releaseDate: releaseData.published_at?.split("T")[0] || versionConfig.releaseDate,
@@ -66,31 +73,6 @@ export async function GET(req: Request) {
         desktopDownloadUrl: desktopUrl,
         androidDownloadUrl: androidUrl,
       });
-    }
-
-    // 2. Fallback check: raw version.json from GitHub
-    const rawUrl = `https://raw.githubusercontent.com/${repo}/main/src/config/version.json?t=${Date.now()}`;
-    const rawRes = await fetch(rawUrl, {
-      headers: { "User-Agent": "PenRX-App" },
-      cache: "no-store",
-    });
-
-    if (rawRes.ok) {
-      const rawData = await rawRes.json();
-      const latestVersion = (rawData.version || currentVersion).replace(/^v/, "").trim();
-      const hasUpdate = compareSemver(currentVersion, latestVersion);
-
-      if (hasUpdate) {
-        return NextResponse.json({
-          hasUpdate: true,
-          currentVersion,
-          latestVersion,
-          releaseDate: rawData.releaseDate || new Date().toISOString().split("T")[0],
-          releaseNotes: rawData.releaseNotes || `تحديث جديد متاح v${latestVersion}`,
-          desktopDownloadUrl: rawData.desktopDownloadUrl || `https://github.com/${repo}/releases/download/v${latestVersion}/PenRX+-Setup.exe`,
-          androidDownloadUrl: rawData.androidDownloadUrl || `https://github.com/${repo}/releases/download/v${latestVersion}/PenRX+.apk`,
-        });
-      }
     }
 
     // Default if no update

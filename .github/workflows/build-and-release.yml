@@ -118,7 +118,7 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
 
       - name: Build Native Windows Installer (.exe)
-        run: npx electron-builder --win --x64
+        run: npx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

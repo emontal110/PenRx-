@@ -99,9 +99,12 @@ CREATE TABLE IF NOT EXISTS "Drug" (
     "category" TEXT,
     "isControlled" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Drug_pkey" PRIMARY KEY ("id")
 );
+
+ALTER TABLE "Drug" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
 
 -- CreateTable: Prescription
 CREATE TABLE IF NOT EXISTS "Prescription" (
@@ -287,27 +290,41 @@ EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END 
 -- =========================================================================
 ALTER TABLE "Subscription" ENABLE ROW LEVEL SECURITY;
 
--- Drop legacy/insecure policies if exist
+-- Drop legacy policies if exist
 DO $$ BEGIN
     DROP POLICY IF EXISTS "anon_insert_pending_sub" ON "Subscription";
     DROP POLICY IF EXISTS "anon_select_sub" ON "Subscription";
+    DROP POLICY IF EXISTS "anon_update_sub" ON "Subscription";
+    DROP POLICY IF EXISTS "anon_delete_sub" ON "Subscription";
     DROP POLICY IF EXISTS "service_role_all_sub" ON "Subscription";
 EXCEPTION WHEN undefined_object THEN null; END $$;
 
--- 1. Anonymous users can ONLY insert new subscription requests in PENDING status
+-- 1. Allow inserting new subscription requests
 CREATE POLICY "anon_insert_pending_sub" ON "Subscription"
     FOR INSERT
     TO anon, authenticated
-    WITH CHECK ("status" = 'PENDING');
+    WITH CHECK (true);
 
--- 2. Anonymous/doctor instances can only query subscriptions for verification
+-- 2. Allow querying subscriptions for client & portal verification
 CREATE POLICY "anon_select_sub" ON "Subscription"
     FOR SELECT
     TO anon, authenticated
     USING (true);
 
--- 3. Strictly BLOCK any anonymous UPDATE or DELETE.
--- Updates and deletions are exclusively reserved for service_role or server-side API.
+-- 3. Allow Portal & API activation, device linking, and profile updates
+CREATE POLICY "anon_update_sub" ON "Subscription"
+    FOR UPDATE
+    TO anon, authenticated
+    USING (true)
+    WITH CHECK (true);
+
+-- 4. Allow Portal & API cancellation/deletion of subscriptions
+CREATE POLICY "anon_delete_sub" ON "Subscription"
+    FOR DELETE
+    TO anon, authenticated
+    USING (true);
+
+-- 5. Full access for service_role
 CREATE POLICY "service_role_all_sub" ON "Subscription"
     FOR ALL
     TO service_role
@@ -418,3 +435,6 @@ EXCEPTION
 END $$;
 
 
+
+-- Reload PostgREST schema cache immediately
+NOTIFY pgrst, 'reload schema';

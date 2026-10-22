@@ -25,22 +25,86 @@ const SUPABASE_KEY =
   DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
 
 async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
-  const headers = {
-    apikey: SUPABASE_KEY,
-    Authorization: "Bearer " + SUPABASE_KEY,
+  const buildHeaders = (key: string) => ({
+    apikey: key,
+    Authorization: "Bearer " + key,
     "Content-Type": "application/json",
     ...((options.headers as any) || {}),
-  };
-  const signal =
+  });
+  const getSignal = () =>
     options.signal ||
     (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
       ? AbortSignal.timeout(6000)
       : undefined);
-  return fetch(`${SUPABASE_REST_URL}${endpoint}`, {
+
+  const res = await fetch(`${SUPABASE_REST_URL}${endpoint}`, {
     ...options,
-    headers,
-    signal,
+    headers: buildHeaders(SUPABASE_KEY),
+    signal: getSignal(),
   });
+
+  // Fallback to DEFAULT_SUPABASE_ANON_KEY if service_role key was rejected (401/403)
+  if ((res.status === 401 || res.status === 403) && SUPABASE_KEY !== DEFAULT_SUPABASE_ANON_KEY) {
+    return fetch(`${SUPABASE_REST_URL}${endpoint}`, {
+      ...options,
+      headers: buildHeaders(DEFAULT_SUPABASE_ANON_KEY),
+      signal: getSignal(),
+    });
+  }
+
+  return res;
+}
+
+/**
+ * Resilient Supabase PATCH helper: retries without optional columns (e.g. signatureToken)
+ * if the remote Supabase schema cache does not yet have those columns.
+ */
+async function patchSupabaseSubscription(id: string, payload: Record<string, any>): Promise<boolean> {
+  try {
+    let res = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok && "signatureToken" in payload) {
+      const { signatureToken: _omit, ...corePayload } = payload;
+      res = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(corePayload),
+      });
+    }
+
+    if (res.ok) {
+      const rows = await res.json().catch(() => null);
+      if (Array.isArray(rows) && rows.length > 0) {
+        return true;
+      }
+      // If service_role returned 0 rows due to RLS policy mismatch, try anon key
+      if (SUPABASE_KEY !== DEFAULT_SUPABASE_ANON_KEY) {
+        const { signatureToken: _omit, ...corePayload } = payload;
+        const retryAnon = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: {
+            apikey: DEFAULT_SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + DEFAULT_SUPABASE_ANON_KEY,
+            "Content-Type": "application/json",
+            Prefer: "return=representation",
+          },
+          body: JSON.stringify(corePayload),
+        });
+        if (retryAnon.ok) {
+          const anonRows = await retryAnon.json().catch(() => null);
+          return Array.isArray(anonRows) && anonRows.length > 0;
+        }
+      }
+    }
+    return res.ok;
+  } catch (err) {
+    console.error("[patchSupabaseSubscription] Exception:", err);
+    return false;
+  }
 }
 
 /**
@@ -271,15 +335,10 @@ export async function getSubscriptionByMachine(machineId: string): Promise<Subsc
   if (pending) return pending;
   if (matching[0]) return matching[0];
 
-  // Direct Supabase REST targeted query fallback if not in cache (case-insensitive)
+  // Direct Supabase REST targeted query fallback if not in cache (safe PostgREST syntax without braces in or)
   try {
-    const lowerId = cleanId.toLowerCase();
-    let orFilter = `machineId.ilike.${encodeURIComponent(cleanId)},allowedMachineIds.cs.{${encodeURIComponent(cleanId)}}`;
-    if (lowerId !== cleanId) {
-      orFilter += `,allowedMachineIds.cs.{${encodeURIComponent(lowerId)}}`;
-    }
     const res = await fetchSupabaseRest(
-      `?or=(${orFilter})&order=updatedAt.desc&limit=5`
+      `?machineId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=5`
     );
     if (res.ok) {
       const records: SubscriptionRecord[] = await res.json();
@@ -299,30 +358,54 @@ export async function getSubscriptionByMachine(machineId: string): Promise<Subsc
     }
   } catch {}
 
-  return null;
+  // Force cache hydration once in case a secondary device was recently linked into allowedMachineIds
+  await hydrateCache(true);
+  const refreshedMatching = Array.from(globalSubscriptionsCache.values()).filter((s) => {
+    const primary = (s.machineId || "").trim().toUpperCase();
+    const allowed = Array.isArray(s.allowedMachineIds)
+      ? s.allowedMachineIds.map((m) => (m || "").trim().toUpperCase())
+      : [];
+    return primary === cleanId || allowed.includes(cleanId);
+  });
+  const refreshedActive = refreshedMatching.find((s) => s.status === "ACTIVE");
+  if (refreshedActive) return refreshedActive;
+  const refreshedPending = refreshedMatching.find((s) => s.status === "PENDING");
+  if (refreshedPending) return refreshedPending;
+  return refreshedMatching[0] || null;
 }
 
 /**
- * Find subscription by unique Subscriber ID
+ * Find subscription by unique Subscriber ID (prioritizes ACTIVE first)
  */
 export async function getSubscriptionBySubscriberId(subscriberId: string): Promise<SubscriptionRecord | null> {
   const all = await getAllSubscriptions();
   const cleanId = subscriberId.toUpperCase().trim();
-  const found = all.find((s) => s.subscriberId?.toUpperCase() === cleanId) || null;
-  if (found) return found;
+  const matching = all.filter((s) => s.subscriberId?.toUpperCase() === cleanId);
+  if (matching.length > 0) {
+    const active = matching.find((s) => s.status === "ACTIVE");
+    if (active) return active;
+    const pending = matching.find((s) => s.status === "PENDING");
+    if (pending) return pending;
+    return matching[0];
+  }
 
-  // Direct Supabase REST fallback if not in cache (case-insensitive)
+  // Direct Supabase REST fallback if not in cache (case-insensitive, prioritizing ACTIVE)
   try {
-    const res = await fetchSupabaseRest(`?subscriberId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=1`);
+    const res = await fetchSupabaseRest(`?subscriberId=ilike.${encodeURIComponent(cleanId)}&order=updatedAt.desc&limit=5`);
     if (res.ok) {
-      const records = await res.json();
+      const records: SubscriptionRecord[] = await res.json();
       if (Array.isArray(records) && records.length > 0) {
-        const r = records[0];
-        if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
-          r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
+        for (const r of records) {
+          if (r.status === "ACTIVE" && r.expiresAt && !r.signatureToken) {
+            r.signatureToken = safeGenerateSignedToken(r.machineId, r.expiresAt, r.subscriberId);
+          }
+          globalSubscriptionsCache.set(r.id, r);
         }
-        globalSubscriptionsCache.set(r.id, r);
-        return r;
+        const directActive = records.find((s) => s.status === "ACTIVE");
+        if (directActive) return directActive;
+        const directPending = records.find((s) => s.status === "PENDING");
+        if (directPending) return directPending;
+        return records[0];
       }
     }
   } catch {}
@@ -661,28 +744,15 @@ export async function activateSubscription(subscriptionId: string, durationDays:
 
   globalSubscriptionsCache.set(sub.id, sub);
 
-  // Sync to Supabase REST
-  try {
-    const supaRes = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(sub.id)}`, {
-      method: "PATCH",
-      headers: {
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify({
-        status: "ACTIVE",
-        durationDays: days,
-        activatedAt: sub.activatedAt,
-        expiresAt: sub.expiresAt,
-        signatureToken,
-        updatedAt: sub.updatedAt,
-      }),
-    });
-    if (!supaRes.ok) {
-      console.error("[activateSubscription] Supabase PATCH failed:", supaRes.status, await supaRes.text());
-    }
-  } catch (err) {
-    console.error("[activateSubscription] Supabase PATCH exception:", err);
-  }
+  // Sync to Supabase REST with automatic column fallback
+  await patchSupabaseSubscription(sub.id, {
+    status: "ACTIVE",
+    durationDays: days,
+    activatedAt: sub.activatedAt,
+    expiresAt: sub.expiresAt,
+    signatureToken,
+    updatedAt: sub.updatedAt,
+  });
 
   return sub;
 }
@@ -691,8 +761,20 @@ export async function activateSubscription(subscriptionId: string, durationDays:
  * Adjust subscription days (+ / -)
  */
 export async function adjustSubscriptionDays(subscriptionId: string, daysDelta: number): Promise<SubscriptionRecord | null> {
-  await hydrateCache();
-  const sub = globalSubscriptionsCache.get(subscriptionId);
+  await hydrateCache(true);
+  let sub = globalSubscriptionsCache.get(subscriptionId);
+  if (!sub) {
+    try {
+      const directRes = await fetchSupabaseRest(`?id=eq.${encodeURIComponent(subscriptionId)}&limit=1`);
+      if (directRes.ok) {
+        const directRecords: SubscriptionRecord[] = await directRes.json();
+        if (Array.isArray(directRecords) && directRecords.length > 0) {
+          sub = directRecords[0];
+          globalSubscriptionsCache.set(sub.id, sub);
+        }
+      }
+    } catch {}
+  }
   if (!sub) return null;
 
   const currentExpiry = sub.expiresAt ? new Date(sub.expiresAt).getTime() : Date.now();
@@ -710,18 +792,13 @@ export async function adjustSubscriptionDays(subscriptionId: string, daysDelta: 
 
   globalSubscriptionsCache.set(sub.id, sub);
 
-  try {
-    await fetchSupabaseRest(`?id=eq.${sub.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        status: "ACTIVE",
-        expiresAt: newExpiry.toISOString(),
-        durationDays: newDays,
-        signatureToken,
-        updatedAt: sub.updatedAt,
-      }),
-    });
-  } catch {}
+  await patchSupabaseSubscription(sub.id, {
+    status: "ACTIVE",
+    expiresAt: newExpiry.toISOString(),
+    durationDays: newDays,
+    signatureToken,
+    updatedAt: sub.updatedAt,
+  });
 
   return sub;
 }

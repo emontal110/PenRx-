@@ -96,7 +96,7 @@ export function initSubscriptionRealtimeListener(): () => void {
 
             if (matchesCurrent || eventType === "DELETE") {
               // Trigger immediate synchronization with authoritative cloud database
-              useSubscriptionStore.getState().syncWithServer();
+              useSubscriptionStore.getState().syncWithServer(true);
             }
           }
         } catch {}
@@ -131,7 +131,7 @@ export function initSubscriptionRealtimeListener(): () => void {
   // Listen to network status changes
   const handleOnline = () => {
     connect();
-    useSubscriptionStore.getState().syncWithServer();
+    useSubscriptionStore.getState().syncWithServer(true);
   };
 
   const handleVisibility = () => {
@@ -139,7 +139,7 @@ export function initSubscriptionRealtimeListener(): () => void {
       if (!realtimeSocket || realtimeSocket.readyState !== WebSocket.OPEN) {
         connect();
       }
-      useSubscriptionStore.getState().syncWithServer();
+      useSubscriptionStore.getState().syncWithServer(true);
     }
   };
 

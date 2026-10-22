@@ -16,8 +16,8 @@ interface PrescriptionItemInput {
 
 interface InteractionRule {
   id: string;
-  ingredients: string[];
-  names: string[];
+  groupA: string[];
+  groupB: string[];
   severity: "CRITICAL" | "HIGH" | "MODERATE";
   titleAr: string;
   titleEn: string;
@@ -27,11 +27,13 @@ interface InteractionRule {
   recommendationEn: string;
 }
 
+const NSAID_TERMS = ["diclofenac", "ibuprofen", "ketoprofen", "naproxen", "meloxicam", "piroxicam", "celecoxib", "cataflam", "voltaren", "brufen", "ketofan", "feldene", "mobic", "antiflam", "celebrex", "flamamol"];
+
 const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   {
     id: "warfarin-nsaids",
-    ingredients: ["warfarin", "diclofenac", "ibuprofen", "ketoprofen", "aspirin", "naproxen", "meloxicam", "piroxicam"],
-    names: ["marevan", "warfarin", "cataflam", "voltaren", "brufen", "ketofan", "aspirin", "aspocid", "feldene", "mobic", "antiflam"],
+    groupA: ["warfarin", "marevan", "rivaroxaban", "xarelto", "apixaban", "eliquis"],
+    groupB: [...NSAID_TERMS, "aspirin", "aspocid"],
     severity: "CRITICAL",
     titleAr: "خطر نزيف حاد وتقرح بالمعدة (Gastrointestinal Bleeding Risk)",
     titleEn: "Major Bleeding & Hemorrhage Risk",
@@ -42,8 +44,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "sildenafil-nitrates",
-    ingredients: ["sildenafil", "tadalafil", "vardenafil", "nitrate", "isosorbide", "nitroglycerin"],
-    names: ["viagra", "erecta", "sildefil", "cialis", "startcop", "nitromak", "effox", "isosorbide", "monoket", "angised", "nitroderm"],
+    groupA: ["sildenafil", "tadalafil", "vardenafil", "viagra", "erecta", "sildefil", "cialis", "startcop"],
+    groupB: ["nitrate", "isosorbide", "nitroglycerin", "nitromak", "effox", "monoket", "angised", "nitroderm"],
     severity: "CRITICAL",
     titleAr: "هبوط حاد وقاتل في ضغط الدم (Severe Hypotension Shock)",
     titleEn: "Life-Threatening Hypotension Shock",
@@ -54,8 +56,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "beta-blocker-non-dhp-ccb",
-    ingredients: ["bisoprolol", "atenolol", "metoprolol", "carvedilol", "verapamil", "diltiazem"],
-    names: ["concor", "tenormin", "betaloc", "dilatrend", "isoptin", "verapamil", "diltiazem", "altiazem"],
+    groupA: ["bisoprolol", "atenolol", "metoprolol", "carvedilol", "concor", "tenormin", "betaloc", "dilatrend"],
+    groupB: ["verapamil", "diltiazem", "isoptin", "altiazem"],
     severity: "HIGH",
     titleAr: "هبوط حاد في نبضات القلب وإحصار قلبي (Severe Bradycardia & AV Block)",
     titleEn: "Profound Bradycardia & Heart Block",
@@ -66,8 +68,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "acei-potassium-sparing",
-    ingredients: ["captopril", "enalapril", "ramipril", "perindopril", "losartan", "valsartan", "candesartan", "spironolactone", "eplerenone"],
-    names: ["capoten", "tritace", "zestril", "coversyl", "co-diovan", "angiotec", "exforge", "aldactone", "inspra"],
+    groupA: ["captopril", "enalapril", "ramipril", "perindopril", "losartan", "valsartan", "candesartan", "capoten", "tritace", "zestril", "coversyl", "co-diovan", "angiotec", "exforge"],
+    groupB: ["spironolactone", "eplerenone", "aldactone", "inspra"],
     severity: "HIGH",
     titleAr: "ارتفاع خطير في بوتاسيوم الدم (Severe Hyperkalemia Risk)",
     titleEn: "Severe Hyperkalemia & Arrhythmia Hazard",
@@ -78,8 +80,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "macrolide-statin",
-    ingredients: ["clarithromycin", "erythromycin", "atorvastatin", "simvastatin", "rosuvastatin"],
-    names: ["klacid", "clarithro", "erythrocin", "ator", "lipitor", "crestor", "zocor", "atormac"],
+    groupA: ["clarithromycin", "erythromycin", "klacid", "clarithro", "erythrocin"],
+    groupB: ["atorvastatin", "simvastatin", "rosuvastatin", "ator", "lipitor", "crestor", "zocor", "atormac"],
     severity: "HIGH",
     titleAr: "تكسر العضلات واعتلال عضلي حاد (Rhabdomyolysis Risk)",
     titleEn: "Severe Myopathy & Rhabdomyolysis",
@@ -90,8 +92,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "tramadol-ssri",
-    ingredients: ["tramadol", "fluoxetine", "paroxetine", "sertraline", "escitalopram", "citalopram", "duloxetine", "venlafaxine"],
-    names: ["tramal", "tramadol", "amadol", "prozac", "cipralex", "seroxat", "lustral", "zoloft", "cymbalta", "efexor"],
+    groupA: ["tramadol", "tramal", "amadol"],
+    groupB: ["fluoxetine", "paroxetine", "sertraline", "escitalopram", "citalopram", "duloxetine", "venlafaxine", "prozac", "cipralex", "seroxat", "lustral", "zoloft", "cymbalta", "efexor"],
     severity: "HIGH",
     titleAr: "متلازمة السيروتونين وخطر التشنجات (Serotonin Syndrome & Seizures)",
     titleEn: "Serotonin Syndrome & Lowered Seizure Threshold",
@@ -102,8 +104,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "quinolone-minerals-antacids",
-    ingredients: ["ciprofloxacin", "levofloxacin", "moxifloxacin", "aluminum", "magnesium", "calcium", "iron"],
-    names: ["ciprofar", "tavanic", "avelox", "maalox", "epicogel", "mucogel", "gaviscon", "feroglobin", "calcimate"],
+    groupA: ["ciprofloxacin", "levofloxacin", "moxifloxacin", "ciprofar", "ciprobay", "tavanic", "avelox"],
+    groupB: ["aluminum", "magnesium", "calcium", "iron", "maalox", "epicogel", "mucogel", "gaviscon", "feroglobin", "calcimate"],
     severity: "MODERATE",
     titleAr: "انخفاض شديد في امتصاص المضاد الحيوي (Chelation & Poor Absorption)",
     titleEn: "Chelation & Reduced Antibiotic Bioavailability",
@@ -114,8 +116,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "clopidogrel-omeprazole",
-    ingredients: ["clopidogrel", "omeprazole", "esomeprazole"],
-    names: ["plavix", "clopidogrel", "omeprazole", "gasec", "nexium", "ezogast"],
+    groupA: ["clopidogrel", "plavix"],
+    groupB: ["omeprazole", "esomeprazole", "gasec", "nexium", "ezogast"],
     severity: "MODERATE",
     titleAr: "انخفاض فعالية بلافيكس الوقائية من الجلطات (Reduced Antiplatelet Efficacy)",
     titleEn: "Attenuated Clopidogrel Activation",
@@ -126,8 +128,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "dual-nsaids",
-    ingredients: ["ibuprofen", "diclofenac", "ketoprofen", "meloxicam", "celecoxib", "naproxen"],
-    names: ["brufen", "cataflam", "voltaren", "ketofan", "mobic", "celebrex", "antiflam", "flamamol"],
+    groupA: NSAID_TERMS,
+    groupB: NSAID_TERMS,
     severity: "HIGH",
     titleAr: "ازدواجية غير مبررة لمضادات الالتهاب (Unjustified Dual NSAID Risk)",
     titleEn: "Duplicate NSAID Toxicity Hazard",
@@ -138,8 +140,8 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
   {
     id: "metformin-contrast",
-    ingredients: ["metformin", "contrast", "iodinated"],
-    names: ["cidophage", "glucophage", "janumet", "metformin", "x-ray contrast", "omnipaque"],
+    groupA: ["metformin", "cidophage", "glucophage", "janumet"],
+    groupB: ["contrast", "iodinated", "x-ray contrast", "omnipaque"],
     severity: "HIGH",
     titleAr: "احتياط الفحص بالصبغة لمرضى السكري (Lactic Acidosis Hazard)",
     titleEn: "Contrast-Induced Lactic Acidosis Risk",
@@ -170,42 +172,37 @@ export async function POST(request: Request) {
       `${i.drugName} ${i.activeIngredient || ""}`.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, " ")
     );
 
-    // 1. Check Drug-to-Drug Interactions (pairs or groups)
+    // 1. Check Drug-to-Drug Interactions (require distinct items matching Group A and Group B)
     if (items.length >= 2) {
       for (const rule of CLINICAL_INTERACTION_RULES) {
-        const matchedItemIndices: number[] = [];
+        const groupAIndices: number[] = [];
+        const groupBIndices: number[] = [];
 
         for (let idx = 0; idx < items.length; idx++) {
           const text = itemFullTexts[idx];
-          const hasIng = rule.ingredients.some((ing) => text.includes(ing));
-          const hasName = rule.names.some((nm) => text.includes(nm));
-
-          if (hasIng || hasName) {
-            matchedItemIndices.push(idx);
+          if (rule.groupA.some((term) => text.includes(term))) {
+            groupAIndices.push(idx);
+          }
+          if (rule.groupB.some((term) => text.includes(term))) {
+            groupBIndices.push(idx);
           }
         }
 
-        // Special case for dual-nsaid: need 2 distinct items matching NSAID list
-        if (rule.id === "dual-nsaids") {
-          if (matchedItemIndices.length >= 2) {
-            const involvedNames = matchedItemIndices.map((i) => items[i].drugName);
-            detectedInteractions.push({
-              id: `${rule.id}-${Date.now()}`,
-              ruleId: rule.id,
-              severity: rule.severity,
-              titleAr: rule.titleAr,
-              titleEn: rule.titleEn,
-              mechanismAr: rule.mechanismAr,
-              recommendationAr: rule.recommendationAr,
-              involvedDrugs: Array.from(new Set(involvedNames)),
-            });
+        let hasDistinctPair = false;
+        const matchedIdxSet = new Set<number>();
+
+        for (const aIdx of groupAIndices) {
+          for (const bIdx of groupBIndices) {
+            if (aIdx !== bIdx) {
+              hasDistinctPair = true;
+              matchedIdxSet.add(aIdx);
+              matchedIdxSet.add(bIdx);
+            }
           }
-          continue;
         }
 
-        // For cross-class rules: check if matched items contain representatives of distinct sides
-        if (matchedItemIndices.length >= 2) {
-          const involvedNames = matchedItemIndices.map((i) => items[i].drugName);
+        if (hasDistinctPair) {
+          const involvedNames = Array.from(matchedIdxSet).map((i) => items[i].drugName);
           detectedInteractions.push({
             id: `${rule.id}-${Date.now()}`,
             ruleId: rule.id,

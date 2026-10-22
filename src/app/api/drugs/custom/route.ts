@@ -151,7 +151,6 @@ export async function POST(request: Request) {
           category: cleanCategory,
           isControlled: false,
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         }),
       });
       if (supaRes.ok) {

@@ -380,7 +380,7 @@ export default function NewPrescriptionPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Pure Print action: Does NOT save prescription automatically
+  // Save & Print action: Ensures prescription is saved in clinic history before printing
   const handlePrintOnly = () => {
     const hasName = Boolean(patient.name && patient.name.trim().length > 0);
     const hasItems = items.length > 0;
@@ -388,7 +388,12 @@ export default function NewPrescriptionPage() {
       setIsPrintValidationOpen(true);
       return;
     }
-    showGlobalToast("🖨️ جاري تجهيز وطباعة الروشتة...");
+    if (!isPrescriptionSaved) {
+      const branchObj = branches.find((b) => b.id === selectedBranchId);
+      savePrescription(branchObj?.nameAr);
+      setIsPrescriptionSaved(true);
+    }
+    showGlobalToast("🖨️ تم حفظ الروشتة وجارٍ تجهيز الطباعة...");
     window.print();
   };
 
@@ -1005,16 +1010,18 @@ export default function NewPrescriptionPage() {
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-300">التشخيص الطبي (Diagnosis):</label>
-                <input
-                  type="text"
-                  value={diagnosis}
-                  onChange={(e) => setDiagnosis(e.target.value)}
-                  placeholder="اكتب التشخيص الطبي (مثال: التهاب حاد بالحلق، نزلة معوية...)"
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
-                />
-              </div>
+              {!visibleFields.showDiagnosis && (
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-300">التشخيص الطبي (Diagnosis):</label>
+                  <input
+                    type="text"
+                    value={diagnosis}
+                    onChange={(e) => setDiagnosis(e.target.value)}
+                    placeholder="اكتب التشخيص الطبي (مثال: التهاب حاد بالحلق، نزلة معوية...)"
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                  />
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-300">تعليمات وإرشادات المريض (تطبع بأسفل الروشتة):</label>

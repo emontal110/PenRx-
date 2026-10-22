@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { useClinicStore, PrescriptionTemplate } from "@/store/useClinicStore";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
+import { useSubscriptionStore } from "@/store/useSubscriptionStore";
+import { getApiUrl } from "@/lib/cloudProxy";
 import { showGlobalToast } from "@/components/common/GlobalToast";
 import { compressImageToDataUrl } from "@/lib/imageCompressor";
 import { PRESCRIPTION_TEMPLATES } from "@/components/prescription/PrescriptionTemplateDecorations";
@@ -44,7 +46,7 @@ const FONT_PRESETS = [
 ];
 
 export function ClinicAndTemplateSettings() {
-  const { clinic, updateClinic, branches, activeBranchId } = useClinicStore();
+  const { clinic, updateClinic, saveClinicAndCreateFirstBranch, branches, activeBranchId } = useClinicStore();
   const { visibleFields } = usePrescriptionStore();
 
   const [name, setName] = useState(clinic.name || "");
@@ -103,7 +105,7 @@ export function ClinicAndTemplateSettings() {
       return;
     }
 
-    updateClinic({
+    saveClinicAndCreateFirstBranch({
       name: name.trim(),
       nameAr: nameAr.trim(),
       doctorName: doctorName.trim(),
@@ -124,7 +126,24 @@ export function ClinicAndTemplateSettings() {
       isProfileSaved: true,
     });
 
-    showGlobalToast("✅ تم حفظ وتأكيد بيانات وهوية العيادة بنجاح!", "success");
+    // Synchronize doctor name, clinic name, and phone immediately with Cloud Admin Portal
+    try {
+      const { machineId, subscriberId } = useSubscriptionStore.getState();
+      fetch(getApiUrl("/api/subscriptions"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_profile",
+          subscriberId,
+          machineId,
+          doctorName: doctorName.trim(),
+          clinicName: nameAr.trim() || name.trim(),
+          phone: clinicPhone.trim(),
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    showGlobalToast("✅ تم حفظ وتأكيد بيانات وهوية العيادة ومزامنتها مع البورتال بنجاح!", "success");
   };
 
   const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

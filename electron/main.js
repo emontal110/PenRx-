@@ -37,6 +37,7 @@ try {
   try {
     const { Provider } = require("electron-updater/out/providers/Provider");
     const { newUrlFromBase } = require("electron-updater/out/util");
+    const escapeRx = (s) => String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (Provider && Provider.prototype && typeof Provider.prototype.getBlockMapFiles === "function") {
       Provider.prototype.getBlockMapFiles = function (baseUrl, oldVersion, newVersion, oldBlockMapFileBaseUrl = null) {
         const newBlockMapUrl = newUrlFromBase(`${baseUrl.pathname}.blockmap`, baseUrl);
@@ -45,12 +46,14 @@ try {
         const newVShort = newVersion.replace(/\.0$/, "");
 
         let oldPath = baseUrl.pathname;
-        if (oldPath.includes(newVersion)) {
-          oldPath = oldPath.replace(new RegExp(newVersion, "g"), oldVersion);
+        if (oldPath.includes(`/v${newVersion}/`)) {
+          oldPath = oldPath.replace(`/v${newVersion}/`, `/v${oldVShort}/`);
+        } else if (oldPath.includes(`/v${newVShort}/`)) {
+          oldPath = oldPath.replace(`/v${newVShort}/`, `/v${oldVShort}/`);
+        } else if (oldPath.includes(newVersion)) {
+          oldPath = oldPath.replace(new RegExp(escapeRx(newVersion), "g"), oldVShort);
         } else if (oldPath.includes(newVShort)) {
-          oldPath = oldPath.replace(new RegExp(newVShort, "g"), oldVShort);
-        } else {
-          oldPath = oldPath.replace(new RegExp(newVersion, "g"), oldVersion);
+          oldPath = oldPath.replace(new RegExp(escapeRx(newVShort), "g"), oldVShort);
         }
 
         const oldBlockMapUrl = newUrlFromBase(
@@ -60,6 +63,29 @@ try {
         return [oldBlockMapUrl, newBlockMapUrl];
       };
       console.log("[PenRX+ AutoUpdater] Differential blockmap tag resolver patch applied successfully.");
+    }
+
+    // Also patch downloadBlockMap on autoUpdater instance so 2-part (v1.39) <-> 3-part (v1.39.0) tags automatically fallback
+    if (typeof autoUpdater.downloadBlockMap === "function") {
+      const origDownloadBlockMap = autoUpdater.downloadBlockMap.bind(autoUpdater);
+      autoUpdater.downloadBlockMap = async function (url) {
+        try {
+          return await origDownloadBlockMap(url);
+        } catch (err) {
+          const href = url && url.href ? url.href : String(url);
+          let altHref = null;
+          if (/\/releases\/download\/v(\d+\.\d+)\//.test(href)) {
+            altHref = href.replace(/\/releases\/download\/v(\d+\.\d+)\//, "/releases/download/v$1.0/");
+          } else if (/\/releases\/download\/v(\d+\.\d+)\.0\//.test(href)) {
+            altHref = href.replace(/\/releases\/download\/v(\d+\.\d+)\.0\//, "/releases/download/v$1/");
+          }
+          if (altHref && altHref !== href) {
+            console.log("[PenRX+ AutoUpdater] Retrying blockmap with alternate tag format:", altHref);
+            return await origDownloadBlockMap(new URL(altHref));
+          }
+          throw err;
+        }
+      };
     }
   } catch (patchErr) {
     console.warn("[PenRX+ AutoUpdater] Blockmap patch warning:", patchErr.message);
@@ -311,14 +337,10 @@ if (autoUpdater) {
   });
 
   autoUpdater.on("error", (err) => {
-    console.warn("[PenRX+ AutoUpdater] Error event:", err?.message || err);
+    console.warn("[PenRX+ AutoUpdater] Notice/Error event:", err?.message || err);
     isUpdateDownloading = false;
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("update-download-progress", {
-        status: "error",
-        error: err?.message || "حدث خطأ أثناء فحص أو تنزيل التحديث",
-      });
-    }
+    // Do not emit premature UI error status here because AutoUpdateModal automatically falls back
+    // to direct streaming installer download if differential update is unavailable.
   });
 }
 

@@ -1543,19 +1543,28 @@
         const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
         const savedSub = localStorage.getItem("penrx_last_sub");
         let subId = "";
+        let subRecId = "";
         if (savedSub) {
-          try { subId = JSON.parse(savedSub).subscriberId || ""; } catch {}
+          try {
+            const parsedSub = JSON.parse(savedSub);
+            subId = parsedSub.subscriberId || "";
+            subRecId = parsedSub.id || "";
+          } catch {}
         }
-        let orConditions = `machineId.eq.${encodeURIComponent(activeMid)},allowedMachineIds.cs.{${encodeURIComponent(activeMid)}}`;
+        const orParts = [`machineId.ilike.${encodeURIComponent(activeMid)}`];
         if (subId) {
-          orConditions += `,subscriberId.eq.${encodeURIComponent(subId)}`;
+          orParts.push(`subscriberId.ilike.${encodeURIComponent(subId)}`);
         }
-        const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orConditions})&order=updatedAt.desc&limit=1`;
+        if (subRecId) {
+          orParts.push(`id.eq.${encodeURIComponent(subRecId)}`);
+        }
+        const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orParts.join(",")})&order=updatedAt.desc&limit=5`;
         const supaRes = await fetch(supaUrl, {
           headers: {
             apikey: supaKey,
             Authorization: "Bearer " + supaKey,
           },
+          cache: "no-store",
           signal: AbortSignal.timeout(5000),
         });
         if (supaRes.ok) {
@@ -1563,7 +1572,11 @@
           const list = await supaRes.json();
           if (Array.isArray(list)) {
             if (list.length > 0) {
-              confirmedSub = list[0];
+              const activeMatch = list.find((r) => r.status === "ACTIVE");
+              const bestMatch = activeMatch || list[0];
+              if (!confirmedSub || (bestMatch.status === "ACTIVE" && confirmedSub.status !== "ACTIVE")) {
+                confirmedSub = bestMatch;
+              }
             } else {
               supaReportedNoSub = true;
             }
