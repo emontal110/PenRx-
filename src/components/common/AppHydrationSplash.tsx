@@ -47,6 +47,11 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
           (window as any).penrxDesktop.signalReady();
         } catch {}
       }
+      if (typeof window !== "undefined" && (window as any).PenRxNative?.hideSplashScreen) {
+        try {
+          (window as any).PenRxNative.hideSplashScreen();
+        } catch {}
+      }
     };
 
     if (checkAllHydrated()) {

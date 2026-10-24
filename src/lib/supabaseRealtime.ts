@@ -105,6 +105,15 @@ export function initSubscriptionRealtimeListener(): () => void {
               (recMid && knownMids.includes(recMid)) ||
               recAllowed.some((m: string) => knownMids.includes(m));
 
+            // Instant Realtime Revocation if current subscription was deleted from portal
+            if (eventType === "DELETE") {
+              const deletedId = (record?.id || payload?.old?.id || "").trim();
+              if (deletedId && (deletedId === currentSub?.id || deletedId === pendingId)) {
+                console.warn(`[SupabaseRealtime] Subscription ${deletedId} deleted in portal. Instant local revocation!`);
+                useSubscriptionStore.getState().revokeLocallyAndClear("Deleted via Realtime WebSocket");
+              }
+            }
+
             if (matchesCurrent || eventType === "DELETE" || eventType === "UPDATE") {
               // Trigger immediate synchronization with authoritative cloud database
               useSubscriptionStore.getState().syncWithServer(true);

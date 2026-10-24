@@ -70,6 +70,7 @@ interface SubscriptionStoreState {
   addDeviceToSubscriber: (subscriptionId: string, newMachineId: string) => Promise<void>;
   removeDeviceFromSubscriber: (subscriptionId: string, targetMachineId: string) => Promise<void>;
   syncWithServer: (force?: boolean) => Promise<void>;
+  revokeLocallyAndClear: (reason?: string) => void;
 }
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
@@ -364,6 +365,38 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       setMachineId: (id: string) => set({ machineId: id }),
       setSubscriberId: (id: string) => set({ subscriberId: id }),
       setSignatureToken: (token: string | null) => set({ signatureToken: token }),
+
+      revokeLocallyAndClear: (reason?: string) => {
+        console.warn(`[PenRX+ License] Revoking subscription locally: ${reason || "No active license"}`);
+        set({
+          subscriptions: [],
+          currentSubscription: null,
+          signatureToken: null,
+          lastSyncedAt: Date.now(),
+          lastOnlineCheck: Date.now(),
+        });
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem("penrx_last_sub");
+            localStorage.removeItem("penrx_was_pending");
+            localStorage.removeItem("penrx_just_activated");
+            localStorage.removeItem("penrx_pending_sub_id");
+            localStorage.removeItem("penrx_last_subscriber_id");
+            const raw = localStorage.getItem("penrx_subscription_storage");
+            if (raw) {
+              try {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.state) {
+                  parsed.state.subscriptions = [];
+                  parsed.state.currentSubscription = null;
+                  parsed.state.signatureToken = null;
+                  localStorage.setItem("penrx_subscription_storage", JSON.stringify(parsed));
+                }
+              } catch {}
+            }
+          } catch {}
+        }
+      },
 
       initHardwareId: async () => {
         await initializeHardwareMachineId((newId) => {
@@ -938,6 +971,8 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                     if (Array.isArray(rows) && rows.length > 0) {
                       supaSubRecord = pickBestCandidate(rows);
                       supaReportedNoSub = false;
+                    } else if (Array.isArray(rows) && rows.length === 0) {
+                      supaReportedNoSub = true;
                     }
                   }
                 }
@@ -969,7 +1004,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                   }
                   if (data && data.subscription) {
                     apiSubRecord = data.subscription;
-                  } else if (data && data.subscription === null) {
+                  } else if (data && (data.subscription === null || data.subscription === undefined)) {
                     serverReportedNoSub = true;
                   }
                 }
@@ -1010,7 +1045,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                     if (data.token) {
                       newSignatureToken = data.token;
                     }
-                  } else if (data.status === "none") {
+                  } else if (data.status === "none" || (!data.success && data.status === "none")) {
                     serverReportedNoSub = true;
                   } else if (data.subscription) {
                     verifySubRecord = data.subscription;
@@ -1081,28 +1116,17 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             return;
           }
 
-          if (hasPendingSub && !(supaResponded && supaReportedNoSub && serverResponded && serverReportedNoSub)) {
-            return;
-          }
+          // Authoritative deletion / revocation sync:
+          // If at least one channel verified zero subscriptions, OR any responding channel confirms no active sub:
+          const anyChannelConfirmedNoSub =
+            (supaResponded && supaReportedNoSub) ||
+            (serverResponded && serverReportedNoSub);
 
-          if (supaResponded && supaReportedNoSub && serverResponded && serverReportedNoSub) {
-            console.warn("[PenRX+ License] Online verification confirmed subscription was deleted from database.");
-            set({
-              subscriptions: [],
-              currentSubscription: null,
-              signatureToken: null,
-              lastSyncedAt: Date.now(),
-              lastOnlineCheck: Date.now(),
-            });
-            if (typeof window !== "undefined") {
-              try {
-                localStorage.removeItem("penrx_last_sub");
-                localStorage.removeItem("penrx_was_pending");
-                localStorage.removeItem("penrx_just_activated");
-                localStorage.removeItem("penrx_pending_sub_id");
-                localStorage.removeItem("penrx_last_subscriber_id");
-              } catch {}
-            }
+          const atLeastOneChannelResponded = supaResponded || serverResponded;
+
+          if (anyChannelConfirmedNoSub || (atLeastOneChannelResponded && !hasPendingSub)) {
+            console.warn("[PenRX+ License] Online verification confirmed subscription was deleted or does not exist.");
+            get().revokeLocallyAndClear("Authoritative server verified zero active subscriptions");
             return;
           }
         };

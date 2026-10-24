@@ -5,19 +5,31 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.util.Base64;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import androidx.core.content.FileProvider;
 
@@ -29,6 +41,141 @@ import java.io.FileOutputStream;
 public class MainActivity extends BridgeActivity {
 
     private String cachedHardwareDeviceId = null;
+    private View splashOverlay = null;
+
+    /**
+     * Shows a native branded loading overlay with logo, title, and emerald progress bar.
+     * Prevents any black screen during WebView initialization and remote cold start.
+     */
+    private void showNativeSplashOverlay() {
+        try {
+            int brandDark = Color.parseColor("#0b1329");
+            FrameLayout root = new FrameLayout(this);
+            root.setBackgroundColor(brandDark);
+            root.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+
+            LinearLayout centerBox = new LinearLayout(this);
+            centerBox.setOrientation(LinearLayout.VERTICAL);
+            centerBox.setGravity(Gravity.CENTER);
+            FrameLayout.LayoutParams centerParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            centerParams.gravity = Gravity.CENTER;
+            centerBox.setLayoutParams(centerParams);
+
+            // 1. Logo
+            ImageView logo = new ImageView(this);
+            int logoSize = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 92, getResources().getDisplayMetrics()
+            );
+            LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(logoSize, logoSize);
+            logoParams.bottomMargin = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 16, getResources().getDisplayMetrics()
+            );
+            logo.setLayoutParams(logoParams);
+            try {
+                logo.setImageResource(R.drawable.splash);
+            } catch (Exception e) {
+                try {
+                    logo.setImageResource(R.mipmap.ic_launcher);
+                } catch (Exception ignored) {}
+            }
+            centerBox.addView(logo);
+
+            // 2. App Title: PenRX+
+            TextView title = new TextView(this);
+            title.setText("PenRX+");
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
+            title.setTypeface(null, Typeface.BOLD);
+            title.setTextColor(Color.parseColor("#34d399"));
+            title.setGravity(Gravity.CENTER);
+            centerBox.addView(title);
+
+            // 3. Subtitle
+            TextView subTitle = new TextView(this);
+            subTitle.setText("منظومة إدارة الروشتات والعيادات الطبية الذكية");
+            subTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            subTitle.setTextColor(Color.parseColor("#94a3b8"));
+            subTitle.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            subParams.topMargin = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 6, getResources().getDisplayMetrics()
+            );
+            subParams.bottomMargin = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 22, getResources().getDisplayMetrics()
+            );
+            subTitle.setLayoutParams(subParams);
+            centerBox.addView(subTitle);
+
+            // 4. Progress Spinner
+            ProgressBar pb = new ProgressBar(this);
+            int pbSize = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 32, getResources().getDisplayMetrics()
+            );
+            LinearLayout.LayoutParams pbParams = new LinearLayout.LayoutParams(pbSize, pbSize);
+            pbParams.bottomMargin = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 10, getResources().getDisplayMetrics()
+            );
+            pb.setLayoutParams(pbParams);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                pb.setIndeterminateTintList(ColorStateList.valueOf(Color.parseColor("#10b981")));
+            }
+            centerBox.addView(pb);
+
+            // 5. Loading status text
+            TextView statusText = new TextView(this);
+            statusText.setText("جاري فتح العيادة الذكية...");
+            statusText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            statusText.setTextColor(Color.parseColor("#10b981"));
+            statusText.setGravity(Gravity.CENTER);
+            centerBox.addView(statusText);
+
+            root.addView(centerBox);
+            splashOverlay = root;
+
+            addContentView(splashOverlay, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+        } catch (Exception e) {
+            splashOverlay = null;
+        }
+    }
+
+    /**
+     * Smoothly dismisses the native splash overlay once the web interface finishes hydration.
+     */
+    public void dismissSplashOverlay() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (splashOverlay != null && splashOverlay.getParent() != null) {
+                    splashOverlay.animate()
+                        .alpha(0f)
+                        .setDuration(250)
+                        .withEndAction(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    ViewGroup parent = (ViewGroup) splashOverlay.getParent();
+                                    if (parent != null) {
+                                        parent.removeView(splashOverlay);
+                                    }
+                                } catch (Exception ignored) {}
+                            }
+                        })
+                        .start();
+                }
+            }
+        });
+    }
 
     /**
      * Computes a deterministic, immutable Hardware Machine ID (PRX-ANDR-XXXX-XXXX)
@@ -120,7 +267,6 @@ public class MainActivity extends BridgeActivity {
             Window window = getWindow();
             if (window != null) {
                 int brandDark = Color.parseColor("#0b1329");
-                window.getDecorView().setBackgroundColor(brandDark);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     window.setStatusBarColor(brandDark);
                     window.setNavigationBarColor(brandDark);
@@ -129,6 +275,17 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception ignored) {}
 
         super.onCreate(savedInstanceState);
+
+        // Instantly display native branded splash overlay so there is zero black screen during startup/cold start
+        showNativeSplashOverlay();
+
+        // Safety fallback timer: auto-dismiss splash after 7 seconds if network takes too long
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                dismissSplashOverlay();
+            }
+        }, 7000);
 
         final String hwId = resolveImmutableHardwareId();
 
@@ -144,6 +301,10 @@ public class MainActivity extends BridgeActivity {
                 settings.setDatabaseEnabled(true);
                 settings.setJavaScriptEnabled(true);
                 settings.setMediaPlaybackRequiresUserGesture(false);
+                settings.setAllowFileAccess(true);
+                settings.setAllowContentAccess(true);
+                settings.setLoadWithOverviewMode(true);
+                settings.setUseWideViewPort(true);
 
                 if (isNetworkAvailable()) {
                     settings.setCacheMode(WebSettings.LOAD_DEFAULT);
@@ -160,6 +321,15 @@ public class MainActivity extends BridgeActivity {
                     @JavascriptInterface
                     public String getHardwareDeviceId() {
                         return hwId;
+                    }
+
+                    /**
+                     * Signals the native layer that React hydration is complete,
+                     * smoothly fading out the native splash overlay.
+                     */
+                    @JavascriptInterface
+                    public void hideSplashScreen() {
+                        dismissSplashOverlay();
                     }
 
                     /**
