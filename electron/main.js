@@ -147,28 +147,43 @@ function performQuitAndInstall(customInstallerPath = null) {
     }
   } catch {}
 
-  const targetExe = customInstallerPath || downloadedInstallerPath;
+  // 3. Primary channel: Official electron-updater quitAndInstall
+  // With oneClick: true and perMachine: false, this silently applies the diff and relaunches PenRX+ in 1-2 seconds
+  if (autoUpdater && updateDownloadedSuccessfully) {
+    try {
+      console.log("[PenRX+ AutoUpdater] Triggering native autoUpdater.quitAndInstall(true, true)...");
+      autoUpdater.quitAndInstall(true, true);
+      // Failsafe exit in case electron event loop is idle
+      setTimeout(() => {
+        try {
+          app.exit(0);
+        } catch {}
+      }, 1500);
+      return;
+    } catch (err) {
+      console.error("[PenRX+ AutoUpdater] quitAndInstall error, falling back to direct runner:", err);
+    }
+  }
 
-  // 3. If we have a verified installer binary on disk (from differential merge or direct fallback),
-  // spawn a detached PowerShell installer helper that waits for our main process to exit, runs NSIS
-  // with --updated /S --force-run, and relaunches PenRX+.exe if NSIS doesn't.
+  // 4. Secondary fallback: direct standalone installer binary on disk (from direct download fallback)
+  const targetExe = customInstallerPath || downloadedInstallerPath;
   if (targetExe && fs.existsSync(targetExe) && process.platform === "win32") {
     try {
       const appExePath = process.execPath;
+      const currentPid = process.pid;
       const escapedInstaller = targetExe.replace(/'/g, "''");
       const escapedAppExe = appExePath.replace(/'/g, "''");
       const psScript = [
-        `Start-Sleep -Milliseconds 500`,
-        `Get-Process -Name 'PenRX+' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue`,
-        `Start-Sleep -Milliseconds 300`,
-        `$proc = Start-Process -FilePath '${escapedInstaller}' -ArgumentList '--updated', '/S', '--force-run' -Wait -PassThru -WindowStyle Hidden`,
-        `Start-Sleep -Milliseconds 500`,
-        `if (-not (Get-Process -Name 'PenRX+' -ErrorAction SilentlyContinue)) { if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' } }`,
+        `try { Wait-Process -Id ${currentPid} -Timeout 10 -ErrorAction SilentlyContinue } catch {}`,
+        `Start-Sleep -Milliseconds 600`,
+        `$proc = Start-Process -FilePath '${escapedInstaller}' -ArgumentList '--updated', '/S', '--force-run' -Wait -PassThru`,
+        `Start-Sleep -Milliseconds 600`,
+        `if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' }`,
       ].join("; ");
 
       const runner = spawn(
         "powershell.exe",
-        ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psScript],
+        ["-NoProfile", "-NonInteractive", "-Command", psScript],
         {
           detached: true,
           stdio: "ignore",
@@ -179,17 +194,17 @@ function performQuitAndInstall(customInstallerPath = null) {
       app.exit(0);
       return;
     } catch (spawnErr) {
-      console.warn("[PenRX+ AutoUpdater] Custom installer runner notice, falling back to quitAndInstall:", spawnErr.message);
+      console.warn("[PenRX+ AutoUpdater] Custom installer runner notice:", spawnErr.message);
     }
   }
 
-  // 4. Standard electron-updater quitAndInstall fallback
+  // 5. Fallback exit
   if (autoUpdater) {
     try {
       autoUpdater.quitAndInstall(true, true);
       return;
     } catch (err) {
-      console.error("[PenRX+ AutoUpdater] quitAndInstall error:", err);
+      console.error("[PenRX+ AutoUpdater] quitAndInstall fallback error:", err);
     }
   }
 

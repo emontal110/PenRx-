@@ -202,13 +202,12 @@ export function AutoUpdateModal() {
     setIsOpen(false);
   };
 
-  const directFallbackUrl =
-    platform === "mobile"
-      ? updateInfo.androidDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
-      : updateInfo.desktopDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
-
   const handleManualDownload = (customUrl?: string) => {
-    const targetUrl = customUrl || directFallbackUrl;
+    const targetUrl =
+      customUrl ||
+      (platform === "mobile"
+        ? updateInfo.androidDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
+        : updateInfo.desktopDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe");
     const w = typeof window !== "undefined" ? (window as any) : null;
     if (w?.penrxDesktop?.openExternal) {
       w.penrxDesktop.openExternal(targetUrl);
@@ -221,9 +220,9 @@ export function AutoUpdateModal() {
     const targetType = selectedType || platform;
     const w = typeof window !== "undefined" ? (window as any) : null;
 
-    // 1. ELECTRON NATIVE UPDATER (Single unified differential update pipeline with automatic silent install)
+    // 1. ELECTRON NATIVE UPDATER (Automatic differential delta download + silent install & restart)
     if (isElectron && targetType === "desktop") {
-      if (isDownloading) return;
+      if (isDownloading || downloadStatus === "completed") return;
       setIsDownloading(true);
       setDownloadProgress(1);
       setDownloadedMB(0);
@@ -256,13 +255,13 @@ export function AutoUpdateModal() {
             setDownloadStatus("completed");
             setIsDownloading(false);
             unsubscribe?.();
-            // Note: electron/main.js automatically triggers performQuitAndInstall after 1.2s;
-            // we also send a backup signal at 1.5s in case the window is still open.
+            // electron/main.js automatically triggers performQuitAndInstall after 1.0s;
+            // send a backup invocation at 1.4s just in case
             setTimeout(() => {
               if (typeof w?.penrxDesktop?.quitAndInstallUpdate === "function") {
                 w.penrxDesktop.quitAndInstallUpdate();
               }
-            }, 1500);
+            }, 1400);
           } else if (progress?.status === "error") {
             setDownloadStatus("error");
             setIsDownloading(false);
@@ -272,17 +271,15 @@ export function AutoUpdateModal() {
         });
       }
 
-      // Use official differential delta updater exclusively when packaged.
-      // Do NOT chain a second full download on top of electron-updater!
+      // Download differential delta update (fetching only changed blocks)
       if (typeof w?.penrxDesktop?.downloadDifferentialUpdate === "function") {
         try {
           const diffRes = await w.penrxDesktop.downloadDifferentialUpdate();
           if (diffRes?.success) {
             return;
           }
-          // Only fall back to direct stream if AutoUpdater is not available (e.g. unpacked dev build)
           if (diffRes?.error && diffRes.error !== "AutoUpdater not available") {
-            console.warn("[AutoUpdateModal] Differential updater reported error, using direct installer fallback:", diffRes.error);
+            console.warn("[AutoUpdateModal] Differential updater notice:", diffRes.error);
           }
         } catch (e: any) {
           console.warn("[AutoUpdateModal] Differential update exception:", e?.message);
@@ -291,6 +288,7 @@ export function AutoUpdateModal() {
 
       if (hasCompleted) return;
 
+      // Standalone direct installer fallback (if differential updater is not active)
       const targetUrl =
         updateInfo.desktopDownloadUrl ||
         "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
@@ -316,7 +314,7 @@ export function AutoUpdateModal() {
       return;
     }
 
-    // 2. MOBILE (Android APK via Browser / System Downloader)
+    // 2. MOBILE (Android APK)
     if (targetType === "mobile") {
       const apkUrl =
         updateInfo.androidDownloadUrl ||
@@ -325,14 +323,18 @@ export function AutoUpdateModal() {
       setDownloadStatus("completed");
       return;
     }
-
-    // 3. WEB BROWSER FALLBACK
-    const exeUrl =
-      updateInfo.desktopDownloadUrl ||
-      "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
-    handleManualDownload(exeUrl);
-    setDownloadStatus("completed");
   };
+
+  // Automatically start differential delta update download as soon as update modal opens in Electron Desktop
+  useEffect(() => {
+    if (isOpen && isElectron && !isDownloading && downloadStatus === "idle") {
+      startAutoUpdate("desktop");
+    }
+  }, [isOpen, isElectron, downloadStatus, isDownloading]);
+
+  if (!isClient || !isOpen || !updateInfo) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
@@ -340,7 +342,7 @@ export function AutoUpdateModal() {
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
 
-        {!isDownloading && (
+        {downloadStatus !== "completed" && (
           <button
             type="button"
             onClick={handleDismiss}
@@ -376,8 +378,8 @@ export function AutoUpdateModal() {
             <h2 className="text-xl sm:text-2xl font-black text-slate-100">
               {downloadStatus === "completed"
                 ? isElectron
-                  ? "اكتمل تنزيل التحديث وجارٍ التثبيت التلقائي!"
-                  : "تم بدء تنزيل التحديث!"
+                  ? "اكتمل التنزيل! جارٍ التثبيت التلقائي وإعادة التشغيل..."
+                  : "تم تجهيز التحديث بنجاح!"
                 : downloadStatus === "downloading"
                 ? "جارٍ تنزيل فرق التحديث السريع..."
                 : "تحديث جديد متوفر لمنظومة PenRX+"}
@@ -385,11 +387,11 @@ export function AutoUpdateModal() {
             <p className="text-xs text-slate-400">
               {downloadStatus === "completed"
                 ? isElectron
-                  ? "تم استلام فرق التحديث بنجاح! سيقوم البرنامج الآن بالتثبيت التلقائي وإعادة التشغيل فوراً..."
-                  : "تم فتح رابط التنزيل المباشر، قم بتشغيل الملف بمجرد اكتماله."
+                  ? "تم استلام فرق التحديث بنجاح! سيتم إغلاق البرنامج الآن وتطبيق التحديث سريعاً ثم إعادة الفتح تلقائياً..."
+                  : "تم تجهيز ملف التحديث بنجاح."
                 : downloadStatus === "downloading"
                 ? isElectron
-                  ? "يتم الآن تحميل التغييرات الجديدة فقط (Delta Update) ثم التثبيت التلقائي دون الحاجة لتدخل يدوي..."
+                  ? "يتم الآن تحميل التغييرات الجديدة فقط (Delta Update) وتثبيتها تلقائياً دون أي حاجة لتدخل يدوي..."
                   : "يرجى الانتظار حتى اكتمال تنزيل ملف التحديث الجديد"
                 : isElectron
                 ? "تحديث ذكي وسريع: يتم تنزيل فرق التحديث فقط وتثبيته تلقائياً مع إعادة تشغيل البرنامج."
@@ -430,7 +432,7 @@ export function AutoUpdateModal() {
                 <span>
                   {downloadStatus === "completed"
                     ? "اكتمل التنزيل 100% — جارٍ التثبيت التلقائي..."
-                    : `جارٍ تنزيل التحديث... (${downloadProgress}%)`}
+                    : `جارٍ تنزيل فرق التحديث... (${downloadProgress}%)`}
                 </span>
               </span>
               <span className="text-slate-400 font-mono text-[11px]">
@@ -454,8 +456,8 @@ export function AutoUpdateModal() {
             {downloadStatus === "completed" && (
               <p className="text-[11px] text-emerald-300 font-bold text-center pt-1 animate-in fade-in">
                 {isElectron
-                  ? "✨ تم تجهيز التحديث، جاري التثبيت التلقائي وإعادة تشغيل البرنامج الآن..."
-                  : "✨ اكتمل التنزيل، قم بفتح الملف لاستكمال التثبيت!"}
+                  ? "✨ تم استلام فرق التحديث، سيتم إغلاق البرنامج والتثبيت التلقائي السريع وإعادة التشغيل فوراً..."
+                  : "✨ اكتمل التجهيز بنجاح!"}
               </p>
             )}
           </div>
@@ -467,16 +469,12 @@ export function AutoUpdateModal() {
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
               <span>{downloadError || "تعذر إكمال التنزيل التلقائي"}</span>
             </div>
-            <p className="text-[11px] text-rose-300/80">
-              يمكنك التنزيل مباشرة عبر متصفح جهازك باستخدام الزر أدناه:
-            </p>
             <button
               type="button"
-              onClick={() => handleManualDownload()}
+              onClick={() => startAutoUpdate("desktop")}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500 text-slate-950 font-black text-[11px] hover:bg-rose-400 transition-colors cursor-pointer"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>تنزيل التحديث المباشر من GitHub في المتصفح</span>
+              <span>إعادة المحاولة 🔄</span>
             </button>
           </div>
         )}
@@ -485,99 +483,67 @@ export function AutoUpdateModal() {
           {downloadStatus === "completed" ? (
             <div className="space-y-2">
               {isElectron ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const w = typeof window !== "undefined" ? (window as any) : null;
-                    w?.penrxDesktop?.quitAndInstallUpdate?.();
-                  }}
-                  className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                  <span>تثبيت وإعادة تشغيل البرنامج الآن فوراً 🚀</span>
-                </button>
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center gap-3 animate-in fade-in">
+                  <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+                  <span className="text-emerald-300 font-bold text-xs sm:text-sm">
+                    جارٍ إغلاق البرنامج وتطبيق فرق التحديث وإعادة التشغيل تلقائياً...
+                  </span>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => handleManualDownload()}
-                  className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Download className="w-4 h-4 stroke-[2.5]" />
-                  <span>إعادة فتح ملف التحديث أو تنزيله يدوياً</span>
-                </button>
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center">
+                  <span className="text-emerald-300 font-bold text-xs sm:text-sm">
+                    تم اكتمال التجهيز بنجاح.
+                  </span>
+                </div>
               )}
             </div>
-          ) : !isDownloading ? (
+          ) : isDownloading ? (
+            <div className="flex items-center justify-center">
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="text-xs text-slate-400 hover:text-slate-200 transition-colors py-1.5 px-4 rounded-xl hover:bg-slate-800/60 font-bold cursor-pointer"
+              >
+                تأجيل التحديث والمتابعة لاحقاً ✕
+              </button>
+            </div>
+          ) : platform === "mobile" ? (
             <div className="space-y-2.5">
               <button
                 type="button"
-                onClick={() => startAutoUpdate()}
+                onClick={() => startAutoUpdate("mobile")}
                 className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer"
               >
-                {platform === "mobile" ? (
-                  <Smartphone className="w-5 h-5 stroke-[2.5]" />
-                ) : (
-                  <Laptop className="w-5 h-5 stroke-[2.5]" />
-                )}
-                <span>موافقة وتحديث البرنامج الآن تلقائياً 🚀</span>
+                <Smartphone className="w-5 h-5 stroke-[2.5]" />
+                <span>تنزيل نسخة الهاتف (Android APK) 🚀</span>
               </button>
-
-              <div className="flex items-center justify-between px-1 text-xs">
-                <button
-                  type="button"
-                  onClick={() =>
-                    startAutoUpdate(platform === "desktop" ? "mobile" : "desktop")
-                  }
-                  className="text-slate-400 hover:text-emerald-400 transition-colors flex items-center gap-1.5 font-bold cursor-pointer"
-                >
-                  {platform === "desktop" ? (
-                    <>
-                      <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>تنزيل نسخة الهاتف (Android APK)</span>
-                    </>
-                  ) : (
-                    <>
-                      <Laptop className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>تنزيل نسخة الكمبيوتر (Windows .exe)</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleManualDownload()}
-                  className="text-slate-400 hover:text-emerald-400 transition-colors flex items-center gap-1 font-bold cursor-pointer"
-                  title="فتح الرابط في المتصفح الخارجي"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  <span>تنزيل يدوي</span>
-                </button>
-
+              <div className="text-center">
                 <button
                   type="button"
                   onClick={handleDismiss}
-                  className="text-slate-400 hover:text-slate-200 transition-colors font-bold cursor-pointer"
+                  className="text-slate-400 hover:text-slate-200 transition-colors font-bold text-xs cursor-pointer"
                 >
                   تذكيري لاحقاً ✕
                 </button>
               </div>
             </div>
           ) : (
-            <div className="space-y-2 text-center">
+            <div className="space-y-2.5">
               <button
                 type="button"
-                onClick={() => handleManualDownload()}
-                className="text-xs text-emerald-400 hover:text-emerald-300 underline font-bold cursor-pointer"
+                onClick={() => startAutoUpdate("desktop")}
+                className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer"
               >
-                هل يستغرق وقتاً طويلاً؟ اضغط هنا للتنزيل المباشر من المتصفح ↗
+                <Laptop className="w-5 h-5 stroke-[2.5]" />
+                <span>بدء التحديث التلقائي السريع الآن 🚀</span>
               </button>
-              <div>
+              <div className="text-center">
                 <button
                   type="button"
                   onClick={handleDismiss}
-                  className="text-xs text-rose-400 hover:text-rose-300 transition-colors py-1 font-bold cursor-pointer"
+                  className="text-slate-400 hover:text-slate-200 transition-colors font-bold text-xs cursor-pointer"
                 >
-                  إلغاء التحميل
+                  تذكيري لاحقاً ✕
                 </button>
               </div>
             </div>
