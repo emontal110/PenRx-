@@ -128,10 +128,7 @@ function performQuitAndInstall(customInstallerPath = null) {
 
   console.log("[PenRX+ AutoUpdater] Executing silent update installation & automatic restart...");
 
-  // 1. Synchronously terminate the child Next.js server process so PenRX+.exe & app.asar have zero file locks
-  killServerProcessSync();
-
-  // 2. Destroy windows cleanly so no close handlers block quitting
+  // 1. Destroy windows cleanly first so no pending requests fail with connection reset
   try {
     if (splashWindow && !splashWindow.isDestroyed()) {
       splashWindow.destroy();
@@ -146,6 +143,9 @@ function performQuitAndInstall(customInstallerPath = null) {
       mainWindow = null;
     }
   } catch {}
+
+  // 2. Synchronously terminate the child Next.js server process so PenRX+.exe & app.asar have zero file locks
+  killServerProcessSync();
 
   // 3. Primary channel: Official electron-updater quitAndInstall
   // With oneClick: true and perMachine: false, this silently applies the diff and relaunches PenRX+ in 1-2 seconds
@@ -1221,9 +1221,23 @@ function createMainWindow(targetUrl) {
   setTimeout(revealMainWindow, 4500);
 
   mainWindow.webContents.on("before-input-event", (event, input) => {
-    if (input.key === "F11" && input.type === "keyDown") {
-      mainWindow.setFullScreen(!mainWindow.isFullScreen());
-      event.preventDefault();
+    if (input.type === "keyDown") {
+      if (input.key === "F11") {
+        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+        event.preventDefault();
+      } else if (input.key === "F12" || (input.control && input.shift && input.key && input.key.toLowerCase() === "i")) {
+        mainWindow.webContents.toggleDevTools();
+        event.preventDefault();
+      } else if ((input.control && input.key && input.key.toLowerCase() === "r") || input.key === "F5") {
+        mainWindow.webContents.reload();
+        event.preventDefault();
+      }
+    }
+  });
+
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    if (level >= 2) {
+      console.warn(`[PenRX+ Renderer ${level === 3 ? "ERROR" : "WARN"}]: ${message} (${sourceId}:${line})`);
     }
   });
 

@@ -27,10 +27,15 @@ interface UpdateInfo {
 
 function compareSemver(current: string, latest: string): boolean {
   try {
-    const c = current.replace(/^v/, "").split(".").map(Number);
-    const l = latest.replace(/^v/, "").split(".").map(Number);
+    const cleanCurrent = String(current || "").replace(/^v/, "").trim();
+    const cleanLatest = String(latest || "").replace(/^v/, "").trim();
+    if (!cleanCurrent || !cleanLatest) return false;
 
-    for (let i = 0; i < 3; i++) {
+    const c = cleanCurrent.split(".").map((n) => parseInt(n, 10) || 0);
+    const l = cleanLatest.split(".").map((n) => parseInt(n, 10) || 0);
+
+    const maxLen = Math.max(c.length, l.length, 3);
+    for (let i = 0; i < maxLen; i++) {
       const cPart = c[i] || 0;
       const lPart = l[i] || 0;
       if (lPart > cPart) return true;
@@ -183,10 +188,6 @@ export function AutoUpdateModal() {
     };
   }, []);
 
-  if (!isClient || !isOpen || !updateInfo) {
-    return null;
-  }
-
   const isElectron =
     typeof window !== "undefined" && Boolean((window as any).penrxDesktop?.isElectron);
 
@@ -197,7 +198,9 @@ export function AutoUpdateModal() {
       }
     }
     if (updateInfo?.latestVersion) {
-      localStorage.setItem("penrx_dismissed_update_version", updateInfo.latestVersion);
+      try {
+        localStorage.setItem("penrx_dismissed_update_version", updateInfo.latestVersion);
+      } catch {}
     }
     setIsOpen(false);
   };
@@ -206,8 +209,8 @@ export function AutoUpdateModal() {
     const targetUrl =
       customUrl ||
       (platform === "mobile"
-        ? updateInfo.androidDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
-        : updateInfo.desktopDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe");
+        ? updateInfo?.androidDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
+        : updateInfo?.desktopDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe");
     const w = typeof window !== "undefined" ? (window as any) : null;
     if (w?.penrxDesktop?.openExternal) {
       w.penrxDesktop.openExternal(targetUrl);
@@ -235,38 +238,42 @@ export function AutoUpdateModal() {
 
       if (typeof w?.penrxDesktop?.onUpdateProgress === "function") {
         unsubscribe = w.penrxDesktop.onUpdateProgress((progress: any) => {
-          if (hasCompleted) return;
+          try {
+            if (hasCompleted) return;
 
-          if (typeof progress?.percent === "number") {
-            setDownloadProgress(progress.percent);
-          } else if (typeof progress?.progress === "number") {
-            setDownloadProgress(progress.progress);
-          }
-          if (typeof progress?.downloadedMB === "number" || typeof progress?.downloadedMB === "string") {
-            setDownloadedMB(Number(progress.downloadedMB));
-          }
-          if (typeof progress?.totalMB === "number" || typeof progress?.totalMB === "string") {
-            setTotalMB(Number(progress.totalMB));
-          }
+            if (typeof progress?.percent === "number") {
+              setDownloadProgress(progress.percent);
+            } else if (typeof progress?.progress === "number") {
+              setDownloadProgress(progress.progress);
+            }
+            if (typeof progress?.downloadedMB === "number" || typeof progress?.downloadedMB === "string") {
+              setDownloadedMB(Number(progress.downloadedMB));
+            }
+            if (typeof progress?.totalMB === "number" || typeof progress?.totalMB === "string") {
+              setTotalMB(Number(progress.totalMB));
+            }
 
-          if (progress?.completed || progress?.status === "completed") {
-            hasCompleted = true;
-            setDownloadProgress(100);
-            setDownloadStatus("completed");
-            setIsDownloading(false);
-            unsubscribe?.();
-            // electron/main.js automatically triggers performQuitAndInstall after 1.0s;
-            // send a backup invocation at 1.4s just in case
-            setTimeout(() => {
-              if (typeof w?.penrxDesktop?.quitAndInstallUpdate === "function") {
-                w.penrxDesktop.quitAndInstallUpdate();
-              }
-            }, 1400);
-          } else if (progress?.status === "error") {
-            setDownloadStatus("error");
-            setIsDownloading(false);
-            setDownloadError(progress.error || "فشل تنزيل ملف التحديث");
-            unsubscribe?.();
+            if (progress?.completed || progress?.status === "completed") {
+              hasCompleted = true;
+              setDownloadProgress(100);
+              setDownloadStatus("completed");
+              setIsDownloading(false);
+              unsubscribe?.();
+              // electron/main.js automatically triggers performQuitAndInstall after 1.2s;
+              // send a backup invocation at 1.6s just in case
+              setTimeout(() => {
+                if (typeof w?.penrxDesktop?.quitAndInstallUpdate === "function") {
+                  w.penrxDesktop.quitAndInstallUpdate();
+                }
+              }, 1600);
+            } else if (progress?.status === "error") {
+              setDownloadStatus("error");
+              setIsDownloading(false);
+              setDownloadError(progress.error || "فشل تنزيل ملف التحديث");
+              unsubscribe?.();
+            }
+          } catch (progressErr) {
+            console.warn("[AutoUpdateModal] Progress callback error:", progressErr);
           }
         });
       }
@@ -290,11 +297,11 @@ export function AutoUpdateModal() {
 
       // Standalone direct installer fallback (if differential updater is not active)
       const targetUrl =
-        updateInfo.desktopDownloadUrl ||
+        updateInfo?.desktopDownloadUrl ||
         "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
 
       try {
-        const res = await w.penrxDesktop.downloadAndInstallUpdate(targetUrl);
+        const res = await w?.penrxDesktop?.downloadAndInstallUpdate?.(targetUrl);
         if (!res || !res.success) {
           if (!hasCompleted) {
             unsubscribe?.();
@@ -317,7 +324,7 @@ export function AutoUpdateModal() {
     // 2. MOBILE (Android APK)
     if (targetType === "mobile") {
       const apkUrl =
-        updateInfo.androidDownloadUrl ||
+        updateInfo?.androidDownloadUrl ||
         "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk";
       handleManualDownload(apkUrl);
       setDownloadStatus("completed");
@@ -332,6 +339,7 @@ export function AutoUpdateModal() {
     }
   }, [isOpen, isElectron, downloadStatus, isDownloading]);
 
+  // Single valid conditional return AFTER all hooks have executed
   if (!isClient || !isOpen || !updateInfo) {
     return null;
   }
