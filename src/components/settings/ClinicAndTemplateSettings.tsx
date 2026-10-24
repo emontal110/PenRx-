@@ -126,7 +126,7 @@ export function ClinicAndTemplateSettings() {
       isProfileSaved: true,
     });
 
-    // Synchronize doctor name, clinic name, and phone immediately with Cloud Admin Portal
+    // Synchronize doctor name, clinic name, phone, and full clinic backup immediately with Cloud
     try {
       const { machineId, subscriberId } = useSubscriptionStore.getState();
       fetch(getApiUrl("/api/subscriptions"), {
@@ -140,6 +140,9 @@ export function ClinicAndTemplateSettings() {
           clinicName: nameAr.trim() || name.trim(),
           phone: clinicPhone.trim(),
         }),
+      }).catch(() => {});
+      import("@/lib/backupService").then(({ runDailySilentBackupAndAutoArchival }) => {
+        runDailySilentBackupAndAutoArchival(true).catch(() => {});
       }).catch(() => {});
     } catch {}
 

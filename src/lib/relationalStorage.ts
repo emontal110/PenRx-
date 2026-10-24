@@ -1,4 +1,5 @@
 import { SavedPrescription } from "@/store/usePrescriptionStore";
+import { DEFAULT_SUPABASE_SERVICE_ROLE_KEY } from "@/lib/subscriptionManager";
 
 export interface ClinicMetaInfo {
   name?: string;
@@ -12,7 +13,7 @@ const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
 const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
+  DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
 
 const supabaseHeaders = {
   apikey: SUPABASE_KEY,

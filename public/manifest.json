@@ -1,12 +1,17 @@
 {
-  "short_name": "PenRx+",
-  "name": "PenRx+ (بن آر إكس +) Medical Prescription Platform",
-
+  "short_name": "PenRX+",
+  "name": "PenRX+ (بن آر إكس +) Medical Prescription Platform",
   "icons": [
     {
-      "src": "/icon.svg",
-      "type": "image/svg+xml",
-      "sizes": "any",
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
@@ -14,17 +19,11 @@
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
-  "background_color": "#131b24",
-  "theme_color": "#131b24",
+  "background_color": "#1C252A",
+  "theme_color": "#1C252A",
   "display": "standalone",
   "orientation": "portrait"
 }

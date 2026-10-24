@@ -2,21 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
-import { Sparkles, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
 import versionConfig from "@/config/version.json";
 
 /**
- * AppHydrationSplash – Modern Micro-Splash & Hydration Guard.
+ * AppHydrationSplash – Ultra-fast Non-Blocking Micro-Splash & Hydration Guard.
  *
- * Eliminates "rehydration flicker" (e.g. flashing default clinic name or "اشترك الآن")
- * by holding a beautiful, high-speed brand transition until Zustand finishes reading
- * localStorage.
- *
- * Zero performance loss: Unlocks the exact millisecond stores are hydrated (~80-150ms).
- * Never triggers on normal in-app client navigation, only on hard reload / first load.
+ * Ensures zero black screen on Android APK and Windows EXE by rendering app content
+ * immediately while fading out the brand splash within 60-120ms.
  */
 export function AppHydrationSplash({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
@@ -37,7 +33,6 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
       localStorage.setItem("penrx_client_version", versionConfig.version);
     } catch {}
 
-    // Fast path: check if stores are already hydrated
     const checkAllHydrated = () => {
       const subHydrated = useSubscriptionStore.persist?.hasHydrated?.() ?? true;
       const clinicHydrated = useClinicStore.persist?.hasHydrated?.() ?? true;
@@ -56,16 +51,14 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
 
     if (checkAllHydrated()) {
       markAppReady();
-      // Fade out splash gracefully
-      const fadeTimer = setTimeout(() => setShouldRenderSplash(false), 200);
+      const fadeTimer = setTimeout(() => setShouldRenderSplash(false), 120);
       return () => clearTimeout(fadeTimer);
     }
 
-    // Subscribe to hydration completion
     const markReadyIfDone = () => {
       if (checkAllHydrated()) {
         markAppReady();
-        setTimeout(() => setShouldRenderSplash(false), 200);
+        setTimeout(() => setShouldRenderSplash(false), 120);
       }
     };
 
@@ -73,11 +66,11 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
     const unsubClinic = useClinicStore.persist?.onFinishHydration?.(markReadyIfDone);
     const unsubRx = usePrescriptionStore.persist?.onFinishHydration?.(markReadyIfDone);
 
-    // Safety timeout: Maximum 220ms so user is never blocked even if an issue occurs
+    // Ultra-fast safety unlock (80ms) so mobile APK never stalls on a dark screen
     const safetyTimer = setTimeout(() => {
       markAppReady();
-      setTimeout(() => setShouldRenderSplash(false), 200);
-    }, 220);
+      setTimeout(() => setShouldRenderSplash(false), 120);
+    }, 80);
 
     return () => {
       unsubSub?.();
@@ -89,12 +82,8 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
 
   return (
     <>
-      {/* Real app content (mounted in background ready to display) */}
-      <div
-        className={`transition-opacity duration-300 ease-out ${
-          isReady ? "opacity-100" : "opacity-0"
-        }`}
-      >
+      {/* Real app content (rendered immediately with zero black-screen opacity block) */}
+      <div className="min-h-screen bg-slate-950 text-slate-100">
         {children}
       </div>
 
@@ -102,21 +91,19 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
       {shouldRenderSplash && (
         <div
           dir="rtl"
-          className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-950 text-slate-100 transition-all duration-300 ease-out ${
+          className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-950 text-slate-100 transition-all duration-200 ease-out ${
             isReady ? "opacity-0 pointer-events-none scale-105" : "opacity-100 pointer-events-auto scale-100"
           }`}
           style={{ willChange: "opacity, transform" }}
         >
-          {/* Ambient Glowing Aura */}
           <div className="absolute w-72 h-72 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
           <div className="absolute w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none delay-300 animate-pulse" />
 
-          {/* Logo & Brand Identity */}
           <div className="relative z-10 flex flex-col items-center space-y-4">
             <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-3xl overflow-hidden border-2 border-emerald-500/50 shadow-2xl shadow-emerald-950/60 p-0.5 bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-500">
-              <div className="relative w-full h-full rounded-[22px] overflow-hidden">
+              <div className="relative w-full h-full rounded-[22px] overflow-hidden bg-[#1C252A]">
                 <Image
-                  src="/logo-penrx.jpg"
+                  src="/icon-192.png"
                   alt="PenRX+"
                   fill
                   priority
@@ -144,14 +131,13 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
               </p>
             </div>
 
-            {/* High-Tech Ultra-Fast Loading Indicator with Bouncing Ping-Pong Beam */}
             <div className="w-52 sm:w-64 space-y-2.5 pt-2">
               <div className="h-1.5 w-full bg-slate-900/90 rounded-full overflow-hidden border border-slate-800 relative shadow-inner">
                 <div className="h-full bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 rounded-full w-2/5 absolute top-0 animate-splash-beam shadow-[0_0_14px_rgba(52,211,153,0.9)]" />
               </div>
-              <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-400 font-semibold tracking-wide">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>جاري تحميل بيانات العيادة والترخيص...</span>
+              <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-emerald-400/90">
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>جاري فتح العيادة الذكية...</span>
               </div>
             </div>
           </div>

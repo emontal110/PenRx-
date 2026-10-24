@@ -33,13 +33,14 @@ import { useClinicStore } from "@/store/useClinicStore";
 import { useSubscriptionStore, getSubscriptionDetails } from "@/store/useSubscriptionStore";
 import { NewRxGuard } from "@/components/prescription/NewRxGuard";
 import { showGlobalToast } from "@/components/common/GlobalToast";
-import { normalizeWhatsAppNumber } from "@/components/prescription/WhatsAppShareModal";
+import { WhatsAppShareModal } from "@/components/prescription/WhatsAppShareModal";
 
 export default function DashboardPage() {
   const { savedPrescriptions, savedPatients } = usePrescriptionStore();
   const { clinic, branches, activeBranchId } = useClinicStore();
   const { subscriptions, machineId } = useSubscriptionStore();
   const [mounted, setMounted] = useState(false);
+  const [rxToShareWhatsApp, setRxToShareWhatsApp] = useState<SavedPrescription | null>(null);
 
   // Date filter state & refs for opening picker anywhere
   const [startDate, setStartDate] = useState<string>("");
@@ -227,18 +228,7 @@ export default function DashboardPage() {
   const displayPrescriptions = filteredPrescriptions.slice(0, 6);
 
   const handleShareWhatsApp = (rx: SavedPrescription) => {
-    const cleanPhone = normalizeWhatsAppNumber(rx.patient.phone || "");
-    if (!cleanPhone) {
-      showGlobalToast("⚠️ لا يوجد رقم هاتف مسجل للمريض لإرسال الواتساب", "error");
-      return;
-    }
-    const itemsText = rx.items
-      .map((it, idx) => `${idx + 1}. *${it.drugName}* (${it.doseQuantity} ${it.doseForm}) - ${it.frequency}`)
-      .join("\n");
-
-    const message = `مرحباً أستاذ/ة *${rx.patient.name}*،\n\nإليك تفاصيل الروشتة الطبية من عيادة *${clinic.doctorName}*:\n\n*رقم الروشتة:* ${rx.prescriptionNo}\n*التاريخ:* ${new Date(rx.createdAt).toLocaleDateString("ar-EG")}\n\n*الأدوية المقررة:*\n${itemsText}\n\n${rx.notes ? `*ملاحظات إضافية:* ${rx.notes}\n\n` : ""}نتمنى لكم دوام الصحة والعافية والشفاء العاجل 🌹`;
-
-    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, "_blank");
+    setRxToShareWhatsApp(rx);
   };
 
   return (
@@ -1014,6 +1004,19 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+      {/* WhatsApp Image/PDF Share Modal */}
+      {rxToShareWhatsApp && (
+        <WhatsAppShareModal
+          isOpen={Boolean(rxToShareWhatsApp)}
+          onClose={() => setRxToShareWhatsApp(null)}
+          patient={rxToShareWhatsApp.patient}
+          clinic={clinic}
+          prescriptionNo={rxToShareWhatsApp.prescriptionNo}
+          diagnosis={rxToShareWhatsApp.diagnosis || ""}
+          notes={rxToShareWhatsApp.notes || ""}
+          items={rxToShareWhatsApp.items}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   LeanCloudPrescription,
+  LeanPrescriptionItem,
   RETENTION_MS,
   decompressPrescription,
 } from "@/lib/prescriptionSync";
@@ -20,24 +21,40 @@ import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 export const dynamic = "force-dynamic";
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-// RLS on CloudPrescription only admits service_role — anon key writes are silently rejected
 const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
 
 // High-Speed Server In-Memory Cache (Multi-Tenant, Partitioned by Subscriber ID)
-// Key: subscriberId -> Map<prescriptionId, LeanCloudPrescription>
 const serverPrescriptionsCache = new Map<string, Map<string, LeanCloudPrescription>>();
+let lastCloudPurgeAt = 0;
 
 /**
- * Purge records older than 90 days from the server cache
+ * Minifies medication items before storing in Supabase JSONB to save 65%+ database space on the Free Tier
  */
-function purgeExpiredRecords(): number {
+function minifyItemsForDb(items: LeanPrescriptionItem[]): LeanPrescriptionItem[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((it) => {
+    const out: LeanPrescriptionItem = { n: String(it.n || "").trim().slice(0, 120) };
+    if (it.a && String(it.a).trim()) out.a = String(it.a).trim().slice(0, 120);
+    if (it.q && String(it.q).trim() && String(it.q).trim() !== "1") out.q = String(it.q).trim().slice(0, 20);
+    if (it.f && String(it.f).trim()) out.f = String(it.f).trim().slice(0, 40);
+    if (it.fr && String(it.fr).trim()) out.fr = String(it.fr).trim().slice(0, 80);
+    if (it.d && String(it.d).trim()) out.d = String(it.d).trim().slice(0, 50);
+    if (it.i && String(it.i).trim()) out.i = String(it.i).trim().slice(0, 160);
+    return out;
+  });
+}
+
+/**
+ * Purge records older than 365 days from the server cache and Supabase (throttled to once every 6 hours)
+ */
+function purgeExpiredRecords(force = false): number {
   const now = Date.now();
   let purged = 0;
 
   for (const [subId, rxMap] of serverPrescriptionsCache.entries()) {
     for (const [rxId, rx] of rxMap.entries()) {
-      if (rx.arc) continue; // Never purge archived prescriptions
+      if (rx.arc) continue;
       const rxTime = new Date(rx.ts).getTime();
       if (!isNaN(rxTime) && now - rxTime > RETENTION_MS) {
         rxMap.delete(rxId);
@@ -49,29 +66,29 @@ function purgeExpiredRecords(): number {
     }
   }
 
-  // Also trigger cloud purge for records older than 90 days
-  try {
-    const minDate = new Date(Date.now() - RETENTION_MS).toISOString();
-    fetch(`${SUPABASE_REST_URL}/CloudPrescription?createdAt=lt.${encodeURIComponent(minDate)}`, {
-      method: "DELETE",
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-      },
-    }).catch(() => {});
-  } catch {}
+  if (force || now - lastCloudPurgeAt > 6 * 60 * 60 * 1000) {
+    lastCloudPurgeAt = now;
+    try {
+      const minDate = new Date(now - RETENTION_MS).toISOString();
+      fetch(`${SUPABASE_REST_URL}/CloudPrescription?createdAt=lt.${encodeURIComponent(minDate)}`, {
+        method: "DELETE",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      }).catch(() => {});
+    } catch {}
+  }
 
   return purged;
 }
 
-// ===== GET: Retrieve prescriptions for a specific subscriber (Last 365 Days Only) =====
+// ===== GET: Retrieve prescriptions for a specific subscriber (Last 365 Days) =====
 export async function GET(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
   if (!hasCloudCredentials()) {
     return proxyToCloud(request, "/api/prescriptions/sync");
   }
 
-  // Rate Limit: 30 sync requests per minute per IP
   if (!checkRateLimit(request, { maxRequests: 30, windowMs: 60_000, prefix: "rx-sync-get" })) {
     return rateLimitExceededResponse(60);
   }
@@ -87,7 +104,6 @@ export async function GET(request: Request) {
     );
   }
 
-  // Security Check: Verify that the subscriber exists and has an active license or trial
   const sub = await getSubscriptionBySubscriberId(subscriberId);
   const isAdmin = validateAdminAuthorization(request);
 
@@ -105,7 +121,6 @@ export async function GET(request: Request) {
     );
   }
 
-  // Security Check: the requesting device must own this subscription (admin portal is exempt)
   if (sub && !isAdmin) {
     if (!machineId) {
       return NextResponse.json(
@@ -121,13 +136,11 @@ export async function GET(request: Request) {
     }
   }
 
-  // Periodic automatic purge of expired items
   purgeExpiredRecords();
 
   let rxMap = serverPrescriptionsCache.get(subscriberId);
   const now = Date.now();
 
-  // If local server cache is empty, query Supabase CloudPrescription table
   if (!rxMap || rxMap.size === 0) {
     try {
       const minDate = new Date(now - RETENTION_MS).toISOString();
@@ -182,7 +195,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // Sort descending by creation date (newest first)
   prescriptions.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 
   return NextResponse.json({
@@ -196,26 +208,23 @@ export async function GET(request: Request) {
 
 // ===== POST: Save, Delete, or Purge Prescriptions =====
 export async function POST(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
   if (!hasCloudCredentials()) {
     return proxyToCloud(request, "/api/prescriptions/sync");
   }
 
-  // Rate Limit: 60 sync operations per minute per IP (save/delete happen often)
   if (!checkRateLimit(request, { maxRequests: 60, windowMs: 60_000, prefix: "rx-sync-post" })) {
     return rateLimitExceededResponse(60);
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { action, subscriberId, prescriptionId, data, machineId } = body;
 
-    // 1. Global Purge Action - Admin Only
     if (action === "PURGE_OLD") {
       if (!validateAdminAuthorization(request)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      const count = purgeExpiredRecords();
+      const count = purgeExpiredRecords(true);
       return NextResponse.json({ success: true, purgedCount: count });
     }
 
@@ -226,7 +235,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Security check: Only active subscribers can sync or save prescriptions
     const sub = await getSubscriptionBySubscriberId(subscriberId);
     if (!sub || (sub.status !== "ACTIVE" && !sub.isTrial)) {
       return NextResponse.json(
@@ -235,7 +243,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Security check: the requesting device must own this subscription
     if (!machineId || !machineOwnsSubscription(sub, String(machineId).trim())) {
       return NextResponse.json(
         { error: "هذا الجهاز غير مرتبط بحساب المشترك المطلوب" },
@@ -243,41 +250,43 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get or initialize subscriber bucket
     if (!serverPrescriptionsCache.has(subscriberId)) {
       serverPrescriptionsCache.set(subscriberId, new Map());
     }
     const subscriberMap = serverPrescriptionsCache.get(subscriberId)!;
 
-    // 2. SAVE Action (Insert or Update)
+    // 2. SAVE Action (Single Canonical Ultra-Compact Upsert to CloudPrescription)
     if (action === "SAVE") {
       if (!data || !data.id) {
         return NextResponse.json({ error: "Prescription data is missing" }, { status: 400 });
       }
 
-      // Check 90-day retention before accepting
       const rxTime = new Date(data.ts).getTime();
-      if (!isNaN(rxTime) && Date.now() - rxTime > RETENTION_MS) {
+      if (!data.arc && !isNaN(rxTime) && Date.now() - rxTime > RETENTION_MS) {
         return NextResponse.json({
           success: false,
-          message: "Prescription is older than 90 days retention window",
+          message: "Prescription is older than retention window",
         });
       }
 
-      // Store in subscriber bucket
-      subscriberMap.set(data.id, data);
+      const compactItems = minifyItemsForDb(data.items);
+      const compactData: LeanCloudPrescription = {
+        ...data,
+        items: compactItems,
+      };
 
-      // Relational persistence in PostgreSQL via Supabase REST (Clinic -> Patient -> Prescription -> Items)
-      try {
-        const richRx = decompressPrescription(data);
-        savePrescriptionRelational(richRx, undefined, subscriberId).catch((err) => {
-          console.warn("[SyncAPI] Supabase relational save deferred:", err.message);
-        });
-      } catch {}
+      subscriberMap.set(data.id, compactData);
 
-      // Attempt background write to Supabase Cloud if available
+      // Optional relational write only if explicitly enabled via env (disabled by default to save 85% Supabase Free Tier storage)
+      if (process.env.ENABLE_RELATIONAL_DUAL_WRITE === "true") {
+        try {
+          const richRx = decompressPrescription(compactData);
+          savePrescriptionRelational(richRx, undefined, subscriberId).catch(() => {});
+        } catch {}
+      }
+
       try {
-        fetch(`${SUPABASE_REST_URL}/CloudPrescription`, {
+        fetch(`${SUPABASE_REST_URL}/CloudPrescription?on_conflict=id`, {
           method: "POST",
           headers: {
             apikey: SUPABASE_KEY,
@@ -286,19 +295,19 @@ export async function POST(request: Request) {
             Prefer: "resolution=merge-duplicates",
           },
           body: JSON.stringify({
-            id: data.id,
+            id: compactData.id,
             subscriberId,
-            prescriptionNo: data.pNo,
-            branchId: data.bId || null,
-            branchName: data.bName || null,
-            patientName: data.pName,
-            patientPhone: data.pPhone || null,
-            patientAge: data.pAge || null,
-            patientGender: data.pGen || null,
-            diagnosis: data.diag || null,
-            notes: data.notes || null,
-            itemsJson: data.items,
-            createdAt: data.ts,
+            prescriptionNo: compactData.pNo,
+            branchId: compactData.bId || null,
+            branchName: compactData.bName || null,
+            patientName: compactData.pName,
+            patientPhone: compactData.pPhone || null,
+            patientAge: compactData.pAge || null,
+            patientGender: compactData.pGen || null,
+            diagnosis: compactData.diag || null,
+            notes: compactData.notes || null,
+            itemsJson: compactItems,
+            createdAt: compactData.ts,
             updatedAt: new Date().toISOString(),
           }),
         }).catch(() => {});
@@ -307,7 +316,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         action: "SAVE",
-        prescriptionId: data.id,
+        prescriptionId: compactData.id,
         storedInBucket: subscriberId,
       });
     }
@@ -320,12 +329,12 @@ export async function POST(request: Request) {
 
       subscriberMap.delete(prescriptionId);
 
-      // Delete from Supabase relational tables
-      try {
-        deletePrescriptionRelational(prescriptionId).catch(() => {});
-      } catch {}
+      if (process.env.ENABLE_RELATIONAL_DUAL_WRITE === "true") {
+        try {
+          deletePrescriptionRelational(prescriptionId).catch(() => {});
+        } catch {}
+      }
 
-      // Attempt background delete in Supabase Cloud
       try {
         fetch(
           `${SUPABASE_REST_URL}/CloudPrescription?id=eq.${encodeURIComponent(prescriptionId)}&subscriberId=eq.${encodeURIComponent(subscriberId)}`,

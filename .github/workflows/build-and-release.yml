@@ -43,7 +43,9 @@ jobs:
           cp public/mobile.html out/index.html 2>/dev/null || cp public/portal.html out/index.html
           cp public/logo-penrx.jpg out/logo-penrx.jpg 2>/dev/null || true
           cp public/favicon.ico out/favicon.ico 2>/dev/null || true
+          cp public/icon-192.png out/icon-192.png 2>/dev/null || true
           cp public/icon-512.png out/icon-512.png 2>/dev/null || true
+          cp public/apple-touch-icon.png out/apple-touch-icon.png 2>/dev/null || true
           cp public/error.html out/error.html 2>/dev/null || true
 
       - name: Add Android Native Platform
@@ -89,16 +91,33 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Check if Release Assets Already Uploaded by Local Builder
+        id: check_existing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_TAG=$(node -p "try { require('./src/config/version.json').version } catch(e) { require('./package.json').version }")
+          if gh release view "v${RELEASE_TAG}" --json assets --jq '.assets[].name' 2>/dev/null | grep -q "PenRX+-Setup.exe"; then
+            echo "already_uploaded=true" >> $GITHUB_OUTPUT
+            echo "✓ Release v${RELEASE_TAG} already contains PenRX+-Setup.exe from local builder; skipping cloud rebuild to preserve exact blockmap parity."
+          else
+            echo "already_uploaded=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Node.js
+        if: steps.check_existing.outputs.already_uploaded != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: "npm"
 
       - name: Install Dependencies
+        if: steps.check_existing.outputs.already_uploaded != 'true'
         run: npm install --no-audit
 
       - name: Setup Environment Variables
+        if: steps.check_existing.outputs.already_uploaded != 'true'
         shell: bash
         run: |
           printf "%s\n" \
@@ -109,6 +128,7 @@ jobs:
             "NEXT_TELEMETRY_DISABLED=1" > .env
 
       - name: Build Web Application
+        if: steps.check_existing.outputs.already_uploaded != 'true'
         run: npx next build
         env:
           NEXT_PUBLIC_SUPABASE_URL: "https://qspaigplwyvpqbmszpgc.supabase.co"
@@ -118,11 +138,13 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
 
       - name: Build Native Windows Installer (.exe)
+        if: steps.check_existing.outputs.already_uploaded != 'true'
         run: npx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows Executables & Differential Update Metadata
+        if: steps.check_existing.outputs.already_uploaded != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: PenRX-Windows-Desktop
@@ -157,14 +179,12 @@ jobs:
       - name: Prepare Files for Release
         run: |
           mkdir -p release-files
-          # Android APK
           for apk in artifacts/android/*.apk; do
             if [ -f "$apk" ]; then
               cp "$apk" release-files/PenRX+.apk
               break
             fi
           done
-          # Windows Desktop Installer & Differential Update Metadata
           for f in artifacts/windows/*.exe; do
             if [ -f "$f" ]; then
               cp "$f" release-files/PenRX+-Setup.exe
@@ -175,7 +195,6 @@ jobs:
               break
             fi
           done
-          # Differential update metadata (.blockmap and latest.yml) for delta updates
           cp artifacts/windows/*.blockmap release-files/ 2>/dev/null || true
           for b in artifacts/windows/*.blockmap; do
             if [ -f "$b" ]; then
@@ -184,11 +203,9 @@ jobs:
             fi
           done
           cp artifacts/windows/latest.yml release-files/ 2>/dev/null || true
-          # Synchronize latest.yml so url and path point to PenRX+-Setup.exe
           if [ -f "release-files/latest.yml" ]; then
             sed -i -E 's/(url|path): .*\.exe/\1: PenRX+-Setup.exe/g' release-files/latest.yml
           fi
-          # Dynamic Tag Extraction
           RELEASE_TAG=$(node -p "try { require('./src/config/version.json').version } catch(e) { require('./package.json').version }")
           echo "CURRENT_TAG=v$RELEASE_TAG" >> $GITHUB_ENV
           echo "Files prepared for release (Tag: v$RELEASE_TAG):"
@@ -198,8 +215,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release-files/*
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || env.CURRENT_TAG }}
-          name: PenRX+ Official Release ${{ github.ref_type == 'tag' && github.ref_name || env.CURRENT_TAG }}
+          tag_name: ${{ env.CURRENT_TAG }}
+          name: "PenRX+ Official Release ${{ env.CURRENT_TAG }}"
+          body: "تحديث رسمي لمنظومة PenRX+ الطبية (نسخة الكمبيوتر Windows .exe + نسخة الهاتف Android .apk)"
           draft: false
           prerelease: false
-          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -48,6 +48,7 @@ interface LivePrescriptionPreviewProps {
   onRequestNewPrescription?: () => void;
   aiAlerts?: InteractionAlert[];
   onOpenAiAlert?: (alert: InteractionAlert) => void;
+  readOnly?: boolean;
 }
 
 export function LivePrescriptionPreview({
@@ -65,6 +66,7 @@ export function LivePrescriptionPreview({
   onRequestNewPrescription,
   aiAlerts = [],
   onOpenAiAlert,
+  readOnly = false,
 }: LivePrescriptionPreviewProps) {
   const { clinic, branches, activeBranchId } = useClinicStore();
   const { visibleFields, updateItem } = usePrescriptionStore();
@@ -750,32 +752,34 @@ export function LivePrescriptionPreview({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity no-print shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(item)}
-                        className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:text-cyan-600 hover:bg-cyan-50 transition-colors cursor-pointer"
-                        title="تعديل هذا الدواء يدويًا بواسطة القلم ✏️"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveItem(item.id)}
-                        className="p-1.5 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 transition-colors cursor-pointer"
-                        title="حذف هذا الدواء"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {!readOnly && (
+                      <div className="flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity no-print shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(item)}
+                          className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:text-cyan-600 hover:bg-cyan-50 transition-colors cursor-pointer"
+                          title="تعديل هذا الدواء يدويًا بواسطة القلم ✏️"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveItem(item.id)}
+                          className="p-1.5 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 transition-colors cursor-pointer"
+                          title="حذف هذا الدواء"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
 
-          {/* Embedded In-Place Drug Search & Manual Writing Pad */}
-          {onAddItem && (
+          {/* Embedded In-Place Drug Search & Manual Writing Pad (Hidden in Read-Only Print Preview) */}
+          {!readOnly && onAddItem && (
             <InlineDrugPadInput
               onAddItem={onAddItem}
               primaryColor={primaryColor}
@@ -783,30 +787,21 @@ export function LivePrescriptionPreview({
             />
           )}
 
-          {/* Patient Instructions & Notes directly on Prescription */}
-          <div className="pt-2 text-xs">
-            {setNotes && (
-              <div className="no-print space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 block">
-                  تعليمات وإرشادات ختامية للمريض (تطبع بأسفل الروشتة):
-                </label>
-                <textarea
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع للاطمئنان..."
-                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 font-medium text-slate-800 text-xs focus:outline-none focus:border-emerald-500 shadow-inner"
-                />
-              </div>
-            )}
-
-            {notes && (
-              <div className="pt-2 text-[10.5px] text-slate-800 font-bold border-t border-slate-200">
-                <span className="font-black text-slate-900">تعليمات المريض: </span>
-                <span className="font-medium text-slate-700">{notes}</span>
-              </div>
-            )}
-          </div>
+          {/* Patient Instructions & Notes Input (Hidden in Read-Only Print Preview) */}
+          {!readOnly && setNotes && (
+            <div className="pt-2 text-xs no-print space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 block">
+                تعليمات وإرشادات ختامية للمريض (تطبع بأسفل الروشتة):
+              </label>
+              <textarea
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع للاطمئنان..."
+                className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 font-medium text-slate-800 text-xs focus:outline-none focus:border-emerald-500 shadow-inner"
+              />
+            </div>
+          )}
 
           {/* Comfortable natural breathing margin between medications and footer */}
           <div className="flex-1 min-h-[40px] sm:min-h-[60px]" aria-hidden="true" />

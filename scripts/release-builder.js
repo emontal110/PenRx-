@@ -84,7 +84,6 @@ console.log(`[*] Push to Git:  ${shouldPush ? "ENABLED" : "DISABLED (Local build
 if (!fs.existsSync(releasesDir)) {
   fs.mkdirSync(releasesDir, { recursive: true });
 } else {
-  // Automatically remove old subdirectories so releases/ only contains the latest files
   const items = fs.readdirSync(releasesDir, { withFileTypes: true });
   for (const item of items) {
     if (item.isDirectory()) {
@@ -195,8 +194,7 @@ if (fs.existsSync(mobileSource)) {
 } else if (fs.existsSync(fallbackSource)) {
   fs.copyFileSync(fallbackSource, outIndex);
 }
-// Copy supporting assets for portal
-const assetsToCopy = ["logo-penrx.jpg", "favicon.ico", "icon-512.png", "error.html"];
+const assetsToCopy = ["logo-penrx.jpg", "favicon.ico", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "error.html"];
 for (const a of assetsToCopy) {
   const srcPub = path.join(rootDir, "public", a);
   const dst = path.join(outDir, a);
@@ -282,7 +280,6 @@ printStep(
   "Package Windows Desktop Installer (electron-builder NSIS)",
   "Creating single-click / next-next PenRX+-Setup.exe installer"
 );
-// Clean temp caches (.next/cache and dist-electron) to accelerate compression
 const nextCache = path.join(rootDir, ".next", "cache");
 if (fs.existsSync(nextCache)) {
   try {
@@ -301,7 +298,6 @@ console.log("⚡ Compressing and packaging Windows Setup installer (optimized fa
 run("npx electron-builder --win --publish never");
 
 if (fs.existsSync(distElectron)) {
-  // Check for unpacked direct EXE
   const winUnpacked = path.join(distElectron, "win-unpacked");
   if (fs.existsSync(winUnpacked)) {
     const mainExe = path.join(winUnpacked, "PenRX+.exe");
@@ -311,7 +307,6 @@ if (fs.existsSync(distElectron)) {
     }
   }
 
-  // Check for NSIS Installer EXE
   const files = fs.readdirSync(distElectron);
   const exeInstaller = files.find((f) => f.endsWith(".exe") && !f.includes("win-unpacked"));
   if (exeInstaller) {
@@ -321,15 +316,12 @@ if (fs.existsSync(distElectron)) {
     console.log(`   - releases/PenRX+-Setup.exe`);
   }
 
-  // Copy differential update metadata files (.blockmap, latest.yml) for Classico-style instant delta updates
   for (const f of files) {
     if (f.endsWith(".blockmap")) {
-      fs.copyFileSync(path.join(distElectron, f), path.join(releasesDir, f));
       fs.copyFileSync(path.join(distElectron, f), path.join(releasesDir, "PenRX+-Setup.exe.blockmap"));
-      console.log(`✓ Updated differential blockmap: releases/${f} & releases/PenRX+-Setup.exe.blockmap`);
+      console.log(`✓ Updated differential blockmap: releases/PenRX+-Setup.exe.blockmap`);
     } else if (f === "latest.yml") {
       let ymlContent = fs.readFileSync(path.join(distElectron, f), "utf8");
-      // Ensure latest.yml points accurately to PenRX+-Setup.exe so electron-updater can resolve differential blockmaps
       ymlContent = ymlContent.replace(/url:\s+[^\r\n]+/g, "url: PenRX+-Setup.exe");
       ymlContent = ymlContent.replace(/path:\s+[^\r\n]+/g, "path: PenRX+-Setup.exe");
       fs.writeFileSync(path.join(releasesDir, "latest.yml"), ymlContent, "utf8");
@@ -346,41 +338,60 @@ printStep(
   6,
   "Git Commit & Release Finalization",
   shouldPush
-    ? "Staging, committing, and pushing to GitHub (main branch only)"
+    ? "Staging, committing, and pushing to GitHub (main branch & unified release assets)"
     : "Staging and committing locally (GitHub Push skipped by user request)"
 );
 
-// 1. Stage all changes
 run("git add -A");
 
-// 2. Commit
 try {
   run(`git commit -m "Release v${activeVersion}: ${releaseNotes}"`);
 } catch (e) {
   console.log("ℹ No new changes to commit.");
 }
 
-// 3. Tag
 try {
-  run(`git tag -a v${activeVersion} -m "Release v${activeVersion}"`);
+  run(`git tag -f -a v${activeVersion} -m "Release v${activeVersion}"`);
 } catch (e) {
   console.log(`ℹ Tag v${activeVersion} already exists or was created.`);
 }
 
 if (shouldPush) {
-  // Push to main branch
   console.log("\n🚀 Pushing to GitHub main branch...");
   run("git push origin main");
 
-  // Push specific release tag to trigger cloud release workflow
   console.log(`🏷 Pushing release tag v${activeVersion}...`);
-  run(`git push origin v${activeVersion}`);
+  run(`git push -f origin v${activeVersion}`);
 
-  // Also push all other tags if any, safely
+  // Upload the exact locally-built PenRX+-Setup.exe, PenRX+-Setup.exe.blockmap, latest.yml, and PenRX+.apk
+  // via GitHub CLI (gh) if available so local and GitHub release blockmaps are 100% identical!
   try {
-    run("git push origin --tags");
-  } catch (e) {
-    // Non-fatal if an older historical tag already exists on remote
+    execSync("gh auth status", { cwd: rootDir, stdio: "ignore" });
+    console.log(`📦 Uploading unified local release binaries to GitHub Release v${activeVersion}...`);
+    const uploadFiles = [
+      path.join(releasesDir, "PenRX+-Setup.exe"),
+      path.join(releasesDir, "PenRX+-Setup.exe.blockmap"),
+      path.join(releasesDir, "latest.yml"),
+      path.join(releasesDir, "PenRX+.apk"),
+    ].filter((f) => fs.existsSync(f));
+
+    if (uploadFiles.length > 0) {
+      const quoted = uploadFiles.map((f) => `"${f}"`).join(" ");
+      try {
+        execSync(
+          `gh release create v${activeVersion} ${quoted} --title "PenRX+ Official Release v${activeVersion}" --notes "${releaseNotes}"`,
+          { cwd: rootDir, stdio: "inherit" }
+        );
+      } catch {
+        execSync(`gh release upload v${activeVersion} ${quoted} --clobber`, {
+          cwd: rootDir,
+          stdio: "inherit",
+        });
+      }
+      console.log("✓ Unified release assets uploaded directly to GitHub Release!");
+    }
+  } catch {
+    console.log("ℹ GitHub CLI (gh) not authenticated locally; GitHub Actions workflow will publish the release.");
   }
 } else {
   console.log("\n🔒 GitHub push skipped as requested. All release files are ready locally.");

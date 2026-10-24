@@ -35,7 +35,7 @@ android/.idea/
 *.apk
 *.aab
 *.keystore
-android/app/penrx-release.keystore
+!android/app/penrx-release.keystore
 *.jks
 github-recovery-codes*.txt
 

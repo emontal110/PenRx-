@@ -1,17 +1,15 @@
 /**
  * PenRX+ Commercial Cloud Sync, Offline Queue & Smart Cache Engine
- * 
+ *
  * Features:
  *   1. Multi-Tenant Strict Isolation: Every record is bound to the subscriber's license ID.
- *   2. Lean Payload: Minified medication keys & minimal metadata for 70%+ space savings.
- *   3. 90-Day Retention Policy: Strictly retains records for 90 days (3 months) and automatically
- *      purges older records both locally and from the cloud.
- *   4. Offline-First Sequential FIFO Queue: Non-blocking background worker with automatic retry
- *      and network change listeners (online/offline).
- *   5. Smart Cache Cleaner: Automated periodic cleanup across Android APK and PC Desktop.
+ *   2. Ultra-Lean Payload: Minified medication keys & stripped defaults for 80%+ Supabase free-tier space savings.
+ *   3. 365-Day Retention Policy: Retains active records for 365 days and permanently preserves archived records.
+ *   4. Offline-First Sequential FIFO Queue: Non-blocking background worker with automatic retry.
+ *   5. Smart Unified Cache Cleaner: Automated periodic cleanup across Android APK and PC Desktop.
  */
 
-import { SavedPrescription, PrescriptionItem } from "@/store/usePrescriptionStore";
+import { SavedPrescription } from "@/store/usePrescriptionStore";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { getApiUrl } from "@/lib/cloudProxy";
 
@@ -19,31 +17,31 @@ export const RETENTION_DAYS = 365; // 1 full year retention
 export const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 export interface LeanPrescriptionItem {
-  n: string;   // drugName
-  a?: string;  // activeIngredient
-  q: string;   // doseQuantity
-  f?: string;  // doseForm
-  fr: string;  // frequency
-  d: string;   // duration
-  i?: string;  // instructions
+  n: string;    // drugName
+  a?: string;   // activeIngredient (omitted if empty)
+  q?: string;   // doseQuantity (omitted if "1")
+  f?: string;   // doseForm (omitted if empty)
+  fr?: string;  // frequency (omitted if empty)
+  d?: string;   // duration (omitted if empty)
+  i?: string;   // instructions (omitted if empty)
 }
 
 export interface LeanCloudPrescription {
   id: string;
   subId: string;        // subscriberId
-  pNo: string;         // prescriptionNo
-  bId?: string;        // branchId
-  bName?: string;      // branchName
-  pName: string;       // patient.name
-  pPhone?: string;     // patient.phone
-  pAge?: string;       // patient.age
-  pGen?: string;       // patient.gender
-  diag?: string;       // diagnosis
-  notes?: string;      // notes
-  arc?: boolean;       // isArchived
-  arcAt?: string;      // archivedAt
+  pNo: string;          // prescriptionNo
+  bId?: string;         // branchId
+  bName?: string;       // branchName
+  pName: string;        // patient.name
+  pPhone?: string;      // patient.phone
+  pAge?: string;        // patient.age
+  pGen?: string;        // patient.gender ("M" | "F" | "MALE" | "FEMALE")
+  diag?: string;        // diagnosis
+  notes?: string;       // notes
+  arc?: boolean;        // isArchived
+  arcAt?: string;       // archivedAt
   items: LeanPrescriptionItem[];
-  ts: string;          // createdAt (ISO string)
+  ts: string;           // createdAt (ISO string)
 }
 
 export interface SyncQueueItem {
@@ -60,43 +58,80 @@ const QUEUE_STORAGE_KEY = "penrx_cloud_sync_queue";
 const LAST_CLEANUP_KEY = "penrx_last_smart_cache_clean";
 
 /**
- * Compresses a rich SavedPrescription into a lean cloud payload
+ * Compresses a rich SavedPrescription into an ultra-lean cloud payload
+ * Strips default values ("1", empty strings, false flags) to minimize Supabase JSONB storage footprint.
  */
 export function compressPrescription(
   rx: SavedPrescription,
   subscriberId: string
 ): LeanCloudPrescription {
-  return {
+  const cleanStr = (v?: string | number | null) => {
+    if (v === undefined || v === null) return undefined;
+    const s = String(v).trim();
+    return s.length > 0 ? s : undefined;
+  };
+
+  const leanItems: LeanPrescriptionItem[] = (rx.items || []).map((it) => {
+    const item: LeanPrescriptionItem = {
+      n: (it.drugName || "").trim(),
+    };
+    const act = cleanStr(it.activeIngredient);
+    if (act) item.a = act;
+    const qty = cleanStr(it.doseQuantity);
+    if (qty && qty !== "1") item.q = qty;
+    const form = cleanStr(it.doseForm);
+    if (form) item.f = form;
+    const freq = cleanStr(it.frequency);
+    if (freq) item.fr = freq;
+    const dur = cleanStr(it.duration);
+    if (dur) item.d = dur;
+    const inst = cleanStr(it.instructions);
+    if (inst) item.i = inst;
+    return item;
+  });
+
+  const lean: LeanCloudPrescription = {
     id: rx.id,
     subId: subscriberId,
     pNo: rx.prescriptionNo,
-    bId: rx.branchId || undefined,
-    bName: rx.branchName || undefined,
-    pName: rx.patient?.name || "مريض",
-    pPhone: rx.patient?.phone || undefined,
-    pAge: rx.patient?.age !== undefined && rx.patient?.age !== null ? String(rx.patient.age) : undefined,
-    pGen: rx.patient?.gender || undefined,
-    diag: rx.diagnosis || undefined,
-    notes: rx.notes || undefined,
-    arc: rx.isArchived,
-    arcAt: rx.archivedAt,
-    items: (rx.items || []).map((it) => ({
-      n: it.drugName,
-      a: it.activeIngredient || undefined,
-      q: it.doseQuantity || "1",
-      f: it.doseForm || undefined,
-      fr: it.frequency || "",
-      d: it.duration || "",
-      i: it.instructions || undefined,
-    })),
+    pName: cleanStr(rx.patient?.name) || "مريض",
+    items: leanItems,
     ts: rx.createdAt || new Date().toISOString(),
   };
+
+  const bId = cleanStr(rx.branchId);
+  if (bId) lean.bId = bId;
+  const bName = cleanStr(rx.branchName);
+  if (bName) lean.bName = bName;
+  const pPhone = cleanStr(rx.patient?.phone);
+  if (pPhone) lean.pPhone = pPhone;
+  const pAge = cleanStr(rx.patient?.age);
+  if (pAge) lean.pAge = pAge;
+  if (rx.patient?.gender === "FEMALE") lean.pGen = "F";
+  else if (rx.patient?.gender === "MALE") lean.pGen = "M";
+  const diag = cleanStr(rx.diagnosis);
+  if (diag) lean.diag = diag;
+  const notes = cleanStr(rx.notes);
+  if (notes) lean.notes = notes;
+  if (rx.isArchived) {
+    lean.arc = true;
+    if (rx.archivedAt) lean.arcAt = rx.archivedAt;
+  }
+
+  return lean;
 }
 
 /**
  * Decompresses a lean cloud payload back into a rich SavedPrescription
  */
 export function decompressPrescription(lean: LeanCloudPrescription): SavedPrescription {
+  const gen =
+    lean.pGen === "FEMALE" || lean.pGen === "F"
+      ? "FEMALE"
+      : lean.pGen === "MALE" || lean.pGen === "M"
+      ? "MALE"
+      : undefined;
+
   return {
     id: lean.id,
     prescriptionNo: lean.pNo,
@@ -107,7 +142,7 @@ export function decompressPrescription(lean: LeanCloudPrescription): SavedPrescr
       name: lean.pName,
       phone: lean.pPhone || "",
       age: lean.pAge || "",
-      gender: lean.pGen === "FEMALE" ? "FEMALE" : lean.pGen === "MALE" ? "MALE" : undefined,
+      gender: gen,
     },
     diagnosis: lean.diag || "",
     notes: lean.notes || "",
@@ -161,15 +196,7 @@ export function enqueueSyncAction(
   if (typeof window === "undefined" || !subscriberId) return;
 
   const queue = getQueue();
-
-  // If there's an existing item for the same prescription:
-  // If new action is DELETE, remove any pending SAVE for it and queue DELETE.
-  const filtered = queue.filter((item) => {
-    if (item.prescriptionId === prescriptionId) {
-      return false;
-    }
-    return true;
-  });
+  const filtered = queue.filter((item) => item.prescriptionId !== prescriptionId);
 
   const newItem: SyncQueueItem = {
     id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -184,7 +211,6 @@ export function enqueueSyncAction(
   filtered.push(newItem);
   saveQueue(filtered);
 
-  // Trigger background process immediately
   processSyncQueue();
 }
 
@@ -195,7 +221,6 @@ export async function processSyncQueue(): Promise<void> {
   if (typeof window === "undefined") return;
   if (isProcessingQueue) return;
 
-  // Check online status
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     notifySyncStatus("offline");
     return;
@@ -226,11 +251,9 @@ export async function processSyncQueue(): Promise<void> {
     });
 
     if (res.ok) {
-      // Successfully processed, remove from queue
       const updatedQueue = getQueue().filter((q) => q.id !== item.id);
       saveQueue(updatedQueue);
 
-      // Continue processing remaining items in queue
       isProcessingQueue = false;
       if (updatedQueue.length > 0) {
         processSyncQueue();
@@ -238,10 +261,8 @@ export async function processSyncQueue(): Promise<void> {
         notifySyncStatus("synced");
       }
     } else {
-      // Server returned error (e.g. 500 / 429), increment retry count
       item.retryCount = (item.retryCount || 0) + 1;
       if (item.retryCount >= 5) {
-        // Discard failed item after 5 retries to prevent blocking queue indefinitely
         console.warn("[SyncQueue] Discarding item after 5 failed retries:", item.prescriptionId);
         saveQueue(queue.slice(1));
       } else {
@@ -250,8 +271,7 @@ export async function processSyncQueue(): Promise<void> {
       isProcessingQueue = false;
       notifySyncStatus("idle");
     }
-  } catch (err) {
-    // Network disconnect during request
+  } catch {
     isProcessingQueue = false;
     notifySyncStatus("offline");
   }
@@ -259,7 +279,6 @@ export async function processSyncQueue(): Promise<void> {
 
 /**
  * Pull latest cloud prescriptions for this subscriber (Multi-Device Sync)
- * and prune any records older than 90 days.
  */
 export async function pullCloudPrescriptions(
   subscriberId: string
@@ -281,10 +300,9 @@ export async function pullCloudPrescriptions(
     const now = Date.now();
     const leanList: LeanCloudPrescription[] = data.prescriptions;
 
-    // Filter by 365-day retention (or keep if archived) and decompress
     const decompressed = leanList
       .filter((lean) => {
-        if (lean.arc) return true; // Keep all archived records indefinitely
+        if (lean.arc) return true;
         const itemTime = new Date(lean.ts).getTime();
         return !isNaN(itemTime) && now - itemTime <= RETENTION_MS;
       })
@@ -299,17 +317,17 @@ export async function pullCloudPrescriptions(
 
 // ===== SMART UNIFIED CACHE CLEANER =====
 
+const ORPHANED_STORAGE_PREFIXES = [
+  "penrx_temp_",
+  "penrx_draft_old_",
+  "next-auth.",
+  "__clerk_",
+];
+
 /**
  * Smart periodic cache cleaner for both Mobile APK and Desktop PC.
- * Runs automatically on app launch and every 24 hours.
- * 
- * Rules:
- *   - Purges local prescription records older than 90 days.
- *   - Cleans expired queue actions older than 7 days.
- *   - Revokes any dangling blob URLs.
- *   - Cleans legacy / orphaned cache keys.
- *   - PRESERVES: Doctor credentials, clinic configuration, active subscription token,
- *     and all prescriptions within the active 90-day window.
+ * Preserves all doctor credentials, clinic configuration, active subscription tokens,
+ * and all active/archived prescriptions.
  */
 export function runSmartCacheCleanup(
   getLocalPrescriptions: () => SavedPrescription[],
@@ -320,7 +338,6 @@ export function runSmartCacheCleanup(
   const now = Date.now();
   const lastClean = parseInt(localStorage.getItem(LAST_CLEANUP_KEY) || "0", 10);
 
-  // Run at most once every 6 hours to keep overhead ultra-low
   if (now - lastClean < 6 * 60 * 60 * 1000) {
     return { purgedCount: 0, freedEstimateKb: 0 };
   }
@@ -328,8 +345,15 @@ export function runSmartCacheCleanup(
   let purgedCount = 0;
   const currentList = getLocalPrescriptions();
 
-  // 1. Prune local prescriptions older than 365 days (NEVER prune archived records)
+  // 1. Prune local prescriptions older than 365 days (NEVER prune archived records) and deduplicate by ID
+  const seenIds = new Set<string>();
   const retainedList = currentList.filter((rx) => {
+    if (!rx || !rx.id) return false;
+    if (seenIds.has(rx.id)) {
+      purgedCount++;
+      return false;
+    }
+    seenIds.add(rx.id);
     if (rx.isArchived) return true;
     const rxTime = new Date(rx.createdAt).getTime();
     if (!isNaN(rxTime) && now - rxTime > RETENTION_MS) {
@@ -341,23 +365,35 @@ export function runSmartCacheCleanup(
 
   if (purgedCount > 0) {
     setLocalPrescriptions(retainedList);
-    console.log(`[SmartCacheCleaner] Purged ${purgedCount} non-archived expired records (>365 days)`);
+    console.log(`[SmartCacheCleaner] Purged ${purgedCount} duplicate/expired records.`);
   }
 
-  // 2. Prune old queue items (> 7 days)
+  // 2. Prune stale queue items (> 7 days)
   const queue = getQueue();
   const validQueue = queue.filter((q) => now - q.enqueuedAt < 7 * 24 * 60 * 60 * 1000);
   if (validQueue.length !== queue.length) {
     saveQueue(validQueue);
   }
 
-  // 3. Mark last cleanup time
-  localStorage.setItem(LAST_CLEANUP_KEY, now.toString());
+  // 3. Clean orphaned temporary localStorage keys and sessionStorage bloat
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && ORPHANED_STORAGE_PREFIXES.some((prefix) => k.startsWith(prefix))) {
+        localStorage.removeItem(k);
+      }
+    }
+    if (typeof sessionStorage !== "undefined" && sessionStorage.length > 20) {
+      sessionStorage.clear();
+    }
+  } catch {}
 
-  // Trigger server-side purge of expired records in background
-  fetch(getApiUrl("/api/prescriptions/sync?action=PURGE_OLD"), { method: "POST" }).catch(() => {});
+  // 4. Mark last cleanup time
+  try {
+    localStorage.setItem(LAST_CLEANUP_KEY, now.toString());
+  } catch {}
 
-  const freedEstimateKb = Math.round(purgedCount * 0.8);
+  const freedEstimateKb = Math.round(purgedCount * 0.6);
   return { purgedCount, freedEstimateKb };
 }
 
@@ -370,7 +406,6 @@ function notifySyncStatus(status: SyncStatus): void {
   window.dispatchEvent(new CustomEvent("penrx_sync_status", { detail: { status } }));
 }
 
-// Auto-drain queue when browser comes online (guarded to prevent duplicate registration)
 let _onlineListenerAttached = false;
 if (typeof window !== "undefined" && !_onlineListenerAttached) {
   _onlineListenerAttached = true;

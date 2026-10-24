@@ -8,6 +8,7 @@ import {
   detectClockTampering,
 } from "@/lib/deviceSecurity";
 import { getApiUrl } from "@/lib/cloudProxy";
+import { useClinicStore } from "@/store/useClinicStore";
 
 export interface SubscriptionRecord {
   id: string;
@@ -76,6 +77,71 @@ const SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
 
+let _hasTriggeredCloudDataRecovery = false;
+
+/**
+ * Automatically recovers the doctor's Clinic Profile, Patients, and Prescriptions
+ * whenever an existing SubscriptionRecord is verified on a fresh install / reinstall!
+ * Prevents forcing the doctor to re-enter their clinic credentials after reinstalling the app.
+ */
+function autoRestoreClinicAndPatientData(sub: SubscriptionRecord) {
+  if (typeof window === "undefined" || !sub) return;
+
+  try {
+    const clinicState = useClinicStore.getState();
+    const currentClinic = clinicState.clinic;
+    const isProfileCurrentlyComplete = Boolean(
+      currentClinic.isProfileSaved &&
+        currentClinic.doctorName?.trim() &&
+        (currentClinic.name?.trim() || currentClinic.nameAr?.trim()) &&
+        currentClinic.phone?.trim()
+    );
+
+    if (!isProfileCurrentlyComplete && (sub.doctorName?.trim() || sub.clinicName?.trim())) {
+      const rawClinicStr = (sub.clinicName || "").trim();
+      let parsedClinicName = rawClinicStr;
+      let parsedPhone = (sub.senderPhone || "").trim();
+
+      if (rawClinicStr.includes("• 📞")) {
+        const parts = rawClinicStr.split("• 📞");
+        parsedClinicName = (parts[0] || "").trim();
+        if (parts[1] && parts[1].trim()) {
+          parsedPhone = parts[1].trim();
+        }
+      }
+
+      const finalDoctorName = (sub.doctorName || currentClinic.doctorName || "الطبيب المعالج").trim();
+      const finalClinicName = (parsedClinicName || currentClinic.nameAr || currentClinic.name || `عيادة ${finalDoctorName}`).trim();
+      const finalPhone = (parsedPhone || currentClinic.phone || "01000000000").trim();
+
+      clinicState.saveClinicAndCreateFirstBranch({
+        nameAr: finalClinicName,
+        name: currentClinic.name || finalClinicName,
+        doctorName: finalDoctorName,
+        phone: finalPhone,
+        isProfileSaved: true,
+      });
+    }
+
+    // Trigger one-time automatic cloud prescription & patient recovery if local records are empty
+    if (!_hasTriggeredCloudDataRecovery && (sub.status === "ACTIVE" || sub.isTrial)) {
+      _hasTriggeredCloudDataRecovery = true;
+      setTimeout(async () => {
+        try {
+          const { usePrescriptionStore } = await import("@/store/usePrescriptionStore");
+          await usePrescriptionStore.getState().syncWithCloud();
+
+          // If full clinic settings or additional archived records exist in CloudBackup, merge them silently
+          const { restoreFromCloudBackup } = await import("@/lib/backupService");
+          await restoreFromCloudBackup("MERGE").catch(() => {});
+        } catch {}
+      }, 300);
+    }
+  } catch (err) {
+    console.warn("[SubscriptionStore] Auto clinic/patient restore notice:", err);
+  }
+}
+
 export function hasUsedFreeTrial(subscriptions: SubscriptionRecord[], currentMachineId: string): boolean {
   if (typeof window !== "undefined") {
     if (localStorage.getItem("penrx_trial_claimed") === "true") return true;
@@ -118,7 +184,6 @@ export function getSubscriptionDetails(
   const normEffectiveSub = (effectiveSubId || "").trim().toUpperCase();
   const normPendingId = (effectivePendingId || "").trim();
 
-  // Find subscriptions matching any known machine ID of this device OR allowed devices OR subscriber ID OR pending order ID
   let matchingSubs = (subscriptions || []).filter((s) => {
     if (!s) return false;
     const sMachine = (s.machineId || "").trim().toUpperCase();
@@ -132,8 +197,6 @@ export function getSubscriptionDetails(
     return matchMachine || matchSub || matchId;
   });
 
-  // Fallback: If no match by exact machine ID (e.g. mobile SSAID updated after subscription creation),
-  // honor ACTIVE or PENDING records stored in this installation so the doctor is never locked out.
   if (matchingSubs.length === 0 && subscriptions && subscriptions.length > 0) {
     const activeCandidate = subscriptions.find(
       (s) =>
@@ -148,7 +211,6 @@ export function getSubscriptionDetails(
     }
   }
 
-  // Strictly prioritize non-expired ACTIVE subscriptions over PENDING
   const now = Date.now();
   const activeSub =
     matchingSubs.find(
@@ -187,15 +249,11 @@ export function getSubscriptionDetails(
   const isSuspended = sub.status === "SUSPENDED";
   const isPending = sub.status === "PENDING";
 
-  // Check 3-day offline limit:
-  // If subscription is ACTIVE, but device has not verified online for > 3 days (72 hours),
-  // lock the app and demand an internet connection.
   const isOfflineGraceExpired =
     sub.status === "ACTIVE" &&
     effectiveLastOnline > 0 &&
     now - effectiveLastOnline > MAX_OFFLINE_GRACE_MS;
 
-  // Anti-Clock Tampering Check (Detect backwards device clock rollback):
   const clockCheck = detectClockTampering();
   const isClockTampered = clockCheck.tampered;
 
@@ -218,7 +276,6 @@ export function getSubscriptionDetails(
     };
   }
 
-  // Active only if: status is ACTIVE, not expired by date, and not exceeded 3-day offline grace!
   const isActive = sub.status === "ACTIVE" && !isExpired && !isOfflineGraceExpired;
 
   let statusLabel = "مفعل وجاهز للعمل ✅";
@@ -260,7 +317,6 @@ function generateLocalSubscriberId(): string {
   return `SUB-${rand}`;
 }
 
-// ── Shared Sync Throttle: Prevents race conditions from multiple components
 let _lastSyncTime = 0;
 let _syncInFlight: Promise<void> | null = null;
 const SYNC_THROTTLE_MS = 4000;
@@ -274,10 +330,6 @@ function safeTimeoutSignal(ms: number): AbortSignal | undefined {
   return undefined;
 }
 
-/**
- * Helper: Pick the most authoritative subscription candidate across multiple responses.
- * Strictly prioritizes non-expired ACTIVE over any ACTIVE over PENDING over others.
- */
 function pickBestCandidate(candidates: (SubscriptionRecord | null | undefined)[]): SubscriptionRecord | null {
   const valid = candidates.filter((c): c is SubscriptionRecord => Boolean(c && c.id && c.status));
   if (valid.length === 0) return null;
@@ -313,7 +365,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       setSubscriberId: (id: string) => set({ subscriberId: id }),
       setSignatureToken: (token: string | null) => set({ signatureToken: token }),
 
-      // Initialize real hardware machine ID from Electron or Capacitor (called on app mount)
       initHardwareId: async () => {
         await initializeHardwareMachineId((newId) => {
           const allKnownMids = getKnownDeviceMachineIds(newId);
@@ -345,8 +396,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             };
           });
 
-          // If a subscription already exists in Supabase and the hardware ID just resolved to a new ID (e.g. PRX-ANDR-...),
-          // append the new hardware ID to allowedMachineIds in Supabase so both IDs are permanently linked in the cloud!
           const activeOrPendingSub =
             get().currentSubscription ||
             (get().subscriptions || []).find((s) => s.status === "ACTIVE" || s.status === "PENDING");
@@ -369,7 +418,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             }).catch(() => {});
           }
 
-          // Trigger immediate server sync once true hardware ID is resolved
           if (prevMid !== newId) {
             setTimeout(() => {
               get().syncWithServer(true);
@@ -379,7 +427,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       },
 
       submitSubscriptionRequest: async (req) => {
-        // Resolve true hardware ID first (with 800ms safety timeout) so APK/EXE submits with final hardware ID
         try {
           await Promise.race([
             get().initHardwareId(),
@@ -414,7 +461,11 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           updatedAt: nowIso,
         };
 
-        // Update local state immediately
+        // Pre-populate clinic profile immediately when doctor submits subscription form so they never have to type it twice!
+        if (req.doctorName?.trim() && req.clinicName?.trim() && req.senderPhone?.trim()) {
+          autoRestoreClinicAndPatientData(newRecord);
+        }
+
         set((state) => ({
           subscriberId,
           subscriptions: [newRecord, ...state.subscriptions.filter((s) => s.id !== newRecord.id && s.status !== "PENDING")],
@@ -430,7 +481,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           } catch {}
         }
 
-        // 1. Direct Supabase Cloud REST persist (Instant Portal Delivery via Supabase Realtime)
         try {
           const directSupaRes = await fetch(`${SUPABASE_REST_URL}?on_conflict=id`, {
             method: "POST",
@@ -449,7 +499,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           console.warn("[SubscriptionStore] Direct Supabase Cloud notice:", supaErr);
         }
 
-        // 2. Dual-Write to Server API (Local Next.js Server + Cloud Deployment Fallback)
         try {
           let res: Response | null = null;
           try {
@@ -458,9 +507,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(newRecord),
             });
-          } catch {
-            // Local server unreachable in some desktop runs — proceed to cloud fallback
-          }
+          } catch {}
 
           if (!res || !res.ok) {
             try {
@@ -478,8 +525,8 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               recordServerTime(data.serverTime);
             }
             if (data && data.subscription) {
+              autoRestoreClinicAndPatientData(data.subscription);
               set((state) => {
-                // Never overwrite if the subscription was already activated in the meantime!
                 if (state.currentSubscription?.status === "ACTIVE") {
                   return state;
                 }
@@ -533,7 +580,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             currentSubscription: null,
           }));
 
-          // Direct delete from Supabase REST so Portal reflects cancellation immediately
           try {
             await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(pending.id)}`, {
               method: "DELETE",
@@ -620,6 +666,9 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                 ...state.subscriptions.filter((s) => s.id !== data.subscription.id),
               ],
             }));
+            // Automatically restore doctor's clinic profile & cloud prescriptions/patients upon linking!
+            _hasTriggeredCloudDataRecovery = false;
+            autoRestoreClinicAndPatientData(data.subscription);
             return { success: true };
           }
           return { success: false, error: data.error || "فشل ربط الجهاز بهذا الاشتراك" };
@@ -805,7 +854,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           let supaResponded = false;
           let supaReportedNoSub = false;
 
-          // Build common query parameters for API endpoints
           const buildApiQuery = () => {
             const params = new URLSearchParams();
             params.set("machineId", machineId);
@@ -818,9 +866,8 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
 
           const apiQueryStr = buildApiQuery();
 
-          // Run all 3 verification channels in PARALLEL for instant (<300ms) activation detection
           await Promise.allSettled([
-            // ── CHANNEL 1: Direct Supabase Cloud REST Verification (Authoritative & Instant) ──
+            // ── CHANNEL 1: Direct Supabase Cloud REST Verification ──
             (async () => {
               try {
                 const orParts: string[] = [];
@@ -843,8 +890,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                   orParts.push(`id.eq.${encodeURIComponent(currentLocalSub.id)}`);
                 }
 
-                // IMPORTANT: Never append `&_t=...` to PostgREST URLs! PostgREST treats unknown query
-                // params as column filters (`WHERE "_t" = ...`) and fails with HTTP 400 Bad Request.
                 const supaUrl = `${SUPABASE_REST_URL}?or=(${orParts.join(",")})&order=updatedAt.desc&limit=10`;
                 const supaRes = await fetch(supaUrl, {
                   headers: {
@@ -873,7 +918,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                   }
                 }
 
-                // Fallback direct ID query if `or=(...)` returned nothing or was blocked, and we have a specific order ID
                 if (effectiveOrderId && !supaSubRecord) {
                   const directIdRes = await fetch(
                     `${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(effectiveOrderId)}&limit=1`,
@@ -976,11 +1020,9 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             })(),
           ]);
 
-          // Pick the best subscription across all 3 channels (ACTIVE strictly wins over PENDING!)
           const confirmedSub = pickBestCandidate([supaSubRecord, verifySubRecord, apiSubRecord]);
 
           if (confirmedSub) {
-            // Ensure all known device machine IDs are included locally in allowedMachineIds
             const mergedAllowed = Array.from(
               new Set([
                 ...(Array.isArray(confirmedSub.allowedMachineIds) ? confirmedSub.allowedMachineIds : []),
@@ -1016,7 +1058,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             }
 
             set((state) => {
-              // When fresh is ACTIVE, completely remove any stale PENDING records
               const otherSubs = (state.subscriptions || []).filter((s) => {
                 if (s.id === fresh.id) return false;
                 if (fresh.status === "ACTIVE" && s.status === "PENDING") {
@@ -1031,20 +1072,19 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                 subscriberId: fresh.subscriberId || state.subscriberId,
                 signatureToken: fresh.signatureToken || state.signatureToken,
                 lastSyncedAt: Date.now(),
-                lastOnlineCheck: Date.now(), // Resets 3-day offline countdown
+                lastOnlineCheck: Date.now(),
               };
             });
+
+            // Automatically restore Clinic Profile, Patients, and Prescriptions if app was reinstalled!
+            autoRestoreClinicAndPatientData(fresh);
             return;
           }
 
-          // PROTECTION FOR PENDING REQUESTS:
-          // If the user has a pending subscription waiting for admin approval, NEVER wipe it unless explicitly deleted!
           if (hasPendingSub && !(supaResponded && supaReportedNoSub && serverResponded && serverReportedNoSub)) {
             return;
           }
 
-          // AUTHORITATIVE ONLINE REVOCATION:
-          // When online, ONLY if BOTH Supabase AND Server explicitly confirm that no subscription exists for this doctor:
           if (supaResponded && supaReportedNoSub && serverResponded && serverReportedNoSub) {
             console.warn("[PenRX+ License] Online verification confirmed subscription was deleted from database.");
             set({

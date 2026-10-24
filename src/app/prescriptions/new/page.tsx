@@ -1179,7 +1179,7 @@ export default function NewPrescriptionPage() {
           <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-black text-slate-100">معاينة الروشتة الحية</h3>
+              <h3 className="text-sm font-black text-slate-100">معاينة طباعة الروشتة</h3>
               <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                 {Math.round(mobilePreviewScale * 100)}%
               </span>
@@ -1228,19 +1228,17 @@ export default function NewPrescriptionPage() {
                 patient={patient}
                 diagnosis={diagnosis}
                 notes={notes}
-                setNotes={setNotes}
                 items={items}
-                onAddItem={addItem}
                 onRemoveItem={removeItem}
                 onSaveAndPrint={handlePrintOnly}
                 onShareWhatsApp={handleShareWhatsApp}
                 onSaveOnly={handleSaveOnly}
-                onRequestNewPrescription={handleRequestNewPrescription}
                 aiAlerts={aiAlerts}
                 onOpenAiAlert={(alert) => {
                   setSelectedAiAlert(alert);
                   setIsAiModalOpen(true);
                 }}
+                readOnly={true}
               />
             </div>
           </div>
@@ -1269,8 +1267,11 @@ export default function NewPrescriptionPage() {
         notes={notes}
         items={items}
         onSaveBeforeShare={() => {
-          const branchObj = branches.find((b) => b.id === selectedBranchId);
-          savePrescription(branchObj?.nameAr);
+          if (!isPrescriptionSaved) {
+            const branchObj = branches.find((b) => b.id === selectedBranchId);
+            savePrescription(branchObj?.nameAr);
+            setIsPrescriptionSaved(true);
+          }
         }}
       />
 

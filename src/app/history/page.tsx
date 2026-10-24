@@ -34,7 +34,7 @@ import { usePrescriptionStore, SavedPrescription } from "@/store/usePrescription
 import { useClinicStore } from "@/store/useClinicStore";
 import { NewRxGuard } from "@/components/prescription/NewRxGuard";
 import { showGlobalToast } from "@/components/common/GlobalToast";
-import { normalizeWhatsAppNumber } from "@/components/prescription/WhatsAppShareModal";
+import { WhatsAppShareModal } from "@/components/prescription/WhatsAppShareModal";
 
 export default function HistoryPage() {
   const router = useRouter();
@@ -51,6 +51,7 @@ export default function HistoryPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [rxToDelete, setRxToDelete] = useState<SavedPrescription | null>(null);
+  const [rxToShareWhatsApp, setRxToShareWhatsApp] = useState<SavedPrescription | null>(null);
   const [syncStatus, setSyncStatus] = useState<"synced" | "syncing" | "offline" | "idle">("idle");
   const [isManualSyncing, setIsManualSyncing] = useState(false);
 
@@ -116,18 +117,7 @@ export default function HistoryPage() {
   });
 
   const handleShareWhatsApp = (rx: SavedPrescription) => {
-    const cleanPhone = normalizeWhatsAppNumber(rx.patient.phone || "");
-    if (!cleanPhone) {
-      showGlobalToast("⚠️ لا يوجد رقم هاتف مسجل للمريض لإرسال الواتساب", "error");
-      return;
-    }
-    const itemsText = rx.items
-      .map((it, idx) => `${idx + 1}. *${it.drugName}* (${it.doseQuantity} ${it.doseForm}) - ${it.frequency}`)
-      .join("\n");
-
-    const message = `مرحباً أستاذ/ة *${rx.patient.name}*،\n\nإليك تفاصيل الروشتة الطبية السابقة من عيادة *${clinic.doctorName}*:\n\n*رقم الروشتة:* ${rx.prescriptionNo}\n*التاريخ:* ${new Date(rx.createdAt).toLocaleDateString("ar-EG")}\n\n*الأدوية المقررة:*\n${itemsText}\n\n${rx.notes ? `*ملاحظات:* ${rx.notes}\n\n` : ""}مع تمنياتنا لكم بالصحة والعافية دائماً 🌹`;
-
-    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, "_blank");
+    setRxToShareWhatsApp(rx);
   };
 
   const handleEditAndReissue = (rx: SavedPrescription) => {
@@ -517,6 +507,19 @@ export default function HistoryPage() {
             </div>
           </div>
         </div>
+      )}
+      {/* WhatsApp Image/PDF Share Modal */}
+      {rxToShareWhatsApp && (
+        <WhatsAppShareModal
+          isOpen={Boolean(rxToShareWhatsApp)}
+          onClose={() => setRxToShareWhatsApp(null)}
+          patient={rxToShareWhatsApp.patient}
+          clinic={clinic}
+          prescriptionNo={rxToShareWhatsApp.prescriptionNo}
+          diagnosis={rxToShareWhatsApp.diagnosis || ""}
+          notes={rxToShareWhatsApp.notes || ""}
+          items={rxToShareWhatsApp.items}
+        />
       )}
     </div>
   );

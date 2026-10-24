@@ -14,14 +14,25 @@ export const metadata: Metadata = {
   title: "PenRX+ | منظومة إدارة الروشتات والعيادات الطبية الذكية",
   description: "البرنامج الأحدث والأسرع في مصر لكتابة الروشتات الطبية، إدارة المرضى، وبنك الأدوية الشامل بالذكاء الاصطناعي.",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "PenRX+",
+    statusBarStyle: "black-translucent",
+  },
   icons: {
-    icon: "/favicon.ico",
-    apple: "/icon-192.png",
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b1329",
+  themeColor: "#1C252A",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -36,7 +47,8 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className="dark">
       <head>
-        <link rel="preload" as="image" href="/logo-penrx.jpg" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="preload" as="image" href="/icon-192.png" />
       </head>
       <body suppressHydrationWarning className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
         <AppHydrationSplash>

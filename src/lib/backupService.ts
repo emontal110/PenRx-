@@ -1,25 +1,20 @@
 /**
  * PenRX+ Medical Data Backup Engine
- * 
+ *
  * Features:
  *   1. Hardware-Accelerated GZIP Stream Compression (saves 80%+ file size).
  *   2. Cryptographically Strong AES-256-GCM Encryption with PBKDF2 (100,000 rounds).
- *   3. Zero user friction: Transparent automated encryption without manual password clutter.
- *   4. Cloud Backup (Multi-Tenant Partitioned by subscriberId with zero collisions).
- *   5. Silent Daily Auto-Backup & Silent Annual Archiving.
- *   6. Dual-source Restore: From Local File or from Cloud.
+ *   3. Multi-Device & Reinstall Compatible Key Derivation (tries Subscriber ID key + Machine ID key).
+ *   4. Cloud Backup (Multi-Tenant Partitioned by subscriberId with zero collisions & automatic deduplication).
+ *   5. Silent Daily Auto-Backup & Automatic Post-Reinstall Restoration of Clinic Profile + Patients.
  */
 
 import { usePrescriptionStore, SavedPrescription, PatientInfo } from "@/store/usePrescriptionStore";
-import { useClinicStore, ClinicSettings } from "@/store/useClinicStore";
+import { useClinicStore, ClinicSettings, Branch } from "@/store/useClinicStore";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { getApiUrl } from "@/lib/cloudProxy";
 
 const MAGIC_HEADER = "PRX_ENC_V2";
-// [SECURITY FIX CRIT-03]: No hardcoded fallback key in source code.
-// The encryption key is derived from the device's unique machine ID at runtime,
-// meaning each clinic installation has a unique encryption key.
-// Backups from one machine cannot be decrypted by another without the machine ID.
 const MACHINE_KEY_PREFIX = "PenRX_MK_2026_";
 
 export interface BackupMetadata {
@@ -36,37 +31,82 @@ export interface BackupMetadata {
 export interface BackupPayload {
   meta: BackupMetadata;
   clinic: ClinicSettings;
+  branches?: Branch[];
   prescriptions: SavedPrescription[];
   patients: PatientInfo[];
   customDrugs?: any[];
 }
 
 /**
+ * Returns the primary subscriber-scoped passphrase so cloud backups can be restored
+ * seamlessly across reinstalls or linked devices belonging to the same subscriber!
+ */
+function getSubscriberPassphrase(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const subId =
+      useSubscriptionStore.getState()?.subscriberId ||
+      localStorage.getItem("penrx_last_subscriber_id");
+    if (subId && subId.startsWith("SUB-") && subId !== "SUB-0000") {
+      return `${MACHINE_KEY_PREFIX}${subId.trim().toUpperCase()}`;
+    }
+  } catch {}
+  return null;
+}
+
+/**
  * Derives a per-machine passphrase for backup encryption.
- * Combines machine ID with a fixed prefix so each clinic has a unique key.
- * Falls back to a random localStorage-persisted key for web/PWA mode.
  */
 function getMachinePassphrase(): string {
   if (typeof window === "undefined") return `${MACHINE_KEY_PREFIX}SERVER`;
 
-  // Prefer the hardware machine ID (stable across restarts)
+  const subPass = getSubscriberPassphrase();
+  if (subPass) return subPass;
+
   const machineId = localStorage.getItem("penrx_unique_machine_id");
   if (machineId && machineId.startsWith("PRX-")) {
     return `${MACHINE_KEY_PREFIX}${machineId}`;
   }
 
-  // Fallback: generate and persist a random installation key
   const INSTALL_KEY = "penrx_install_enc_key";
   const existing = localStorage.getItem(INSTALL_KEY);
   if (existing && existing.length > 20) return existing;
 
-  // Generate a new random 32-char hex key for this installation
   const randomKey = Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
   const installKey = `${MACHINE_KEY_PREFIX}${randomKey}`;
   localStorage.setItem(INSTALL_KEY, installKey);
   return installKey;
+}
+
+/**
+ * Candidate passphrases for decryption (supports subscriber key, machine key, and universal fallback)
+ */
+function getCandidateDecryptionPassphrases(userPassphrase?: string): string[] {
+  const candidates = new Set<string>();
+  if (userPassphrase && userPassphrase.trim()) {
+    candidates.add(userPassphrase.trim());
+  }
+  const subPass = getSubscriberPassphrase();
+  if (subPass) candidates.add(subPass);
+
+  if (typeof window !== "undefined") {
+    const machineId =
+      useSubscriptionStore.getState()?.machineId ||
+      localStorage.getItem("penrx_unique_machine_id");
+    if (machineId && machineId.startsWith("PRX-")) {
+      candidates.add(`${MACHINE_KEY_PREFIX}${machineId.trim().toUpperCase()}`);
+    }
+    const initMid = localStorage.getItem("penrx_initial_machine_id");
+    if (initMid && initMid.startsWith("PRX-")) {
+      candidates.add(`${MACHINE_KEY_PREFIX}${initMid.trim().toUpperCase()}`);
+    }
+    const installKey = localStorage.getItem("penrx_install_enc_key");
+    if (installKey) candidates.add(installKey);
+  }
+  candidates.add(getMachinePassphrase());
+  return Array.from(candidates);
 }
 
 /**
@@ -171,7 +211,7 @@ export async function exportEncryptedBackup(userPassphrase?: string): Promise<{
 
   const nowIso = new Date().toISOString();
   const metadata: BackupMetadata = {
-    version: "1.3",
+    version: "1.4",
     exportedAt: nowIso,
     clinicName: clinicStore.clinic.name || clinicStore.clinic.nameAr || "العيادة الرئيسية",
     doctorName: clinicStore.clinic.doctorName || "الاستشاري",
@@ -184,19 +224,17 @@ export async function exportEncryptedBackup(userPassphrase?: string): Promise<{
   const payload: BackupPayload = {
     meta: metadata,
     clinic: clinicStore.clinic,
+    branches: clinicStore.branches,
     prescriptions: allRx,
     patients: allPatients,
   };
 
-  // 1. Serialize JSON
   const jsonStr = JSON.stringify(payload);
   const jsonBytes = new TextEncoder().encode(jsonStr);
   const originalSizeKb = Math.round(jsonBytes.length / 1024);
 
-  // 2. Compress via GZIP
   const compressedBytes = await compressData(jsonBytes);
 
-  // 3. Encrypt via AES-256-GCM using machine-specific key
   const passphrase = userPassphrase?.trim() || getMachinePassphrase();
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -209,8 +247,6 @@ export async function exportEncryptedBackup(userPassphrase?: string): Promise<{
   );
   const ciphertextBytes = new Uint8Array(ciphertextBuffer);
 
-  // 4. Pack into binary format:
-  // [10 bytes: MAGIC_HEADER] [16 bytes: SALT] [12 bytes: IV] [Remaining: Ciphertext]
   const headerBytes = new TextEncoder().encode(MAGIC_HEADER);
   const finalBuffer = new Uint8Array(headerBytes.length + salt.length + iv.length + ciphertextBytes.length);
 
@@ -243,9 +279,6 @@ export async function exportEncryptedBackup(userPassphrase?: string): Promise<{
   };
 }
 
-/**
- * Initiates browser download of backup blob
- */
 export function downloadBackupFile(blob: Blob, fileName: string) {
   if (typeof window === "undefined") return;
   const url = URL.createObjectURL(blob);
@@ -284,7 +317,6 @@ export async function restoreFromBackupBuffer(
     };
   }
 
-  // Check Magic Header
   const headerStr = new TextDecoder().decode(data.slice(0, headerLength));
   if (headerStr !== MAGIC_HEADER) {
     return {
@@ -300,17 +332,21 @@ export async function restoreFromBackupBuffer(
   const iv = data.slice(headerLength + 16, headerLength + 16 + 12);
   const ciphertext = data.slice(headerLength + 16 + 12);
 
-  // Derive key and decrypt using machine-specific key
-  let decryptedBytes: ArrayBuffer;
-  try {
-    const passphrase = userPassphrase?.trim() || getMachinePassphrase();
-    const key = await deriveKey(passphrase, salt);
-    decryptedBytes = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      key,
-      ciphertext as any
-    );
-  } catch {
+  let decryptedBytes: ArrayBuffer | null = null;
+  const passphrases = getCandidateDecryptionPassphrases(userPassphrase);
+  for (const pass of passphrases) {
+    try {
+      const key = await deriveKey(pass, salt);
+      decryptedBytes = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        key,
+        ciphertext as any
+      );
+      if (decryptedBytes) break;
+    } catch {}
+  }
+
+  if (!decryptedBytes) {
     return {
       success: false,
       message: "فشل فك التشفير. تأكد من صحة الملف وسلامته.",
@@ -320,7 +356,6 @@ export async function restoreFromBackupBuffer(
     };
   }
 
-  // Decompress GZIP
   const decompressedBytes = await decompressData(new Uint8Array(decryptedBytes));
   const jsonStr = new TextDecoder().decode(decompressedBytes);
   const payload: BackupPayload = JSON.parse(jsonStr);
@@ -336,21 +371,27 @@ export async function restoreFromBackupBuffer(
   }
 
   const prescriptionStore = usePrescriptionStore.getState();
+  const clinicStore = useClinicStore.getState();
   let finalRx: SavedPrescription[];
   let finalPatients: PatientInfo[];
   let newRxCount = 0;
   let newPatCount = 0;
+
+  // Always restore clinic profile settings if the user's current profile was wiped by reinstall
+  // or when mode === "REPLACE"
+  if (payload.clinic && (mode === "REPLACE" || !clinicStore.clinic.isProfileSaved || !clinicStore.clinic.specialty)) {
+    clinicStore.saveClinicAndCreateFirstBranch({
+      ...payload.clinic,
+      isProfileSaved: true,
+    });
+  }
 
   if (mode === "REPLACE") {
     finalRx = payload.prescriptions;
     finalPatients = payload.patients || [];
     newRxCount = finalRx.length;
     newPatCount = finalPatients.length;
-    if (payload.clinic) {
-      useClinicStore.getState().updateClinic(payload.clinic);
-    }
   } else {
-    // Smart Merge (default)
     const existingRx = prescriptionStore.savedPrescriptions || [];
     const existingRxMap = new Map(existingRx.map((r) => [r.id || r.prescriptionNo, r]));
 
@@ -365,9 +406,8 @@ export async function restoreFromBackupBuffer(
     finalRx = Array.from(existingRxMap.values());
     finalRx.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    // Merge Patients
     const existingPatients = prescriptionStore.savedPatients || [];
-    const existingPatMap = new Map(existingPatients.map((p) => [p.name.trim().toLowerCase(), p]));
+    const existingPatMap = new Map(existingPatients.map((p) => [(p.name || "").trim().toLowerCase(), p]));
 
     if (Array.isArray(payload.patients)) {
       for (const p of payload.patients) {
@@ -381,27 +421,8 @@ export async function restoreFromBackupBuffer(
     finalPatients = Array.from(existingPatMap.values());
   }
 
-  // Update store state
   prescriptionStore.setSavedPrescriptions(finalRx);
   prescriptionStore.setSavedPatients(finalPatients);
-
-  // Trigger background sync to relational database and cloud
-  try {
-    const subState = useSubscriptionStore.getState();
-    const subId = subState.subscriberId || "PRX-BACKUP-RESTORE";
-    for (const rx of payload.prescriptions) {
-      fetch(getApiUrl("/api/prescriptions/sync"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "SAVE",
-          subscriberId: subId,
-          prescriptionId: rx.id,
-          data: rx,
-        }),
-      }).catch(() => {});
-    }
-  } catch {}
 
   const successMessage =
     mode === "REPLACE"
@@ -417,9 +438,6 @@ export async function restoreFromBackupBuffer(
   };
 }
 
-/**
- * Reads, decrypts, and restores an encrypted backup file from a local File
- */
 export async function importEncryptedBackup(
   file: File,
   userPassphrase?: string,
@@ -447,9 +465,6 @@ export async function importEncryptedBackup(
   }
 }
 
-/**
- * Uploads an encrypted backup to the secure cloud endpoint partitioned by subscriberId
- */
 export async function uploadBackupToCloud(
   payloadBase64: string,
   fileName: string,
@@ -487,9 +502,6 @@ export async function uploadBackupToCloud(
   return { success: true, message: data.message || "تم حفظ النسخة السحابية بنجاح" };
 }
 
-/**
- * Fetches latest cloud backup info for the current subscriber
- */
 export async function fetchLatestCloudBackupInfo(): Promise<{
   exists: boolean;
   backup?: {
@@ -529,9 +541,6 @@ export async function fetchLatestCloudBackupInfo(): Promise<{
   return { exists: false, message: data.message || "لا توجد نسخ سحابية محفوظة بعد" };
 }
 
-/**
- * Downloads and restores the latest cloud backup
- */
 export async function restoreFromCloudBackup(
   mode: "MERGE" | "REPLACE" = "MERGE"
 ): Promise<{
@@ -552,9 +561,8 @@ export async function restoreFromCloudBackup(
 
 /**
  * Silent Daily Backup & Silent Annual Auto-Archiving
- * Runs automatically in the background once per day without user disruption
  */
-export async function runDailySilentBackupAndAutoArchival(): Promise<{
+export async function runDailySilentBackupAndAutoArchival(forceBackup = false): Promise<{
   didBackup: boolean;
   archivedCount: number;
 }> {
@@ -562,7 +570,6 @@ export async function runDailySilentBackupAndAutoArchival(): Promise<{
 
   let archivedCount = 0;
 
-  // 1. Silent Annual Archival: Auto-archive records older than 365 days or from previous calendar years
   try {
     const rxStore = usePrescriptionStore.getState();
     const currentYear = new Date().getFullYear();
@@ -595,11 +602,10 @@ export async function runDailySilentBackupAndAutoArchival(): Promise<{
     console.warn("[AutoArchive Error]:", err);
   }
 
-  // 2. Silent Daily Backup
   const todayStr = new Date().toISOString().slice(0, 10);
   const lastBackup = localStorage.getItem("penrx_last_silent_backup");
 
-  if (lastBackup === todayStr) {
+  if (!forceBackup && lastBackup === todayStr) {
     return { didBackup: false, archivedCount };
   }
 
@@ -611,8 +617,8 @@ export async function runDailySilentBackupAndAutoArchival(): Promise<{
     }
 
     const res = await exportEncryptedBackup();
-    // Only upload if clinic has data
-    if (res.metadata.totalPrescriptions > 0 || res.metadata.totalPatients > 0) {
+    const clinicSaved = useClinicStore.getState().clinic.isProfileSaved;
+    if (res.metadata.totalPrescriptions > 0 || res.metadata.totalPatients > 0 || clinicSaved) {
       await uploadBackupToCloud(res.payloadBase64, res.fileName, res.compressedSizeKb, res.metadata);
       localStorage.setItem("penrx_last_silent_backup", todayStr);
       localStorage.setItem("penrx_last_backup_time", new Date().toISOString());

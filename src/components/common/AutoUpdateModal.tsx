@@ -8,7 +8,6 @@ import {
   Smartphone,
   X,
   ArrowRight,
-  ShieldCheck,
   CheckCircle2,
   AlertCircle,
   ExternalLink,
@@ -59,11 +58,11 @@ export function AutoUpdateModal() {
   // Platform Detection
   const [platform, setPlatform] = useState<"desktop" | "mobile">("desktop");
   const abortControllerRef = useRef<AbortController | null>(null);
+  const notifiedVersionRef = useRef<string>("");
 
   useEffect(() => {
     setIsClient(true);
 
-    // Detect device platform
     if (typeof navigator !== "undefined") {
       const ua = navigator.userAgent.toLowerCase();
       if (/android|iphone|ipad|ipod|mobile/i.test(ua)) {
@@ -74,26 +73,31 @@ export function AutoUpdateModal() {
     }
 
     const w = typeof window !== "undefined" ? (window as any) : null;
+    const isElectronDesktop = Boolean(w?.penrxDesktop?.isElectron);
 
-    // Fast Native Update Listener: Catches instant update notifications from Electron main process
+    // 1. Native Electron AutoUpdater Listener (Primary channel for Desktop EXE)
     let unsubAvailable: (() => void) | undefined;
     if (typeof w?.penrxDesktop?.onUpdateAvailable === "function") {
       unsubAvailable = w.penrxDesktop.onUpdateAvailable(async (info: any) => {
         if (info && info.version) {
           let currentAppVer = "";
           if (w?.penrxDesktop?.getAppVersion) {
-            try { currentAppVer = await w.penrxDesktop.getAppVersion(); } catch {}
+            try {
+              currentAppVer = await w.penrxDesktop.getAppVersion();
+            } catch {}
           }
           if (currentAppVer && !compareSemver(currentAppVer, info.version)) {
             return;
           }
+          const cleanVer = String(info.version).replace(/\.0$/, "");
           const dismissedVersion = localStorage.getItem("penrx_dismissed_update_version");
-          if (dismissedVersion !== info.version) {
+          if (dismissedVersion !== info.version && dismissedVersion !== cleanVer) {
+            notifiedVersionRef.current = cleanVer;
             setUpdateInfo({
               hasUpdate: true,
-              currentVersion: currentAppVer || "v...",
-              latestVersion: info.version,
-              releaseNotes: info.releaseNotes,
+              currentVersion: currentAppVer ? currentAppVer.replace(/\.0$/, "") : "v...",
+              latestVersion: cleanVer,
+              releaseNotes: typeof info.releaseNotes === "string" ? info.releaseNotes : "",
               releaseDate: info.releaseDate,
             });
             setIsOpen(true);
@@ -104,6 +108,19 @@ export function AutoUpdateModal() {
 
     async function checkForUpdates() {
       try {
+        const isNativeCapacitor = Boolean(
+          w?.Capacitor?.isNativePlatform?.() ||
+            (typeof window !== "undefined" && window.location.protocol === "capacitor:") ||
+            (typeof window !== "undefined" &&
+              window.location.hostname === "localhost" &&
+              /android/i.test(navigator.userAgent))
+        );
+
+        if (isNativeCapacitor) {
+          // Mobile APK receives live updates automatically
+          return;
+        }
+
         let currentAppVer = "";
         if (w?.penrxDesktop?.getAppVersion) {
           try {
@@ -111,20 +128,11 @@ export function AutoUpdateModal() {
           } catch {}
         }
 
-        const isNativeCapacitor = Boolean(
-          w?.Capacitor?.isNativePlatform?.() ||
-          (typeof window !== "undefined" && window.location.protocol === "capacitor:") ||
-          (typeof window !== "undefined" && window.location.hostname === "localhost" && /android/i.test(navigator.userAgent))
-        );
-
-        let data: UpdateInfo | null = null;
-
-        if (isNativeCapacitor) {
-          // Mobile APK is powered by Live Cloud Updates directly from Vercel
+        // If running in Electron and native update_available already notified us, skip duplicate API check
+        if (isElectronDesktop && notifiedVersionRef.current) {
           return;
         }
 
-        // Desktop / PC mode: fetch from local Next.js API with safety timeout
         const url = currentAppVer
           ? `/api/version/check?currentVersion=${encodeURIComponent(currentAppVer)}`
           : "/api/version/check";
@@ -134,30 +142,38 @@ export function AutoUpdateModal() {
           signal: AbortSignal.timeout(4000),
         });
         if (!res.ok) return;
-        data = await res.json();
+        const data: UpdateInfo = await res.json();
 
-        if (!data) return;
+        if (!data || !data.latestVersion) return;
 
-        // Extra safeguard: If running in Electron and app version >= latestVersion, do not show update modal
         if (currentAppVer && !compareSemver(currentAppVer, data.latestVersion)) {
+          return;
+        }
+
+        const cleanLatest = String(data.latestVersion).replace(/\.0$/, "");
+        if (notifiedVersionRef.current === cleanLatest) {
           return;
         }
 
         if (data.hasUpdate) {
           const dismissedVersion = localStorage.getItem("penrx_dismissed_update_version");
-          if (dismissedVersion !== data.latestVersion) {
-            setUpdateInfo(data);
+          if (dismissedVersion !== data.latestVersion && dismissedVersion !== cleanLatest) {
+            notifiedVersionRef.current = cleanLatest;
+            setUpdateInfo({
+              ...data,
+              currentVersion: (currentAppVer || data.currentVersion || "").replace(/\.0$/, ""),
+              latestVersion: cleanLatest,
+            });
             setIsOpen(true);
           }
         }
       } catch {
-        // Silent catch in offline / timeout mode - never freeze the app
+        // Silent catch in offline / timeout mode
       }
     }
 
-    // Fast check: Run 1.5 seconds after app startup
-    const timer = setTimeout(checkForUpdates, 1500);
-    // Recurring periodic check every 15 minutes
+    // Run fallback API check after 4.5s (giving Electron native checkForUpdates priority at 2.5s)
+    const timer = setTimeout(checkForUpdates, isElectronDesktop ? 4500 : 1800);
     const interval = setInterval(checkForUpdates, 15 * 60 * 1000);
 
     return () => {
@@ -205,17 +221,16 @@ export function AutoUpdateModal() {
     const targetType = selectedType || platform;
     const w = typeof window !== "undefined" ? (window as any) : null;
 
-    // 1. ELECTRON NATIVE UPDATER (For Desktop PC installed version)
+    // 1. ELECTRON NATIVE UPDATER (Single unified differential update pipeline with automatic silent install)
     if (isElectron && targetType === "desktop") {
-      if (isDownloading) return; // Prevent double trigger
+      if (isDownloading) return;
       setIsDownloading(true);
-      setDownloadProgress(0);
+      setDownloadProgress(1);
       setDownloadedMB(0);
       setTotalMB(0);
       setDownloadStatus("downloading");
       setDownloadError(null);
 
-      // Subscribe to live IPC progress from Electron main process
       let unsubscribe: (() => void) | undefined;
       let hasCompleted = false;
 
@@ -240,42 +255,41 @@ export function AutoUpdateModal() {
             setDownloadProgress(100);
             setDownloadStatus("completed");
             setIsDownloading(false);
-            // Give user visual confirmation, then trigger quit and auto-restart
+            unsubscribe?.();
+            // Note: electron/main.js automatically triggers performQuitAndInstall after 1.2s;
+            // we also send a backup signal at 1.5s in case the window is still open.
             setTimeout(() => {
               if (typeof w?.penrxDesktop?.quitAndInstallUpdate === "function") {
                 w.penrxDesktop.quitAndInstallUpdate();
               }
-            }, 1000);
+            }, 1500);
           } else if (progress?.status === "error") {
             setDownloadStatus("error");
             setIsDownloading(false);
             setDownloadError(progress.error || "فشل تنزيل ملف التحديث");
+            unsubscribe?.();
           }
         });
       }
 
-      // Try official differential delta update (Classico-style)
+      // Use official differential delta updater exclusively when packaged.
+      // Do NOT chain a second full download on top of electron-updater!
       if (typeof w?.penrxDesktop?.downloadDifferentialUpdate === "function") {
         try {
           const diffRes = await w.penrxDesktop.downloadDifferentialUpdate();
           if (diffRes?.success) {
-            // autoUpdater.downloadUpdate() is active, do NOT fall through!
             return;
           }
-          console.warn("[AutoUpdateModal] Differential update notice:", diffRes?.error);
+          // Only fall back to direct stream if AutoUpdater is not available (e.g. unpacked dev build)
+          if (diffRes?.error && diffRes.error !== "AutoUpdater not available") {
+            console.warn("[AutoUpdateModal] Differential updater reported error, using direct installer fallback:", diffRes.error);
+          }
         } catch (e: any) {
           console.warn("[AutoUpdateModal] Differential update exception:", e?.message);
         }
       }
 
-      // Fallback: direct download & install ONLY IF differential update failed and not completed
       if (hasCompleted) return;
-
-      // Cleanly reset progress UI for the official installer package download
-      setDownloadProgress(0);
-      setDownloadedMB(0);
-      setTotalMB(0);
-      setDownloadStatus("downloading");
 
       const targetUrl =
         updateInfo.desktopDownloadUrl ||
@@ -323,11 +337,9 @@ export function AutoUpdateModal() {
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
       <div className="w-full max-w-lg bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 border-2 border-emerald-500/50 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative overflow-hidden animate-in zoom-in-95">
-        {/* Glow ambient background effects */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Close Button */}
         {!isDownloading && (
           <button
             type="button"
@@ -339,7 +351,6 @@ export function AutoUpdateModal() {
           </button>
         )}
 
-        {/* Header with Pulsing Icon */}
         <div className="text-center space-y-3">
           <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 p-0.5 mx-auto shadow-xl shadow-emerald-950/60 flex items-center justify-center">
             <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
@@ -359,37 +370,34 @@ export function AutoUpdateModal() {
               {downloadStatus === "completed"
                 ? "UPDATE READY 🎉"
                 : downloadStatus === "downloading"
-                ? "DOWNLOADING UPDATE ⏳"
+                ? "DOWNLOADING DELTA UPDATE ⏳"
                 : "NEW RELEASE AVAILABLE 🚀"}
             </span>
             <h2 className="text-xl sm:text-2xl font-black text-slate-100">
               {downloadStatus === "completed"
                 ? isElectron
-                  ? "اكتمل التنزيل بنجاح!"
+                  ? "اكتمل تنزيل التحديث وجارٍ التثبيت التلقائي!"
                   : "تم بدء تنزيل التحديث!"
                 : downloadStatus === "downloading"
-                ? "جارٍ تحميل التحديث الجديد..."
+                ? "جارٍ تنزيل فرق التحديث السريع..."
                 : "تحديث جديد متوفر لمنظومة PenRX+"}
             </h2>
             <p className="text-xs text-slate-400">
               {downloadStatus === "completed"
                 ? isElectron
-                  ? "اكتمل تنزيل حزمة التحديث بنجاح! جاري فتح معالج التثبيت الرسمي الآن..."
+                  ? "تم استلام فرق التحديث بنجاح! سيقوم البرنامج الآن بالتثبيت التلقائي وإعادة التشغيل فوراً..."
                   : "تم فتح رابط التنزيل المباشر، قم بتشغيل الملف بمجرد اكتماله."
                 : downloadStatus === "downloading"
                 ? isElectron
-                  ? totalMB > 60
-                    ? `جارٍ تنزيل حزمة التثبيت الرسمية الكاملة (${downloadedMB} / ${totalMB} MB)...`
-                    : "جارٍ تنزيل ملفات التحديث بالتقنية التفاضلية السريعة (Delta Update)..."
+                  ? "يتم الآن تحميل التغييرات الجديدة فقط (Delta Update) ثم التثبيت التلقائي دون الحاجة لتدخل يدوي..."
                   : "يرجى الانتظار حتى اكتمال تنزيل ملف التحديث الجديد"
                 : isElectron
-                ? "تحديث فوري وآمن: يتم تنزيل التحديث وتثبيته بمعالج التثبيت الرسمي المعتمد."
+                ? "تحديث ذكي وسريع: يتم تنزيل فرق التحديث فقط وتثبيته تلقائياً مع إعادة تشغيل البرنامج."
                 : "تم إطلاق إصدار جديد يتضمن تحسينات ومميزات دوائية وتقنية متقدمة"}
             </p>
           </div>
         </div>
 
-        {/* Version Comparison Card */}
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
           <div className="space-y-0.5 text-right">
             <span className="text-[10px] text-slate-500 font-bold block">إصدارك الحالي:</span>
@@ -410,8 +418,7 @@ export function AutoUpdateModal() {
           </div>
         </div>
 
-        {/* PROGRESS BAR SECTION (When downloading or completed) */}
-        {isDownloading && (
+        {(isDownloading || downloadStatus === "completed") && (
           <div className="p-5 rounded-2xl bg-slate-950 border border-emerald-500/40 space-y-3">
             <div className="flex items-center justify-between text-xs font-bold">
               <span className="text-emerald-400 flex items-center gap-2">
@@ -422,8 +429,8 @@ export function AutoUpdateModal() {
                 )}
                 <span>
                   {downloadStatus === "completed"
-                    ? "اكتمل التنزيل 100%"
-                    : `جارٍ التنزيل... (${downloadProgress}%)`}
+                    ? "اكتمل التنزيل 100% — جارٍ التثبيت التلقائي..."
+                    : `جارٍ تنزيل التحديث... (${downloadProgress}%)`}
                 </span>
               </span>
               <span className="text-slate-400 font-mono text-[11px]">
@@ -435,13 +442,11 @@ export function AutoUpdateModal() {
               </span>
             </div>
 
-            {/* Glowing Smooth Progress Bar */}
             <div className="w-full h-3.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800 relative">
               <div
                 className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 rounded-full transition-all duration-300 ease-out shadow-lg shadow-emerald-500/50 relative overflow-hidden"
                 style={{ width: `${downloadProgress}%` }}
               >
-                {/* Subtle shimmer animation overlay */}
                 <div className="absolute inset-0 bg-white/20 animate-pulse" />
               </div>
             </div>
@@ -449,14 +454,13 @@ export function AutoUpdateModal() {
             {downloadStatus === "completed" && (
               <p className="text-[11px] text-emerald-300 font-bold text-center pt-1 animate-in fade-in">
                 {isElectron
-                  ? "✨ تم استلام حزمة التحديث، جاري تشغيل معالج التثبيت الرسمي وإعادة التشغيل..."
+                  ? "✨ تم تجهيز التحديث، جاري التثبيت التلقائي وإعادة تشغيل البرنامج الآن..."
                   : "✨ اكتمل التنزيل، قم بفتح الملف لاستكمال التثبيت!"}
               </p>
             )}
           </div>
         )}
 
-        {/* Error notification if any */}
         {downloadStatus === "error" && (
           <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/50 text-xs text-rose-300 space-y-2">
             <div className="flex items-center gap-2 font-bold text-rose-200">
@@ -477,29 +481,34 @@ export function AutoUpdateModal() {
           </div>
         )}
 
-        {/* ACTION BUTTONS */}
         <div className="space-y-3 pt-1">
           {downloadStatus === "completed" ? (
             <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => handleManualDownload()}
-                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Download className="w-4 h-4 stroke-[2.5]" />
-                <span>إعادة فتح ملف التحديث أو تنزيله يدوياً</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleDismiss}
-                className="w-full text-xs text-slate-400 hover:text-slate-200 transition-colors py-2 font-bold cursor-pointer"
-              >
-                إغلاق هذه النافذة ✕
-              </button>
+              {isElectron ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const w = typeof window !== "undefined" ? (window as any) : null;
+                    w?.penrxDesktop?.quitAndInstallUpdate?.();
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                  <span>تثبيت وإعادة تشغيل البرنامج الآن فوراً 🚀</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleManualDownload()}
+                  className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-4 h-4 stroke-[2.5]" />
+                  <span>إعادة فتح ملف التحديث أو تنزيله يدوياً</span>
+                </button>
+              )}
             </div>
           ) : !isDownloading ? (
             <div className="space-y-2.5">
-              {/* PRIMARY ONE-CLICK UPDATE BUTTON */}
               <button
                 type="button"
                 onClick={() => startAutoUpdate()}
@@ -513,7 +522,6 @@ export function AutoUpdateModal() {
                 <span>موافقة وتحديث البرنامج الآن تلقائياً 🚀</span>
               </button>
 
-              {/* SECONDARY PLATFORM OPTION (Switch device type if needed) */}
               <div className="flex items-center justify-between px-1 text-xs">
                 <button
                   type="button"

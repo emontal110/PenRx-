@@ -10,7 +10,6 @@ import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
-// RLS on CloudBackup only admits service_role — anon key writes are silently rejected
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
 const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
@@ -27,13 +26,8 @@ export interface CloudBackupRecord {
 }
 
 // In-Memory Multi-Tenant Cache partitioned strictly by Subscriber ID
-// Key: subscriberId -> CloudBackupRecord[] (sorted newest first)
 const serverCloudBackupCache = new Map<string, CloudBackupRecord[]>();
 
-/**
- * Resolves an ACTIVE (or trial) subscription for the caller and confirms
- * that the requesting machine actually owns it. Fails closed on DB errors.
- */
 async function resolveAuthorizedSubscription(
   subscriberId?: string,
   machineId?: string
@@ -48,23 +42,18 @@ async function resolveAuthorizedSubscription(
     if (machineId && !machineOwnsSubscription(sub, machineId.trim())) return false;
     return true;
   } catch {
-    // Fail closed: DB unreachable means we cannot confirm identity
     return false;
   }
 }
 
 /**
  * GET /api/backup/cloud?subscriberId=...&machineId=...
- * Retrieves the latest cloud backup strictly scoped to this subscriber/machine.
- * [SECURITY FIX HIGH-04]: Now validates subscriber identity before serving data.
  */
 export async function GET(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
   if (!hasCloudCredentials()) {
     return proxyToCloud(request, "/api/backup/cloud");
   }
 
-  // Rate Limit: 15 requests per minute per IP
   if (!checkRateLimit(request, { maxRequests: 15, windowMs: 60_000, prefix: "cloud-backup-get" })) {
     return rateLimitExceededResponse(60);
   }
@@ -82,7 +71,6 @@ export async function GET(request: Request) {
       );
     }
 
-    // [SECURITY FIX HIGH-04]: Validate subscriber identity + device ownership before serving data
     const isAuthorized = await resolveAuthorizedSubscription(subscriberId, machineId);
     if (!isAuthorized) {
       return NextResponse.json(
@@ -91,12 +79,11 @@ export async function GET(request: Request) {
       );
     }
 
-    // 1. Check in-memory partitioned cache first
     const list = serverCloudBackupCache.get(targetKey) || [];
     if (list.length > 0) {
       return NextResponse.json({
         success: true,
-        backup: list[0], // Return the latest backup
+        backup: list[0],
         totalBackups: list.length,
         allBackups: list.map((b) => ({
           id: b.id,
@@ -108,16 +95,16 @@ export async function GET(request: Request) {
       });
     }
 
-    // 2. Query Supabase if table exists
     if (SUPABASE_KEY) {
       try {
         const resp = await fetch(
-          `${SUPABASE_REST_URL}/CloudBackup?subscriberId=eq.${encodeURIComponent(targetKey)}&order=createdAt.desc&limit=5`,
+          `${SUPABASE_REST_URL}/CloudBackup?subscriberId=eq.${encodeURIComponent(targetKey)}&order=createdAt.desc&limit=1`,
           {
             headers: {
               apikey: SUPABASE_KEY,
               Authorization: `Bearer ${SUPABASE_KEY}`,
             },
+            cache: "no-store",
           }
         );
         if (resp.ok) {
@@ -155,16 +142,15 @@ export async function GET(request: Request) {
 /**
  * POST /api/backup/cloud
  * Uploads an encrypted and compressed backup payload for this subscriber.
- * [SECURITY FIX HIGH-04]: Now validates subscriber identity before accepting backup.
+ * Uses single-slot upsert per subscriberId and purges older snapshots so Supabase Free Tier (500MB)
+ * never accumulates duplicate daily blobs across thousands of doctors!
  */
 export async function POST(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
   if (!hasCloudCredentials()) {
     return proxyToCloud(request, "/api/backup/cloud");
   }
 
-  // Rate Limit: 5 uploads per hour per IP (backups are daily, so this is very generous)
-  if (!checkRateLimit(request, { maxRequests: 5, windowMs: 60 * 60_000, prefix: "cloud-backup-post" })) {
+  if (!checkRateLimit(request, { maxRequests: 10, windowMs: 60 * 60_000, prefix: "cloud-backup-post" })) {
     return rateLimitExceededResponse(3600);
   }
 
@@ -194,7 +180,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // [SECURITY FIX HIGH-04]: Validate subscriber identity + device ownership before accepting upload
     const isAuthorized = await resolveAuthorizedSubscription(
       subscriberId?.trim(),
       machineId?.trim()
@@ -206,15 +191,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate payload size (max 50MB Base64 encoded)
-    if (payloadBase64.length > 50 * 1024 * 1024) {
+    if (payloadBase64.length > 25 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "حجم النسخة الاحتياطية أكبر من الحد المسموح به (50 ميجابايت)" },
+        { error: "حجم النسخة الاحتياطية أكبر من الحد المسموح به (25 ميجابايت)" },
         { status: 413 }
       );
     }
 
-    const backupId = `cbk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    // Canonical single-slot ID per subscriber: overwrites previous backup in-place!
+    const backupId = `cbk_${targetKey.replace(/[^a-zA-Z0-9_-]/g, "")}`;
     const newRecord: CloudBackupRecord = {
       id: backupId,
       subscriberId: targetKey,
@@ -226,21 +211,19 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     };
 
-    // Store in partitioned in-memory cache (keep up to 10 latest snapshots per subscriber)
-    const existing = serverCloudBackupCache.get(targetKey) || [];
-    const updated = [newRecord, ...existing].slice(0, 10);
-    serverCloudBackupCache.set(targetKey, updated);
+    // Keep only the single latest snapshot in memory per subscriber
+    serverCloudBackupCache.set(targetKey, [newRecord]);
 
-    // Save to Supabase CloudBackup table asynchronously
+    // Upsert canonical row in Supabase CloudBackup AND delete any legacy historical rows for this subscriber
     if (SUPABASE_KEY) {
       try {
-        fetch(`${SUPABASE_REST_URL}/CloudBackup`, {
+        fetch(`${SUPABASE_REST_URL}/CloudBackup?on_conflict=id`, {
           method: "POST",
           headers: {
             apikey: SUPABASE_KEY,
             Authorization: `Bearer ${SUPABASE_KEY}`,
             "Content-Type": "application/json",
-            Prefer: "return=representation",
+            Prefer: "resolution=merge-duplicates,return=minimal",
           },
           body: JSON.stringify({
             id: backupId,
@@ -251,7 +234,21 @@ export async function POST(request: Request) {
             metadataJson: newRecord.metadata,
             createdAt: newRecord.createdAt,
           }),
-        }).catch(() => {});
+        })
+          .then(() => {
+            // Clean up any legacy timestamped cbk_* rows for this subscriber to free space
+            return fetch(
+              `${SUPABASE_REST_URL}/CloudBackup?subscriberId=eq.${encodeURIComponent(targetKey)}&id=neq.${encodeURIComponent(backupId)}`,
+              {
+                method: "DELETE",
+                headers: {
+                  apikey: SUPABASE_KEY,
+                  Authorization: `Bearer ${SUPABASE_KEY}`,
+                },
+              }
+            );
+          })
+          .catch(() => {});
       } catch {}
     }
 
