@@ -41,6 +41,7 @@ let updateDownloadedSuccessfully = false;
 let downloadedInstallerPath = null;
 let isQuittingForInstall = false;
 let isInstallQueuedForLaunch = false;
+let activeUpdateStrategy = "none"; // "none" | "differential" | "full"
 
 try {
   const electronUpdater = require("electron-updater");
@@ -141,6 +142,7 @@ function performQuitAndInstall(customInstallerPath = null) {
   if (isQuittingForInstall) return;
   isQuittingForInstall = true;
   isInstallQueuedForLaunch = false;
+  activeUpdateStrategy = activeUpdateStrategy === "none" ? "full" : activeUpdateStrategy;
 
   console.log("[PenRX+ AutoUpdater] Executing silent update installation & automatic restart...");
 
@@ -638,6 +640,7 @@ if (autoUpdater) {
     console.log("[PenRX+ AutoUpdater] Update package downloaded & verified:", info?.downloadedFile || "");
     isUpdateDownloading = false;
     updateDownloadedSuccessfully = true;
+    activeUpdateStrategy = "differential";
     if (info && info.downloadedFile) {
       downloadedInstallerPath = info.downloadedFile;
     }
@@ -679,9 +682,15 @@ ipcMain.handle("check-differential-update", async () => {
 });
 
 ipcMain.handle("download-differential-update", async () => {
-  if (updateDownloadedSuccessfully) {
-    setTimeout(() => performQuitAndInstall(downloadedInstallerPath), 300);
-    return { success: true, alreadyDownloaded: true };
+  if (updateDownloadedSuccessfully || activeUpdateStrategy !== "none") {
+    if (downloadedInstallerPath) {
+      setTimeout(() => {
+        if (!isQuittingForInstall) {
+          performQuitAndInstall(downloadedInstallerPath);
+        }
+      }, 300);
+    }
+    return { success: true, alreadyDownloaded: true, strategy: activeUpdateStrategy };
   }
   if (isUpdateDownloading) {
     return { success: true, message: "Download already in progress" };
@@ -689,6 +698,7 @@ ipcMain.handle("download-differential-update", async () => {
   if (autoUpdater && app.isPackaged) {
     try {
       isUpdateDownloading = true;
+      activeUpdateStrategy = "differential";
       // Reuse recent checkForUpdates result if checked within the last 5 minutes to avoid duplicate update_available events
       if (!cachedUpdateInfo || Date.now() - lastUpdateCheckAt > 5 * 60 * 1000) {
         console.log("[PenRX+ AutoUpdater] Checking for differential updates before download...");
@@ -860,7 +870,7 @@ function downloadFileWithRedirects(url, destPath, onProgress, maxRedirects = 6) 
 
 // IPC handler: fallback direct download & silent install
 ipcMain.handle("download-and-install-update", async (_event, downloadUrl) => {
-  if (updateDownloadedSuccessfully || isUpdateDownloading) {
+  if (updateDownloadedSuccessfully || isUpdateDownloading || activeUpdateStrategy !== "none") {
     if (downloadedInstallerPath) {
       setTimeout(() => {
         if (!isQuittingForInstall) {
@@ -868,8 +878,10 @@ ipcMain.handle("download-and-install-update", async (_event, downloadUrl) => {
         }
       }, 300);
     }
-    return { success: true, alreadyHandled: true };
+    return { success: true, alreadyHandled: true, strategy: activeUpdateStrategy };
   }
+
+  activeUpdateStrategy = "full";
 
   const targetUrl =
     downloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
