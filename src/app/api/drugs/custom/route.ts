@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import { registerCustomDrug } from "@/lib/drugSearchEngine";
-import { getSubscriptionBySubscriberId, getSubscriptionByMachine, DEFAULT_SUPABASE_SERVICE_ROLE_KEY } from "@/lib/subscriptionManager";
+import { getSubscriptionBySubscriberId, getSubscriptionByMachine, getSupabaseServiceRoleKey } from "@/lib/subscriptionManager";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || getSupabaseServiceRoleKey();
 
 export const dynamic = "force-dynamic";
 

@@ -3,7 +3,7 @@ import {
   getSubscriptionByMachine,
   getSubscriptionBySubscriberId,
   machineOwnsSubscription,
-  DEFAULT_SUPABASE_SERVICE_ROLE_KEY,
+  getSupabaseServiceRoleKey,
 } from "@/lib/subscriptionManager";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
@@ -11,8 +11,7 @@ import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 export const dynamic = "force-dynamic";
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || getSupabaseServiceRoleKey();
 
 export interface CloudBackupRecord {
   id: string;

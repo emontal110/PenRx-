@@ -188,8 +188,8 @@ function performQuitAndInstall(customInstallerPath = null) {
   // 4. Final fallback for native electron-updater if no installer file is on disk yet.
   if (autoUpdater && updateDownloadedSuccessfully) {
     try {
-      console.log("[PenRX+ AutoUpdater] Fallback: native update installer requested...");
-      autoUpdater.quitAndInstall(true, true);
+      console.log("[PenRX+ AutoUpdater] Fallback: native update installer requested with visible Windows UI...");
+      autoUpdater.quitAndInstall(false, true);
       setTimeout(() => {
         try {
           app.exit(0);

@@ -9,7 +9,7 @@ import {
   getSubscriptionBySubscriberId,
   validateAdminAuthorization,
   machineOwnsSubscription,
-  DEFAULT_SUPABASE_SERVICE_ROLE_KEY,
+  getSupabaseServiceRoleKey,
 } from "@/lib/subscriptionManager";
 import {
   savePrescriptionRelational,
@@ -21,8 +21,7 @@ import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 export const dynamic = "force-dynamic";
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || getSupabaseServiceRoleKey();
 
 // High-Speed Server In-Memory Cache (Multi-Tenant, Partitioned by Subscriber ID)
 const serverPrescriptionsCache = new Map<string, Map<string, LeanCloudPrescription>>();
