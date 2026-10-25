@@ -57,7 +57,7 @@ export function AutoUpdateModal() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadedMB, setDownloadedMB] = useState(0);
   const [totalMB, setTotalMB] = useState(0);
-  const [downloadStatus, setDownloadStatus] = useState<"idle" | "downloading" | "completed" | "error">("idle");
+  const [downloadStatus, setDownloadStatus] = useState<"idle" | "downloading" | "completed" | "installing" | "error">("idle");
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // Platform Detection
@@ -234,7 +234,7 @@ export function AutoUpdateModal() {
 
     // 1. ELECTRON NATIVE UPDATER (Automatic differential delta download + silent install & restart)
     if (isElectron && targetType === "desktop") {
-      if (isDownloading || downloadStatus === "completed") return;
+      if (isDownloading || downloadStatus === "completed" || downloadStatus === "installing") return;
       setIsDownloading(true);
       setDownloadProgress(1);
       setDownloadedMB(0);
@@ -264,6 +264,18 @@ export function AutoUpdateModal() {
             }
             if (typeof progress?.totalMB === "number" || typeof progress?.totalMB === "string") {
               setTotalMB(Number(progress.totalMB));
+            }
+
+            if (progress?.installing || progress?.status === "installing") {
+              hasCompleted = true;
+              setDownloadProgress(100);
+              setDownloadStatus("installing");
+              setIsDownloading(false);
+              if (progressUnsubRef.current) {
+                progressUnsubRef.current();
+                progressUnsubRef.current = null;
+              }
+              return;
             }
 
             if (progress?.completed || progress?.status === "completed") {
@@ -368,7 +380,7 @@ export function AutoUpdateModal() {
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
 
-        {downloadStatus !== "completed" && (
+        {downloadStatus !== "completed" && downloadStatus !== "installing" && (
           <button
             type="button"
             onClick={handleDismiss}
@@ -384,6 +396,8 @@ export function AutoUpdateModal() {
             <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
               {downloadStatus === "completed" ? (
                 <Check className="w-8 h-8 text-emerald-400 animate-bounce" />
+              ) : downloadStatus === "installing" ? (
+                <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
               ) : downloadStatus === "downloading" ? (
                 <Download className="w-8 h-8 text-emerald-400 animate-bounce" />
               ) : (
@@ -397,6 +411,8 @@ export function AutoUpdateModal() {
             <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider">
               {downloadStatus === "completed"
                 ? "UPDATE READY 🎉"
+                : downloadStatus === "installing"
+                ? "INSTALLING UPDATE 🛠️"
                 : downloadStatus === "downloading"
                 ? "DOWNLOADING DELTA UPDATE ⏳"
                 : "NEW RELEASE AVAILABLE 🚀"}
@@ -406,6 +422,8 @@ export function AutoUpdateModal() {
                 ? isElectron
                   ? "اكتمل التنزيل! جارٍ التثبيت التلقائي وإعادة التشغيل..."
                   : "تم تجهيز التحديث بنجاح!"
+                : downloadStatus === "installing"
+                ? "جارٍ تثبيت التحديث الآن..."
                 : downloadStatus === "downloading"
                 ? "جارٍ تنزيل فرق التحديث السريع..."
                 : "تحديث جديد متوفر لمنظومة PenRX+"}
@@ -415,6 +433,10 @@ export function AutoUpdateModal() {
                 ? isElectron
                   ? "تم استلام فرق التحديث بنجاح! سيتم إغلاق البرنامج الآن وتطبيق التحديث سريعاً ثم إعادة الفتح تلقائياً..."
                   : "تم تجهيز ملف التحديث بنجاح."
+                : downloadStatus === "installing"
+                ? isElectron
+                  ? "يتم الآن تثبيت التحديث على جهازك، وسيظهر شريط تقدم التثبيت الحقيقي الخاص بالنظام ثم يفتح التطبيق تلقائياً."
+                  : "جارٍ تثبيت التحديث..."
                 : downloadStatus === "downloading"
                 ? isElectron
                   ? "يتم الآن تحميل التغييرات الجديدة فقط (Delta Update) وتثبيتها تلقائياً دون أي حاجة لتدخل يدوي..."
@@ -446,23 +468,29 @@ export function AutoUpdateModal() {
           </div>
         </div>
 
-        {(isDownloading || downloadStatus === "completed") && (
+        {(isDownloading || downloadStatus === "completed" || downloadStatus === "installing") && (
           <div className="p-5 rounded-2xl bg-slate-950 border border-emerald-500/40 space-y-3">
             <div className="flex items-center justify-between text-xs font-bold">
               <span className="text-emerald-400 flex items-center gap-2">
                 {downloadStatus === "downloading" ? (
                   <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                ) : downloadStatus === "installing" ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
                 ) : (
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 )}
                 <span>
-                  {downloadStatus === "completed"
+                  {downloadStatus === "installing"
+                    ? "جارٍ تثبيت التحديث على النظام..."
+                    : downloadStatus === "completed"
                     ? "اكتمل التنزيل 100% — جارٍ التثبيت التلقائي..."
                     : `جارٍ تنزيل فرق التحديث... (${downloadProgress}%)`}
                 </span>
               </span>
               <span className="text-slate-400 font-mono text-[11px]">
-                {downloadedMB > 0 && totalMB > 0
+                {downloadStatus === "installing"
+                  ? "تثبيت"
+                  : downloadedMB > 0 && totalMB > 0
                   ? `${downloadedMB} MB / ${totalMB} MB`
                   : downloadedMB > 0
                   ? `${downloadedMB} MB`
@@ -486,6 +514,14 @@ export function AutoUpdateModal() {
                   : "✨ اكتمل التجهيز بنجاح!"}
               </p>
             )}
+
+            {downloadStatus === "installing" && (
+              <p className="text-[11px] text-emerald-300 font-bold text-center pt-1 animate-in fade-in">
+                {isElectron
+                  ? "🛠️ سيتم الآن فتح مثبت Windows الرسمي لعرض شريط تقدم التثبيت الحقيقي ثم إعادة فتح PenRX+ تلقائياً..."
+                  : "🛠️ جاري تثبيت التحديث..."}
+              </p>
+            )}
           </div>
         )}
 
@@ -506,13 +542,15 @@ export function AutoUpdateModal() {
         )}
 
         <div className="space-y-3 pt-1">
-          {downloadStatus === "completed" ? (
+          {downloadStatus === "completed" || downloadStatus === "installing" ? (
             <div className="space-y-2">
               {isElectron ? (
                 <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center gap-3 animate-in fade-in">
                   <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
                   <span className="text-emerald-300 font-bold text-xs sm:text-sm">
-                    جارٍ إغلاق البرنامج وتطبيق فرق التحديث وإعادة التشغيل تلقائياً...
+                    {downloadStatus === "installing"
+                      ? "جارٍ تثبيت التحديث الآن عبر مثبت Windows الرسمي، ثم يتم فتح التطبيق تلقائياً..."
+                      : "جارٍ إغلاق البرنامج وتطبيق فرق التحديث وإعادة التشغيل تلقائياً..."}
                   </span>
                 </div>
               ) : (

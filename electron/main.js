@@ -45,7 +45,9 @@ try {
   const electronUpdater = require("electron-updater");
   autoUpdater = electronUpdater.autoUpdater;
   autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Keep the actual installer visible on Windows so the user sees the real install progress bar.
+  // We still cleanly stop the app and server first, then launch the installer explicitly.
+  autoUpdater.autoInstallOnAppQuit = false;
   // Explicitly enable differential (delta) downloads so only changed blocks are fetched
   autoUpdater.disableDifferentialDownload = false;
   autoUpdater.disableWebInstaller = true;
@@ -147,25 +149,7 @@ function performQuitAndInstall(customInstallerPath = null) {
   // 2. Synchronously terminate the child Next.js server process so PenRX+.exe & app.asar have zero file locks
   killServerProcessSync();
 
-  // 3. Primary channel: Official electron-updater quitAndInstall
-  // With oneClick: true and perMachine: false, this silently applies the diff and relaunches PenRX+ in 1-2 seconds
-  if (autoUpdater && updateDownloadedSuccessfully) {
-    try {
-      console.log("[PenRX+ AutoUpdater] Triggering native autoUpdater.quitAndInstall(true, true)...");
-      autoUpdater.quitAndInstall(true, true);
-      // Failsafe exit in case electron event loop is idle
-      setTimeout(() => {
-        try {
-          app.exit(0);
-        } catch {}
-      }, 1500);
-      return;
-    } catch (err) {
-      console.error("[PenRX+ AutoUpdater] quitAndInstall error, falling back to direct runner:", err);
-    }
-  }
-
-  // 4. Secondary fallback: direct standalone installer binary on disk (from direct download fallback)
+  // 3. Preferred path: launch the real installer visibly on Windows so the user sees the installer UI/progress
   const targetExe = customInstallerPath || downloadedInstallerPath;
   if (targetExe && fs.existsSync(targetExe) && process.platform === "win32") {
     try {
@@ -173,12 +157,15 @@ function performQuitAndInstall(customInstallerPath = null) {
       const currentPid = process.pid;
       const escapedInstaller = targetExe.replace(/'/g, "''");
       const escapedAppExe = appExePath.replace(/'/g, "''");
+
+      // Important: do not pass /S or quiet flags here because the requirement is a visible installer progress bar.
       const psScript = [
         `try { Wait-Process -Id ${currentPid} -Timeout 10 -ErrorAction SilentlyContinue } catch {}`,
         `Start-Sleep -Milliseconds 600`,
-        `$proc = Start-Process -FilePath '${escapedInstaller}' -ArgumentList '--updated', '/S', '--force-run' -Wait -PassThru`,
-        `Start-Sleep -Milliseconds 600`,
+        `$installer = Start-Process -FilePath '${escapedInstaller}' -Wait -PassThru`,
+        `Start-Sleep -Milliseconds 700`,
         `if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' }`,
+        `if ($installer -and $installer.ExitCode -ne 0) { exit $installer.ExitCode }`,
       ].join("; ");
 
       const runner = spawn(
@@ -187,21 +174,27 @@ function performQuitAndInstall(customInstallerPath = null) {
         {
           detached: true,
           stdio: "ignore",
-          windowsHide: true,
+          windowsHide: false,
         }
       );
       runner.unref();
       app.exit(0);
       return;
     } catch (spawnErr) {
-      console.warn("[PenRX+ AutoUpdater] Custom installer runner notice:", spawnErr.message);
+      console.warn("[PenRX+ AutoUpdater] Visible installer runner notice:", spawnErr.message);
     }
   }
 
-  // 5. Fallback exit
-  if (autoUpdater) {
+  // 4. Final fallback for native electron-updater if no installer file is on disk yet.
+  if (autoUpdater && updateDownloadedSuccessfully) {
     try {
+      console.log("[PenRX+ AutoUpdater] Fallback: native update installer requested...");
       autoUpdater.quitAndInstall(true, true);
+      setTimeout(() => {
+        try {
+          app.exit(0);
+        } catch {}
+      }, 1500);
       return;
     } catch (err) {
       console.error("[PenRX+ AutoUpdater] quitAndInstall fallback error:", err);
@@ -637,12 +630,16 @@ if (autoUpdater) {
         percent: 100,
         completed: true,
         status: "completed",
+        installing: true,
+        message: "جارٍ تثبيت التحديث الآن...",
       });
     }
-    // Automatically quit and run silent NSIS installer after 1.2 seconds
+    // Launch the real Windows installer to show the genuine install progress UI.
     setTimeout(() => {
-      performQuitAndInstall(downloadedInstallerPath);
-    }, 1200);
+      if (!isQuittingForInstall) {
+        performQuitAndInstall(downloadedInstallerPath);
+      }
+    }, 1500);
   });
 
   autoUpdater.on("error", (err) => {
