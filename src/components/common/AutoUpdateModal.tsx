@@ -64,6 +64,7 @@ export function AutoUpdateModal() {
   const [platform, setPlatform] = useState<"desktop" | "mobile">("desktop");
   const abortControllerRef = useRef<AbortController | null>(null);
   const notifiedVersionRef = useRef<string>("");
+  const progressUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -185,6 +186,10 @@ export function AutoUpdateModal() {
       clearTimeout(timer);
       clearInterval(interval);
       unsubAvailable?.();
+      if (progressUnsubRef.current) {
+        progressUnsubRef.current();
+        progressUnsubRef.current = null;
+      }
     };
   }, []);
 
@@ -196,6 +201,10 @@ export function AutoUpdateModal() {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+    }
+    if (progressUnsubRef.current) {
+      progressUnsubRef.current();
+      progressUnsubRef.current = null;
     }
     if (updateInfo?.latestVersion) {
       try {
@@ -233,11 +242,15 @@ export function AutoUpdateModal() {
       setDownloadStatus("downloading");
       setDownloadError(null);
 
-      let unsubscribe: (() => void) | undefined;
       let hasCompleted = false;
 
+      if (progressUnsubRef.current) {
+        progressUnsubRef.current();
+        progressUnsubRef.current = null;
+      }
+
       if (typeof w?.penrxDesktop?.onUpdateProgress === "function") {
-        unsubscribe = w.penrxDesktop.onUpdateProgress((progress: any) => {
+        progressUnsubRef.current = w.penrxDesktop.onUpdateProgress((progress: any) => {
           try {
             if (hasCompleted) return;
 
@@ -258,7 +271,10 @@ export function AutoUpdateModal() {
               setDownloadProgress(100);
               setDownloadStatus("completed");
               setIsDownloading(false);
-              unsubscribe?.();
+              if (progressUnsubRef.current) {
+                progressUnsubRef.current();
+                progressUnsubRef.current = null;
+              }
               // electron/main.js automatically triggers performQuitAndInstall after 1.2s;
               // send a backup invocation at 1.6s just in case
               setTimeout(() => {
@@ -270,7 +286,10 @@ export function AutoUpdateModal() {
               setDownloadStatus("error");
               setIsDownloading(false);
               setDownloadError(progress.error || "فشل تنزيل ملف التحديث");
-              unsubscribe?.();
+              if (progressUnsubRef.current) {
+                progressUnsubRef.current();
+                progressUnsubRef.current = null;
+              }
             }
           } catch (progressErr) {
             console.warn("[AutoUpdateModal] Progress callback error:", progressErr);
@@ -304,7 +323,10 @@ export function AutoUpdateModal() {
         const res = await w?.penrxDesktop?.downloadAndInstallUpdate?.(targetUrl);
         if (!res || !res.success) {
           if (!hasCompleted) {
-            unsubscribe?.();
+            if (progressUnsubRef.current) {
+              progressUnsubRef.current();
+              progressUnsubRef.current = null;
+            }
             setIsDownloading(false);
             setDownloadStatus("error");
             setDownloadError(res?.error || "تعذر إكمال التحديث التلقائي");
@@ -312,7 +334,10 @@ export function AutoUpdateModal() {
         }
       } catch (err: any) {
         if (!hasCompleted) {
-          unsubscribe?.();
+          if (progressUnsubRef.current) {
+            progressUnsubRef.current();
+            progressUnsubRef.current = null;
+          }
           setIsDownloading(false);
           setDownloadStatus("error");
           setDownloadError(err?.message || "حدث خطأ غير متوقع أثناء التحديث");
@@ -331,13 +356,6 @@ export function AutoUpdateModal() {
       return;
     }
   };
-
-  // Automatically start differential delta update download as soon as update modal opens in Electron Desktop
-  useEffect(() => {
-    if (isOpen && isElectron && !isDownloading && downloadStatus === "idle") {
-      startAutoUpdate("desktop");
-    }
-  }, [isOpen, isElectron, downloadStatus, isDownloading]);
 
   // Single valid conditional return AFTER all hooks have executed
   if (!isClient || !isOpen || !updateInfo) {

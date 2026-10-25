@@ -141,9 +141,12 @@ export function WhatsAppShareModal({
     // Allow a brief paint frame so all images/fonts inside the dedicated staging sheet are ready
     await new Promise((resolve) => setTimeout(resolve, 60));
 
-    let sourceEl: HTMLElement | null = dedicatedSheetRef.current;
+    let sourceEl: HTMLElement | null = null;
+    if (dedicatedSheetRef.current) {
+      sourceEl = (dedicatedSheetRef.current.querySelector("#prescription-print-sheet") as HTMLElement) || dedicatedSheetRef.current;
+    }
     if (!sourceEl && printAreaRef?.current) {
-      sourceEl = printAreaRef.current;
+      sourceEl = (printAreaRef.current.querySelector("#prescription-print-sheet") as HTMLElement) || printAreaRef.current;
     }
     if (!sourceEl) {
       sourceEl = document.getElementById("prescription-print-sheet");
@@ -171,6 +174,7 @@ export function WhatsAppShareModal({
           opacity: "1",
           visibility: "visible",
           transform: "none",
+          margin: "0",
         },
       });
       if (dataUrl && dataUrl.length > 1000) {
@@ -318,7 +322,7 @@ export function WhatsAppShareModal({
         }
       }
 
-      // ── 2. NATIVE WINDOWS DESKTOP EXE (Electron): Native OS Clipboard + Direct WhatsApp Launch + Auto-Paste ──
+      // ── 2. NATIVE WINDOWS DESKTOP EXE (Electron): Native WhatsApp App + Auto-Paste + Auto-Send ──
       if (w?.penrxDesktop && typeof w.penrxDesktop.shareWhatsAppDesktop === "function") {
         const res = await w.penrxDesktop.shareWhatsAppDesktop({
           base64Data: targetDataUrl,
@@ -332,9 +336,9 @@ export function WhatsAppShareModal({
             type: mode,
             fileName: targetFileName,
             fileUrl,
-            message: `تم فتح محادثة المريض (${cleanPhone}) على واتساب ووضع ${
+            message: `✅ تم فتح تطبيق واتساب على محادثة المريض (${cleanPhone}) مباشرةً، وتم الإرفاق التلقائي وإرسال ${
               mode === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"
-            } تلقائياً لإرساله فوراً! (يمكنك أيضاً الضغط على Ctrl + V للصق المباشر).`,
+            } بضغطة واحدة!`,
           });
           setIsGenerating(false);
           setGenerationType(null);
@@ -375,7 +379,8 @@ export function WhatsAppShareModal({
         }
       }
 
-      // ── 4. DESKTOP / WEB BROWSER FALLBACK: Copy Image to Clipboard (or Auto-Download PDF) & Open Patient Chat ──
+      // ── 4. BROWSER FALLBACK: Copy to Clipboard + Open Native WhatsApp App ──
+      // Uses whatsapp:// URI first (opens WhatsApp Desktop/Mobile app), falls back to api.whatsapp.com
       let copiedImage = false;
       if (mode === "image" && typeof navigator !== "undefined" && navigator.clipboard && (window as any).ClipboardItem) {
         try {
@@ -396,18 +401,24 @@ export function WhatsAppShareModal({
         document.body.removeChild(a);
       }
 
-      const directWaUrl = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}`;
-      window.open(directWaUrl, "_blank");
+      // Try native app protocol first, fall back to web
+      const nativeWaUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=`;
+      const webWaUrl = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}`;
+      try {
+        window.open(nativeWaUrl, "_blank");
+      } catch {
+        window.open(webWaUrl, "_blank");
+      }
 
       setStatusBanner({
         type: mode,
         fileName: targetFileName,
         fileUrl,
         message: copiedImage
-          ? `تم نسخ صورة الروشتة تلقائياً وفتح محادثة المريض (${cleanPhone})! اضغط (Ctrl + V) داخل المحادثة لإرسالها فوراً.`
+          ? `تم نسخ صورة الروشتة تلقائياً وفتح تطبيق واتساب على محادثة المريض (${cleanPhone})! اضغط (Ctrl + V) داخل المحادثة لإرسالها فوراً.`
           : `تم تجهيز وتنزيل ${
               mode === "pdf" ? "ملف الروشتة (PDF)" : "صورة الروشتة"
-            } وفتح محادثة المريض (${cleanPhone}) مباشرة على واتساب!`,
+            } وفتح تطبيق واتساب على محادثة المريض (${cleanPhone}) مباشرة!`,
       });
     } catch (err: any) {
       console.error("[WhatsAppShareModal] Error:", err);
@@ -419,7 +430,7 @@ export function WhatsAppShareModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
       {/* Off-screen Dedicated Export Sheet: Always rendered at standard print width with readOnly=true
           so Image & PDF generation works 100% reliably on Mobile APK, Tablet, and Desktop! */}
       <div
@@ -428,16 +439,25 @@ export function WhatsAppShareModal({
           position: "fixed",
           top: 0,
           left: "-10000px",
-          width: `${standardWidth + 24}px`,
-          padding: "12px",
-          backgroundColor: "#ffffff",
+          width: `${standardWidth}px`,
+          margin: 0,
+          padding: 0,
+          backgroundColor: "transparent",
           opacity: 1,
           pointerEvents: "none",
           zIndex: -1,
         }}
         dir="rtl"
       >
-        <div ref={dedicatedSheetRef} style={{ width: `${standardWidth}px`, margin: "0 auto", backgroundColor: "#ffffff" }}>
+        <div
+          ref={dedicatedSheetRef}
+          style={{
+            width: `${standardWidth}px`,
+            margin: 0,
+            padding: 0,
+            backgroundColor: "transparent",
+          }}
+        >
           <LivePrescriptionPreview
             prescriptionNo={prescriptionNo}
             patient={patient}
@@ -452,9 +472,9 @@ export function WhatsAppShareModal({
         </div>
       </div>
 
-      {/* Modal Dialog Card */}
+      {/* Modal Dialog Card: Standardized responsive dimensions for Phone APK and Desktop EXE */}
       <div
-        className="w-full max-w-md sm:max-w-lg bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 text-right relative overflow-hidden animate-in zoom-in-95 duration-200"
+        className="w-full max-w-[460px] sm:max-w-[520px] max-h-[92vh] flex flex-col bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/30 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-3.5 sm:space-y-4 text-right relative overflow-y-auto overscroll-contain animate-in zoom-in-95 duration-200"
         dir="rtl"
       >
         {/* Top Glowing Accent Bar */}

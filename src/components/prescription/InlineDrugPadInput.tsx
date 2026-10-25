@@ -84,7 +84,7 @@ export function InlineDrugPadInput({
 
   // Advanced Search Toggles
   const [searchByActiveIngredient, setSearchByActiveIngredient] = useState(false);
-  const [searchByAi, setSearchByAi] = useState(false);
+  const [searchByAi, setSearchByAi] = useState(true); // AI mode is ON by default
   const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // Selected drug or manual fields
@@ -157,6 +157,10 @@ export function InlineDrugPadInput({
   useEffect(() => {
     const q = query.trim();
     if (!q || isManualMode) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setIsSearching(false);
       setResults([]);
       setIsDropdownOpen(false);
       return;
@@ -549,7 +553,14 @@ export function InlineDrugPadInput({
               type="text"
               value={query}
               onChange={(e) => {
-                setQuery(e.target.value);
+                const val = e.target.value;
+                setQuery(val);
+                if (!val.trim()) {
+                  setIsSearching(false);
+                  if (abortControllerRef.current) {
+                    abortControllerRef.current.abort();
+                  }
+                }
                 setSelectedDrug(null);
                 setShowEquivalents(false);
               }}
@@ -576,8 +587,12 @@ export function InlineDrugPadInput({
               <button
                 type="button"
                 onClick={() => {
+                  if (abortControllerRef.current) {
+                    abortControllerRef.current.abort();
+                  }
                   setQuery("");
                   setResults([]);
+                  setIsSearching(false);
                   setSelectedDrug(null);
                   setIsDropdownOpen(false);
                   setShowEquivalents(false);

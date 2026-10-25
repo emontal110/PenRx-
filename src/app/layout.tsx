@@ -53,13 +53,13 @@ export default function RootLayout({
       <body suppressHydrationWarning className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
         <AppHydrationSplash>
           {/* Unified Sticky Header: binds TitleBar + Navbar together so they stick smoothly with zero content clipping on scroll */}
-          <div className="sticky top-0 z-40 w-full bg-slate-950">
+          <div className="sticky top-0 z-40 w-full bg-slate-950 no-print print:!hidden">
             <DesktopTitleBar />
             <Navbar />
           </div>
           <CapacitorNativeBridge />
           <MobileBiometricLock />
-          <main className="max-w-7xl 2xl:max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-20 md:pb-8">
+          <main className="max-w-7xl 2xl:max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-20 md:pb-8 print:!m-0 print:!p-0 print:!max-w-none print:!w-full">
             <SubscriptionExpiryBanner />
             <PaywallGuard>{children}</PaywallGuard>
           </main>

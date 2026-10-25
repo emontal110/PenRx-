@@ -231,6 +231,23 @@ export default function DashboardPage() {
     setRxToShareWhatsApp(rx);
   };
 
+  const doctorDisplayName = useMemo(() => {
+    if (!clinic.doctorName) return "";
+    const clean = clinic.doctorName.trim();
+    if (
+      clean.startsWith("د.") ||
+      clean.startsWith("د /") ||
+      clean.startsWith("دكتور") ||
+      clean.startsWith("الدكتور")
+    ) {
+      return clean;
+    }
+    return `د. ${clean}`;
+  }, [clinic.doctorName]);
+
+  const clinicDisplayName = clinic.nameAr?.trim() || clinic.name?.trim() || "العيادة الطبية";
+  const clinicSpecialtyName = clinic.specialty?.trim() || clinic.doctorTitle?.trim() || "";
+
   return (
     <div className="space-y-6 sm:space-y-8 pb-4">
       {/* Expiry Warning Banner (<= 7 days) */}
@@ -302,44 +319,38 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Hero Welcome Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/60 border border-slate-800 p-6 sm:p-8 shadow-2xl">
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-xs font-black">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span>منظومة PenRX+ الذكية</span>
-            </div>
-            <h1 className="text-2xl sm:text-4xl font-black text-slate-100">
-              أهلاً بك، {clinic.doctorName} 👋
+      {/* Hero Welcome Banner (Clean, Standard Proportions for APK & EXE) */}
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-slate-900/95 via-slate-900/90 to-emerald-950/40 border border-slate-800/80 p-4 sm:p-6 shadow-xl backdrop-blur-md">
+        {/* Subtle decorative glow */}
+        <div className="absolute -top-10 -left-10 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-teal-500/5 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 flex items-center justify-between gap-4">
+          <div className="space-y-1.5 sm:space-y-2">
+            <h1 className="text-lg sm:text-2xl md:text-3xl font-black text-slate-100 flex items-center gap-2 tracking-tight">
+              <span>أهلاً بك{doctorDisplayName ? `، ${doctorDisplayName}` : ""}</span>
+              <span className="inline-block text-xl sm:text-2xl">👋</span>
             </h1>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-xl">
-              {clinic.doctorTitle} • {activeBranch?.nameAr || "الفرع الرئيسي"}
-            </p>
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
+              <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                <Building2 className="w-4 h-4 shrink-0 text-emerald-400/90" />
+                <span>{clinicDisplayName}</span>
+              </div>
+
+              {clinicSpecialtyName && (
+                <>
+                  <span className="text-slate-600 hidden sm:inline">•</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[11px] sm:text-xs font-semibold">
+                    {clinicSpecialtyName}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <NewRxGuard>
-              <Link
-                href="/prescriptions/new"
-                className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/60 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2.5 cursor-pointer group hover:-translate-y-0.5"
-              >
-                <div className="w-6 h-6 rounded-lg bg-slate-950/20 flex items-center justify-center text-slate-950 group-hover:scale-110 transition-transform">
-                  <Plus className="w-4 h-4 stroke-[3]" />
-                </div>
-                <span>كتابة روشتة جديدة</span>
-              </Link>
-            </NewRxGuard>
-
-            <Link
-              href="/history"
-              className="px-5 py-3.5 rounded-2xl bg-slate-950 border-2 border-slate-700/80 hover:border-emerald-500/50 hover:bg-slate-900 text-slate-200 hover:text-white font-bold text-xs transition-all shadow-md active:scale-95 flex items-center gap-2.5 cursor-pointer group hover:-translate-y-0.5"
-            >
-              <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
-                <Clock className="w-3.5 h-3.5 stroke-[2.2]" />
-              </div>
-              <span>أرشيف الروشتات</span>
-            </Link>
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
+            <Building2 className="w-5 h-5 sm:w-6 sm:h-6 stroke-[1.8]" />
           </div>
         </div>
       </div>

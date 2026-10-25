@@ -18,7 +18,6 @@ import {
   Stethoscope,
   Plus,
   Settings2,
-  History,
   Eye,
   ZoomIn,
   ZoomOut,
@@ -473,7 +472,7 @@ export default function NewPrescriptionPage() {
   };
 
   return (
-    <div className="space-y-6 pb-4">
+    <div className="space-y-6 pb-28 sm:pb-20">
       {/* Toast */}
       {toast && (
         <div className="p-4 rounded-2xl bg-emerald-500/20 border-2 border-emerald-500 text-emerald-200 text-xs font-black shadow-xl flex items-center justify-between animate-bounce">
@@ -487,91 +486,83 @@ export default function NewPrescriptionPage() {
         </div>
       )}
 
-      {/* Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-5 rounded-3xl shadow-lg">
+      {/* Container 1: Prescription Editor Header & Clinic/Branch Clarification */}
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 bg-slate-900/90 border border-slate-800 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-lg no-print print:!hidden">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-100">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-lg sm:text-2xl font-black text-slate-100 tracking-tight">
               محرر وكتابة الروشتات الطبية
             </h1>
             <span
               suppressHydrationWarning
-              className="font-mono text-xs font-black text-emerald-400 bg-slate-950 px-3 py-1 rounded-xl border border-slate-800"
+              className="font-mono text-[10px] sm:text-[11px] font-bold text-emerald-400/90 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800"
               dir="ltr"
+              title="رقم الروشتة الحالي"
             >
               {mounted ? prescriptionNo : "..."}
             </span>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-[11px] sm:text-xs text-slate-400">
             أدخل بيانات المريض وابحث عن الأدوية بسرعة البرق مع الفحص الدوائي الذكي
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/history"
-            className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-slate-100 font-bold text-xs border border-slate-700 hover:border-slate-600 transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
-          >
-            <History className="w-3.5 h-3.5 text-cyan-400" />
-            <span>سجل الروشتات</span>
-          </Link>
+        {/* Branch / Clinic Clarification & Selector */}
+        <div className="flex items-center gap-2 shrink-0">
+          {branches && branches.length > 1 ? (
+            <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800/90 px-3 py-1.5 rounded-xl shadow-inner">
+              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 shrink-0">
+                <Building2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>الفرع:</span>
+              </span>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold text-slate-200 focus:outline-none focus:text-emerald-300 cursor-pointer py-0.5"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id} className="bg-slate-900 text-slate-100">
+                    {b.nameAr || b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : branches && branches.length === 1 ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs font-bold text-slate-300 shadow-inner">
+              <Building2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="text-[11px] text-slate-400 font-medium">الفرع:</span>
+              <span className="text-emerald-300">{branches[0].nameAr || branches[0].name}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs font-bold text-slate-300 shadow-inner">
+              <Building2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="text-emerald-300">{clinic.nameAr || clinic.name || "العيادة الرئيسية"}</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Responsive Grid: Side-by-Side on Desktop (EXE), Clean Dedicated Input Form on Mobile (APK) */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start print:!block print:!m-0 print:!p-0">
         {/* Column 1: Input Forms (Patient Data + Drug Entry Pad + Diagnosis & Notes + Action Bar) */}
-        <div className="xl:col-span-5 2xl:col-span-5 space-y-6">
-          {/* Patient Information & Branch Selector Box */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+        <div className="xl:col-span-5 2xl:col-span-5 space-y-6 no-print print:!hidden">
+          {/* Patient Information Box */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <span className="text-xs font-black text-slate-200 flex items-center gap-2">
-                <User className="w-4 h-4 text-emerald-400" />
-                <span>بيانات المريض والعيادة</span>
+              <span className="text-xs sm:text-sm font-black text-slate-200 flex items-center gap-2">
+                <User className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>بيانات المريض</span>
               </span>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Branch Select or Clean Badge */}
-                {branches && branches.length > 1 ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
-                      <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>الفرع:</span>
-                    </span>
-                    <select
-                      value={selectedBranchId}
-                      onChange={(e) => setSelectedBranchId(e.target.value)}
-                      className="px-3 py-1.5 min-w-[130px] rounded-xl bg-slate-950 border border-slate-700 text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                    >
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.nameAr || b.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : branches && branches.length === 1 ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300">
-                    <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>{branches[0].nameAr || branches[0].name}</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300">
-                    <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>{clinic.nameAr || clinic.name || "العيادة الرئيسية"}</span>
-                  </div>
-                )}
-
-                {/* Patient Settings Button */}
-                <Link
-                  href="/settings?tab=patientFields"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-emerald-300 border border-slate-700 hover:border-emerald-500/50 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
-                  title="تخصيص وإعدادات حقول بيانات المريض بالروشتة"
-                >
-                  <Settings2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>إعدادات المريض</span>
-                </Link>
-              </div>
+              {/* Patient Settings Button directly beside the title */}
+              <Link
+                href="/settings?tab=patientFields"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-emerald-300 border border-slate-700 hover:border-emerald-500/50 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer group"
+                title="تخصيص وإعدادات حقول بيانات المريض بالروشتة"
+              >
+                <Settings2 className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-45 transition-transform" />
+                <span>إعدادات المريض</span>
+              </Link>
             </div>
 
             {/* Patient Fields: Spacious, Elegant 2-Column Responsive Layout */}
@@ -1130,8 +1121,8 @@ export default function NewPrescriptionPage() {
           </div>
         </div>
 
-        {/* Column 2: Live Prescription Sheet (Desktop / EXE Side-by-Side View) */}
-        <div className="hidden xl:block xl:col-span-7 2xl:col-span-7 sticky top-20">
+        {/* Column 2: Live Prescription Sheet (Desktop / EXE Side-by-Side View & Dedicated Print Target) */}
+        <div className="hidden xl:block print:!block print:!w-full print:!m-0 print:!p-0 print:!static xl:col-span-7 2xl:col-span-7 sticky top-20">
           <LivePrescriptionPreview
             prescriptionNo={prescriptionNo}
             patient={patient}
@@ -1155,17 +1146,17 @@ export default function NewPrescriptionPage() {
       </div>
 
       {/* Mobile Floating Action Button (FAB) for Live Prescription Sheet */}
-      <div className="xl:hidden fixed bottom-20 left-4 z-40 select-none">
+      <div className="xl:hidden fixed bottom-20 left-3 sm:left-4 z-40 select-none">
         <button
           type="button"
           onClick={() => setIsMobilePreviewOpen(true)}
-          className="flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs shadow-2xl shadow-emerald-950/80 border-2 border-emerald-300 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
-          title="معاينة ورقة الروشتة الحية"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-[11px] shadow-xl shadow-emerald-950/70 border border-emerald-300 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+          title="معاينة الروشتة الحية"
         >
-          <Eye className="w-4 h-4 stroke-[2.5]" />
-          <span>معاينة الروشتة</span>
+          <Eye className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>معاينة</span>
           {items.length > 0 && (
-            <span className="w-5 h-5 rounded-full bg-slate-950 text-emerald-400 text-[10px] font-mono flex items-center justify-center font-bold">
+            <span className="w-4 h-4 rounded-full bg-slate-950 text-emerald-400 text-[9px] font-mono flex items-center justify-center font-bold">
               {items.length}
             </span>
           )}

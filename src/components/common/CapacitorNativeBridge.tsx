@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { showGlobalToast } from "./GlobalToast";
+import { useSubscriptionStore, getSubscriptionDetails } from "@/store/useSubscriptionStore";
 
 export function CapacitorNativeBridge() {
   const pathname = usePathname();
@@ -23,9 +24,20 @@ export function CapacitorNativeBridge() {
         const nativeInitPromise = (async () => {
           const { App } = await import("@capacitor/app");
           const backHandle = await App.addListener("backButton", ({ canGoBack }) => {
-            if (pathname === "/" || pathname === "/subscriptions") {
-              // Exit app if on root page
+            if (pathname === "/") {
+              // Exit app if on root home page
               App.exitApp();
+            } else if (pathname === "/subscriptions") {
+              // If subscription is locked/inactive, back button exits app; if active, returns home
+              const subState = useSubscriptionStore.getState();
+              const subDetails = getSubscriptionDetails(subState.subscriptions, subState.machineId, subState.subscriberId);
+              if (!subDetails.isActive) {
+                App.exitApp();
+              } else if (canGoBack || window.history.length > 1) {
+                window.history.back();
+              } else {
+                router.push("/");
+              }
             } else if (canGoBack || window.history.length > 1) {
               window.history.back();
             } else {

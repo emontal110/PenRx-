@@ -429,6 +429,9 @@ ipcMain.handle("open-external", async (_event, url) => {
 });
 
 // IPC handler: Native Desktop WhatsApp Direct File Share (Image PNG or PDF)
+// Strategy: Write file to disk → copy to clipboard → launch WhatsApp Desktop app
+//           via whatsapp:// URI protocol (opens native app, NOT browser/web) →
+//           PowerShell auto-pastes the file and sends it after WhatsApp focuses.
 ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
   try {
     const { base64Data, fileName, mimeType, cleanPhone } = payload || {};
@@ -450,33 +453,76 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
     const filePath = path.join(tempDir, safeName);
     fs.writeFileSync(filePath, buffer);
 
-    if (mimeType === "image/png" || safeName.endsWith(".png")) {
+    const isPdf = mimeType === "application/pdf" || safeName.endsWith(".pdf");
+
+    if (!isPdf) {
+      // For images: put nativeImage into clipboard so WhatsApp Desktop picks it up on Ctrl+V
       const img = nativeImage.createFromBuffer(buffer);
       if (!img.isEmpty()) {
         clipboard.writeImage(img);
       }
-    } else if (process.platform === "win32") {
-      // Put the actual PDF file object (CF_HDROP) into the Windows Clipboard so Ctrl+V in WhatsApp attaches the PDF file!
-      const escapedPath = filePath.replace(/'/g, "''");
-      try {
-        execSync(
-          `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "Set-Clipboard -Path '${escapedPath}'"`,
-          { windowsHide: true, stdio: "ignore", timeout: 3500 }
-        );
-      } catch {}
+    } else {
+      // For PDF: put the actual file object (CF_HDROP) into the Windows Clipboard
+      // so Ctrl+V in WhatsApp Desktop attaches the PDF file directly
+      if (process.platform === "win32") {
+        const escapedPath = filePath.replace(/'/g, "''");
+        try {
+          execSync(
+            `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetFileDropList([System.Collections.Specialized.StringCollection]@('${escapedPath}'))"`,
+            { windowsHide: true, stdio: "ignore", timeout: 4000 }
+          );
+        } catch {
+          // Fallback: use Set-Clipboard -Path
+          const escapedPath2 = filePath.replace(/'/g, "''");
+          try {
+            execSync(
+              `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "Set-Clipboard -Path '${escapedPath2}'"`,
+              { windowsHide: true, stdio: "ignore", timeout: 3500 }
+            );
+          } catch {}
+        }
+      }
     }
 
-    // Open WhatsApp directly to the patient conversation
-    const waUrl = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}`;
-    await shell.openExternal(waUrl);
+    // ── OPEN NATIVE WHATSAPP DESKTOP APP (NOT WEB) ──
+    // Priority 1: whatsapp:// URI scheme → opens WhatsApp Desktop app directly to patient chat
+    // Priority 2: Fallback to api.whatsapp.com if app is not installed (opens browser)
+    const whatsappNativeUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=`;
+    const whatsappWebFallback = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}`;
 
-    // On Windows, if WhatsApp Desktop or Browser window opens, automatically paste & send after focus settles
+    let openedNative = false;
+    if (process.platform === "win32") {
+      // On Windows: try launching WhatsApp Desktop directly via URI protocol
+      try {
+        const uriScript = `Start-Process "${whatsappNativeUrl}"`;
+        execSync(
+          `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "${uriScript}"`,
+          { windowsHide: true, stdio: "ignore", timeout: 4000 }
+        );
+        openedNative = true;
+        console.log("[PenRX+ WhatsApp] Opened native WhatsApp Desktop via whatsapp:// URI");
+      } catch (uriErr) {
+        console.log("[PenRX+ WhatsApp] whatsapp:// URI not available, falling back to web URL");
+      }
+    }
+
+    if (!openedNative) {
+      await shell.openExternal(whatsappNativeUrl).catch(() => shell.openExternal(whatsappWebFallback));
+    }
+
+    // ── AUTO-PASTE & AUTO-SEND via PowerShell SendKeys ──
+    // Waits for WhatsApp window to focus, then injects Ctrl+V (paste) + Enter (send)
+    // This works for both WhatsApp Desktop (Win32 app) and WhatsApp Web in browser
     if (process.platform === "win32") {
       const autoPasteScript = [
         "Add-Type -AssemblyName System.Windows.Forms",
-        "Start-Sleep -Milliseconds 2600",
+        // Wait for WhatsApp to open and gain focus (3.5 seconds for UWP/Desktop app)
+        "Start-Sleep -Milliseconds 3500",
+        // Paste the file/image from clipboard
         "[System.Windows.Forms.SendKeys]::SendWait('^v')",
-        "Start-Sleep -Milliseconds 900",
+        // Small pause for WhatsApp to process the attachment
+        "Start-Sleep -Milliseconds 1200",
+        // Press Enter to send
         "[System.Windows.Forms.SendKeys]::SendWait('~')",
       ].join("; ");
       try {
@@ -486,10 +532,13 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
           { detached: true, stdio: "ignore", windowsHide: true }
         );
         pasteRunner.unref();
-      } catch {}
+        console.log("[PenRX+ WhatsApp] Auto-paste & auto-send script launched successfully");
+      } catch (sendErr) {
+        console.warn("[PenRX+ WhatsApp] Auto-paste script warning:", sendErr.message);
+      }
     }
 
-    return { success: true, filePath, copiedToClipboard: true };
+    return { success: true, filePath, copiedToClipboard: true, openedNative };
   } catch (err) {
     console.error("[PenRX+ WhatsApp Desktop Share Error]:", err);
     return { success: false, error: err.message };

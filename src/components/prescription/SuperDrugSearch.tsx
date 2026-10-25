@@ -184,6 +184,8 @@ export function SuperDrugSearch({
   // Real-time debounced search + auto-AI when no results
   useEffect(() => {
     if (!query.trim()) {
+      setIsSearching(false);
+      setIsAiLoading(false);
       setResults([]);
       setAiSuggestions([]);
       setIsDropdownOpen(false);
@@ -641,7 +643,12 @@ export function SuperDrugSearch({
                   type="text"
                   value={query}
                   onChange={(e) => {
-                    setQuery(e.target.value);
+                    const val = e.target.value;
+                    setQuery(val);
+                    if (!val.trim()) {
+                      setIsSearching(false);
+                      setIsAiLoading(false);
+                    }
                     setSelectedDrug(null);
                     setAiSuggestions([]);
                   }}
@@ -671,6 +678,8 @@ export function SuperDrugSearch({
                       type="button"
                       onClick={() => {
                         setQuery("");
+                        setIsSearching(false);
+                        setIsAiLoading(false);
                         setSelectedDrug(null);
                         setAiSuggestions([]);
                         setIsDropdownOpen(false);

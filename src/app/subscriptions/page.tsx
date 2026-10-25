@@ -178,17 +178,6 @@ export default function SubscriptionsPage() {
     }
   }, [subDetails.isPending, subDetails.isActive]);
 
-  // Auto-redirect when subscription is active (waits for welcome modal countdown if newly activated)
-  useEffect(() => {
-    if (mounted && subDetails.isActive && !showWelcomeModal) {
-      const targetRoute = clinic.isProfileSaved ? "/" : "/settings";
-      const timer = setTimeout(() => {
-        router.push(targetRoute);
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [mounted, subDetails.isActive, showWelcomeModal, clinic.isProfileSaved, router]);
-
   // Manual button check with direct feedback and instant entry
   const handleManualActivationCheck = async () => {
     setIsManualSyncing(true);
@@ -502,7 +491,7 @@ export default function SubscriptionsPage() {
   // ============================================================
   if (activePlanForCheckout) {
     return (
-      <div className="space-y-4 pb-12 max-w-xl mx-auto px-3.5 sm:px-6 transition-all duration-300" dir="rtl">
+      <div className="min-h-screen space-y-4 pb-16 max-w-lg mx-auto px-3 sm:px-5 py-4 sm:py-6 transition-all duration-300" dir="rtl">
         <div className="space-y-3.5 text-right">
           {/* Top Bar: Back to Plans & Security Indicator */}
           <div className="flex items-center justify-between gap-2.5 pb-2 border-b border-slate-800/80">
@@ -810,7 +799,7 @@ export default function SubscriptionsPage() {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8 pb-10 max-w-4xl mx-auto px-3.5 sm:px-6 transition-all duration-300">
+    <div className="space-y-5 sm:space-y-7 pb-14 max-w-3xl mx-auto px-3 sm:px-5 transition-all duration-300">
       {/* ============================================================ */}
       {/* QUICK DOWNLOAD BAR: كمبيوتر • أندرويد • آيفون */}
       {/* ============================================================ */}
@@ -866,7 +855,7 @@ export default function SubscriptionsPage() {
       {/* CASE 1: WAITING FOR ACTIVATION SCREEN (صفحة انتظار التفعيل) */}
       {/* ============================================================ */}
       {subDetails.isPending && !subDetails.isActive && (
-        <div className="rounded-3xl bg-slate-900/95 border-2 border-amber-500/40 p-6 sm:p-10 shadow-2xl backdrop-blur-2xl relative overflow-hidden animate-in fade-in duration-300">
+        <div className="max-w-2xl mx-auto rounded-2xl sm:rounded-3xl bg-slate-900/95 border-2 border-amber-500/40 p-5 sm:p-8 shadow-2xl backdrop-blur-2xl relative overflow-hidden animate-in fade-in duration-300">
           {/* Ambient Glows */}
           <div className="absolute -top-32 -left-32 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />

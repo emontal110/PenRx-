@@ -52,7 +52,6 @@ nav,
 /* Print Specific Rules for Prescription Printing (Strict Single Page Guarantee) */
 @media print {
   @page {
-    size: auto;
     margin: 0 !important;
   }
 
@@ -60,19 +59,12 @@ nav,
   body {
     width: 100% !important;
     height: 100% !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
     background: #ffffff !important;
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
-    position: relative !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    page-break-after: avoid !important;
-    page-break-before: avoid !important;
-    break-after: avoid !important;
-    break-before: avoid !important;
   }
 
   /* Completely collapse interactive and non-print blocks */
@@ -88,19 +80,40 @@ nav,
     display: none !important;
   }
 
-  /* Hide everything on the page visually */
-  body * {
-    visibility: hidden !important;
+  /* Force display on any parent container of #prescription-print-sheet */
+  div:has(> #prescription-print-sheet),
+  div:has(#prescription-print-sheet),
+  .print-force-visible {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    position: static !important;
   }
 
-  /* Make ONLY the prescription print sheet and its contents visible */
+  /* Hide everything else on the page visually */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Make ONLY the prescription print sheet and its contents visible with exact colors */
   #prescription-print-sheet,
   #prescription-print-sheet * {
     visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   #prescription-print-sheet {
-    position: absolute !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
@@ -108,17 +121,12 @@ nav,
     width: 100% !important;
     height: 100% !important;
     max-width: 100% !important;
-    max-height: 100vh !important;
-    min-height: 0 !important;
+    max-height: 100% !important;
     box-sizing: border-box !important;
     margin: 0 !important;
-    padding: 7mm 11mm !important;
-    background: #ffffff !important;
-    color: #000000 !important;
-    box-shadow: none !important;
-    border: none !important;
-    border-radius: 0 !important;
+    padding: 6mm 8mm !important;
     overflow: hidden !important;
+    box-shadow: none !important;
     page-break-inside: avoid !important;
     page-break-after: avoid !important;
     page-break-before: avoid !important;

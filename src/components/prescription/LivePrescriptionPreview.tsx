@@ -181,7 +181,7 @@ export function LivePrescriptionPreview({
     visibleFields.showBloodType;
 
   return (
-    <div className="space-y-4">
+    <div className={readOnly ? "w-full m-0 p-0" : "space-y-4"}>
       {/* Dynamic Print Styles for Exact Paper Size */}
       <style
         dangerouslySetInnerHTML={{
@@ -197,21 +197,23 @@ export function LivePrescriptionPreview({
       />
 
       {/* Live Prescription Sheet Indicator Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 text-xs font-bold text-slate-400 no-print">
-        <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-emerald-400" />
-          <span className="text-slate-200">ورقة الروشتة الطبية:</span>
-          <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            {paperConfig.label}
-          </span>
+      {!readOnly && (
+        <div className="flex items-center justify-between px-3 py-1.5 text-xs font-bold text-slate-400 no-print">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span className="text-slate-200">ورقة الروشتة الطبية:</span>
+            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              {paperConfig.label}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-400">
+            <span>Rx No:</span>
+            <span suppressHydrationWarning className="text-emerald-400 font-bold" dir="ltr">
+              {mounted ? prescriptionNo : "..."}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-400">
-          <span>Rx No:</span>
-          <span suppressHydrationWarning className="text-emerald-400 font-bold" dir="ltr">
-            {mounted ? prescriptionNo : "..."}
-          </span>
-        </div>
-      </div>
+      )}
 
       {/* The Printable Prescription Sheet */}
       <div
@@ -221,7 +223,7 @@ export function LivePrescriptionPreview({
           fontFamily,
           ...templateStyles.style,
         }}
-        className={`text-slate-900 rounded-2xl sm:rounded-3xl p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden mx-auto transition-all ${templateStyles.className} ${paperConfig.maxW} ${paperConfig.minH}`}
+        className={`text-slate-900 rounded-2xl sm:rounded-3xl p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden transition-all ${templateStyles.className} ${paperConfig.maxW} ${readOnly ? "w-full mx-0" : "mx-auto"} ${paperConfig.minH}`}
         dir="rtl"
       >
         {/* Prescription Template Vector Decorations (Waves, Hexagons, Ornate Corners, etc.) */}
@@ -926,65 +928,67 @@ export function LivePrescriptionPreview({
       </div>
 
       {/* Primary Action Buttons Bar (Responsive Grid on Mobile, Sleek Bar on Desktop) */}
-      <div className="p-3 sm:p-4 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl no-print w-full transition-all" dir="rtl">
-        <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-between gap-2.5">
-          {/* New Prescription (Desktop: Start side / Mobile: Cell 4) */}
-          {onRequestNewPrescription && (
-            <button
-              type="button"
-              onClick={onRequestNewPrescription}
-              className="order-4 sm:order-1 w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-950/80 hover:bg-slate-900 text-slate-200 hover:text-white font-bold text-xs border-2 border-slate-800 hover:border-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-slate-950/50"
-              title="تفريغ وبدء روشتة جديدة للمريض التالي"
-            >
-              <div className="w-5 h-5 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0">
-                <Plus className="w-3.5 h-3.5 text-cyan-400 stroke-[2.5]" />
-              </div>
-              <span className="truncate">روشتة جديدة</span>
-            </button>
-          )}
-
-          {/* Action Group: Save, WhatsApp, Print */}
-          <div className="contents sm:flex sm:items-center sm:gap-2.5 sm:order-2">
-            {onSaveOnly && (
+      {!readOnly && (
+        <div className="p-3 sm:p-4 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl no-print w-full transition-all" dir="rtl">
+          <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-between gap-2.5">
+            {/* New Prescription (Desktop: Start side / Mobile: Cell 4) */}
+            {onRequestNewPrescription && (
               <button
                 type="button"
-                onClick={onSaveOnly}
-                className="order-3 sm:order-1 w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-950/80 hover:bg-slate-900 text-emerald-300 hover:text-emerald-200 border-2 border-emerald-500/40 hover:border-emerald-400 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-emerald-950/40"
-                title="حفظ الروشتة في سجل العيادة"
+                onClick={onRequestNewPrescription}
+                className="order-4 sm:order-1 w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-950/80 hover:bg-slate-900 text-slate-200 hover:text-white font-bold text-xs border-2 border-slate-800 hover:border-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-slate-950/50"
+                title="تفريغ وبدء روشتة جديدة للمريض التالي"
               >
-                <div className="w-5 h-5 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
-                  <Save className="w-3.5 h-3.5 text-emerald-400" />
+                <div className="w-5 h-5 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0">
+                  <Plus className="w-3.5 h-3.5 text-cyan-400 stroke-[2.5]" />
                 </div>
-                <span className="truncate">حفظ بالسجل</span>
+                <span className="truncate">روشتة جديدة</span>
               </button>
             )}
 
-            {onShareWhatsApp && (
-              <button
-                type="button"
-                onClick={onShareWhatsApp}
-                className="order-2 sm:order-2 w-full sm:w-auto px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs border border-emerald-400/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-lg shadow-emerald-950/50"
-                title="إرسال الروشتة للمريض عبر واتساب مباشرة"
-              >
-                <MessageCircle className="w-4 h-4 stroke-[2.2] shrink-0" />
-                <span className="truncate">إرسال واتساب</span>
-              </button>
-            )}
+            {/* Action Group: Save, WhatsApp, Print */}
+            <div className="contents sm:flex sm:items-center sm:gap-2.5 sm:order-2">
+              {onSaveOnly && (
+                <button
+                  type="button"
+                  onClick={onSaveOnly}
+                  className="order-3 sm:order-1 w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-950/80 hover:bg-slate-900 text-emerald-300 hover:text-emerald-200 border-2 border-emerald-500/40 hover:border-emerald-400 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-emerald-950/40"
+                  title="حفظ الروشتة في سجل العيادة"
+                >
+                  <div className="w-5 h-5 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+                    <Save className="w-3.5 h-3.5 text-emerald-400" />
+                  </div>
+                  <span className="truncate">حفظ بالسجل</span>
+                </button>
+              )}
 
-            {onSaveAndPrint && (
-              <button
-                type="button"
-                onClick={onSaveAndPrint}
-                className="order-1 sm:order-3 w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-xl shadow-emerald-950/60"
-                title="حفظ وطباعة الروشتة فوراً"
-              >
-                <Printer className="w-4 h-4 stroke-[2.5] shrink-0" />
-                <span className="truncate">طباعة الروشتة</span>
-              </button>
-            )}
+              {onShareWhatsApp && (
+                <button
+                  type="button"
+                  onClick={onShareWhatsApp}
+                  className="order-2 sm:order-2 w-full sm:w-auto px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs border border-emerald-400/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-lg shadow-emerald-950/50"
+                  title="إرسال الروشتة للمريض عبر واتساب مباشرة"
+                >
+                  <MessageCircle className="w-4 h-4 stroke-[2.2] shrink-0" />
+                  <span className="truncate">إرسال واتساب</span>
+                </button>
+              )}
+
+              {onSaveAndPrint && (
+                <button
+                  type="button"
+                  onClick={onSaveAndPrint}
+                  className="order-1 sm:order-3 w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-xl shadow-emerald-950/60"
+                  title="حفظ وطباعة الروشتة فوراً"
+                >
+                  <Printer className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate">طباعة الروشتة</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

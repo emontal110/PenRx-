@@ -131,7 +131,7 @@ export function SubscriptionExpiryBanner() {
   return (
     <div
       dir="rtl"
-      className={`relative z-30 mb-4 rounded-2xl border shadow-2xl overflow-hidden transition-all animate-in slide-in-from-top-3 duration-300 ${
+      className={`no-print print:!hidden relative z-30 mb-4 rounded-2xl border shadow-2xl overflow-hidden transition-all animate-in slide-in-from-top-3 duration-300 ${
         isUrgent
           ? "bg-gradient-to-r from-rose-950/95 via-slate-950 to-rose-950/95 border-rose-500/60 shadow-rose-950/50 ring-1 ring-rose-500/30"
           : "bg-gradient-to-r from-amber-950/90 via-slate-950 to-amber-950/90 border-amber-500/50 shadow-amber-950/40"
