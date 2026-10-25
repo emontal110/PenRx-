@@ -1,10 +1,10 @@
 {
-  "version": "1.53",
-  "versionCode": 54,
+  "version": "1.54",
+  "versionCode": 55,
   "releaseDate": "2026-10-25",
   "appName": "PenRX+",
   "githubRepo": "emontal110/PenRx-",
   "releaseNotes": "PenRX+ Official Automated Release",
-  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.53/PenRX+-Setup.exe",
-  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.53/PenRX+.apk"
+  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.54/PenRX+-Setup.exe",
+  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.54/PenRX+.apk"
 }

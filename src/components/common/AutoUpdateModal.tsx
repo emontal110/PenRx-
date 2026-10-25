@@ -301,7 +301,7 @@ export function AutoUpdateModal() {
       if (typeof w?.penrxDesktop?.downloadDifferentialUpdate === "function") {
         try {
           const diffRes = await w.penrxDesktop.downloadDifferentialUpdate();
-          if (diffRes?.success) {
+          if (diffRes?.success || diffRes?.alreadyDownloaded) {
             return;
           }
           if (diffRes?.error && diffRes.error !== "AutoUpdater not available") {

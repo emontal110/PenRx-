@@ -691,6 +691,22 @@ ipcMain.handle("download-differential-update", async () => {
       }
       console.log(`[PenRX+ AutoUpdater] Downloading differential update v${cachedUpdateInfo.version}...`);
       await autoUpdater.downloadUpdate();
+
+      // In some GitHub release cases electron-updater resolves the Promise before the
+      // final update-downloaded event is emitted or before the installer path is stored.
+      // Mark it as downloaded immediately so the fallback full installer path cannot start.
+      if (autoUpdater.downloadedUpdateFile) {
+        downloadedInstallerPath = autoUpdater.downloadedUpdateFile;
+      }
+      updateDownloadedSuccessfully = true;
+      isUpdateDownloading = false;
+
+      setTimeout(() => {
+        if (!isQuittingForInstall) {
+          performQuitAndInstall(downloadedInstallerPath);
+        }
+      }, 1200);
+
       return { success: true, updateInfo: cachedUpdateInfo };
     } catch (err) {
       isUpdateDownloading = false;
@@ -837,9 +853,15 @@ function downloadFileWithRedirects(url, destPath, onProgress, maxRedirects = 6) 
 
 // IPC handler: fallback direct download & silent install
 ipcMain.handle("download-and-install-update", async (_event, downloadUrl) => {
-  if (updateDownloadedSuccessfully && downloadedInstallerPath) {
-    setTimeout(() => performQuitAndInstall(downloadedInstallerPath), 300);
-    return { success: true };
+  if (updateDownloadedSuccessfully || isUpdateDownloading) {
+    if (downloadedInstallerPath) {
+      setTimeout(() => {
+        if (!isQuittingForInstall) {
+          performQuitAndInstall(downloadedInstallerPath);
+        }
+      }, 300);
+    }
+    return { success: true, alreadyHandled: true };
   }
 
   const targetUrl =
