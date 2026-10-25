@@ -40,6 +40,7 @@ let isUpdateDownloading = false;
 let updateDownloadedSuccessfully = false;
 let downloadedInstallerPath = null;
 let isQuittingForInstall = false;
+let isInstallQueuedForLaunch = false;
 
 try {
   const electronUpdater = require("electron-updater");
@@ -124,9 +125,22 @@ try {
 }
 
 // Centralized, mutex-protected silent installation & auto-relaunch handler
+function queueInstallAfterDownload(customInstallerPath = null) {
+  if (isInstallQueuedForLaunch || isQuittingForInstall) return;
+  isInstallQueuedForLaunch = true;
+
+  const installerPath = customInstallerPath || downloadedInstallerPath;
+  setTimeout(() => {
+    if (!isQuittingForInstall) {
+      performQuitAndInstall(installerPath);
+    }
+  }, 1500);
+}
+
 function performQuitAndInstall(customInstallerPath = null) {
   if (isQuittingForInstall) return;
   isQuittingForInstall = true;
+  isInstallQueuedForLaunch = false;
 
   console.log("[PenRX+ AutoUpdater] Executing silent update installation & automatic restart...");
 
@@ -479,9 +493,13 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
 
     // ── OPEN NATIVE WHATSAPP DESKTOP APP (NOT WEB) ──
     // Priority 1: whatsapp:// URI scheme → opens WhatsApp Desktop app directly to patient chat
-    // Priority 2: Fallback to api.whatsapp.com if app is not installed (opens browser)
-    const whatsappNativeUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=`;
-    const whatsappWebFallback = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}`;
+    // Priority 2: Fallback to wa.me if WhatsApp Desktop is not installed (opens browser)
+    const whatsappNativeUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(
+      `📋 الروشتة الطبية - ${fileName}`
+    )}`;
+    const whatsappWebFallback = `https://wa.me/${encodeURIComponent(cleanPhone)}?text=${encodeURIComponent(
+      `📋 الروشتة الطبية - ${fileName}`
+    )}`;
 
     let openedNative = false;
     if (process.platform === "win32") {
@@ -634,12 +652,8 @@ if (autoUpdater) {
         message: "جارٍ تثبيت التحديث الآن...",
       });
     }
-    // Launch the real Windows installer to show the genuine install progress UI.
-    setTimeout(() => {
-      if (!isQuittingForInstall) {
-        performQuitAndInstall(downloadedInstallerPath);
-      }
-    }, 1500);
+    // Launch the real Windows installer only once to avoid duplicate update install attempts.
+    queueInstallAfterDownload(downloadedInstallerPath);
   });
 
   autoUpdater.on("error", (err) => {
@@ -698,11 +712,7 @@ ipcMain.handle("download-differential-update", async () => {
       updateDownloadedSuccessfully = true;
       isUpdateDownloading = false;
 
-      setTimeout(() => {
-        if (!isQuittingForInstall) {
-          performQuitAndInstall(downloadedInstallerPath);
-        }
-      }, 1200);
+      queueInstallAfterDownload(downloadedInstallerPath);
 
       return { success: true, updateInfo: cachedUpdateInfo };
     } catch (err) {
@@ -1343,7 +1353,7 @@ app.whenReady().then(() => {
     nativeTheme.themeSource = "dark";
   }
 
-  // Auto clean HTTP/ServiceWorker cache (preserving localStorage) on version upgrade
+  // Auto clean HTTP/ServiceWorker cache on version upgrade without deleting localStorage data.
   try {
     const lastVersionFile = path.join(app.getPath("userData"), "last-version.txt");
     let lastVersion = "";
@@ -1352,11 +1362,12 @@ app.whenReady().then(() => {
     }
     const currentVersion = app.getVersion();
     if (lastVersion && lastVersion !== currentVersion) {
-      console.log(`[PenRX+ Electron] App updated from v${lastVersion} to v${currentVersion}. Cleaning HTTP cache...`);
+      console.log(`[PenRX+ Electron] App updated from v${lastVersion} to v${currentVersion}. Cleaning HTTP and app caches...`);
       if (session.defaultSession) {
         session.defaultSession.clearCache().catch(() => {});
         session.defaultSession.clearStorageData({
-          storages: ["appcache", "serviceworkers", "cachestorage"],
+          storages: ["appcache", "serviceworkers", "cachestorage", "filesystem", "shadercache", "websql"],
+          quotas: ["temporary"],
         }).catch(() => {});
       }
     }

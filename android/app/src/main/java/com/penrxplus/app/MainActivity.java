@@ -392,16 +392,23 @@ public class MainActivity extends BridgeActivity {
                                 sendIntent.putExtra(Intent.EXTRA_TEXT, caption.trim());
                             }
                             if (!digitsOnly.isEmpty()) {
-                                // Direct WhatsApp JID targeting: opens patient's conversation directly with the file attached!
+                                // Direct WhatsApp JID targeting: opens the patient's conversation directly with the file attached.
                                 sendIntent.putExtra("jid", digitsOnly + "@s.whatsapp.net");
                             }
                             sendIntent.setClipData(ClipData.newRawUri("", contentUri));
+                            sendIntent.addCategory(Intent.CATEGORY_DEFAULT);
                             sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
 
                             if (targetPackage != null) {
                                 sendIntent.setPackage(targetPackage);
                                 grantUriPermission(targetPackage, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                startActivity(sendIntent);
+                                if (getPackageManager().resolveActivity(sendIntent, 0) != null) {
+                                    startActivity(sendIntent);
+                                } else {
+                                    Intent chooser = Intent.createChooser(sendIntent, "إرسال الروشتة عبر واتساب");
+                                    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                    startActivity(chooser);
+                                }
                             } else {
                                 Intent chooser = Intent.createChooser(sendIntent, "إرسال الروشتة عبر واتساب");
                                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);

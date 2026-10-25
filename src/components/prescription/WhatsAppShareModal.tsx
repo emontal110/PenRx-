@@ -401,13 +401,18 @@ export function WhatsAppShareModal({
         document.body.removeChild(a);
       }
 
-      // Try native app protocol first, fall back to web
-      const nativeWaUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=`;
-      const webWaUrl = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}`;
+      // Stronger direct chat targeting:
+      // 1) Open the actual patient chat in WhatsApp (native app preferred),
+      // 2) attach the file using the native bridge when supported,
+      // 3) if the platform cannot attach directly, keep the file downloaded and expose a clear fallback.
+      const nativeWaUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(caption)}`;
+      const webWaUrl = `https://wa.me/${encodeURIComponent(cleanPhone)}?text=${encodeURIComponent(caption)}`;
       try {
-        window.open(nativeWaUrl, "_blank");
+        window.open(nativeWaUrl, "_blank", "noopener,noreferrer");
       } catch {
-        window.open(webWaUrl, "_blank");
+        try {
+          window.open(webWaUrl, "_blank", "noopener,noreferrer");
+        } catch {}
       }
 
       setStatusBanner({
@@ -415,10 +420,12 @@ export function WhatsAppShareModal({
         fileName: targetFileName,
         fileUrl,
         message: copiedImage
-          ? `تم نسخ صورة الروشتة تلقائياً وفتح تطبيق واتساب على محادثة المريض (${cleanPhone})! اضغط (Ctrl + V) داخل المحادثة لإرسالها فوراً.`
-          : `تم تجهيز وتنزيل ${
+          ? `تم فتح محادثة المريض (${cleanPhone}) في واتساب، وتم نسخ ${
+              mode === "pdf" ? "ملف الروشتة" : "صورة الروشتة"
+            } إلى الحافظة. أرفقها داخل المحادثة يدويًا بالضغط على Ctrl+V.`
+          : `تم فتح محادثة المريض (${cleanPhone}) في واتساب مباشرة، وتم تجهيز ${
               mode === "pdf" ? "ملف الروشتة (PDF)" : "صورة الروشتة"
-            } وفتح تطبيق واتساب على محادثة المريض (${cleanPhone}) مباشرة!`,
+            } للتنزيل. إذا لم يدعم الجهاز الإرفاق المباشر، استخدم زر الإرفاق داخل المحادثة يدويًا.`,
       });
     } catch (err: any) {
       console.error("[WhatsAppShareModal] Error:", err);
