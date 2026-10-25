@@ -31,8 +31,16 @@ jobs:
 
       - name: Configure Android SDK
         run: |
-          echo "ANDROID_HOME=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}" >> $GITHUB_ENV
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          export PATH="$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          if [ -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | sdkmanager --licenses >/dev/null
+            sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          else
+            echo "sdkmanager not found in expected path; continuing with installed SDK defaults"
+          fi
 
       - name: Install Dependencies
         run: npm install --no-audit
@@ -76,7 +84,8 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'penrx123456' }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew --version
+          ./gradlew clean assembleRelease -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon --stacktrace
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
