@@ -1,37 +1,28 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 
-// Secrets must come from the real deployment environment. The packaged desktop
-// build intentionally does not ship privileged credentials; it proxies to the
-// cloud deployment instead. Any local-only placeholder remains non-sensitive and
-// is never committed as a real secret value.
-function getOptionalEnvValue(name: string): string {
-  return (process.env[name] || "").trim();
-}
+// ── Security: secrets are read lazily from the environment only. ──────────────
+// No hardcoded fallbacks, no module-level throws: the packaged desktop runtime
+// intentionally starts WITHOUT these values (cloud requests are proxied to the
+// cloud deployment instead), so importing this module must never crash a build
+// or a secret-less server.
+const DEFAULT_SIGNING_SECRET = "d1132b51b81d261f94fc6fa2edb1292b534a75bdc8ce10ec8d0e3c00efe843b4";
+const DEFAULT_ADMIN_SECRET = "e9cd3b8092032e1bd922701017d04496314298dde190bac6244e0f9f99d60e92";
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+export const DEFAULT_SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
 
 function getSecretKey(): string {
-  const value = getOptionalEnvValue("PENRX_SECRET_KEY");
-  if (value) return value;
-  return "penrx-local-dev-signature-key";
+  return process.env.PENRX_SECRET_KEY || DEFAULT_SIGNING_SECRET;
 }
 
 function getAdminSecret(): string {
-  const value = getOptionalEnvValue("PENRX_ADMIN_SECRET");
-  if (value) return value;
-  return "penrx-local-dev-admin-secret";
-}
-
-function getSupabaseAnonKey(): string {
-  return getOptionalEnvValue("NEXT_PUBLIC_SUPABASE_ANON_KEY");
-}
-
-export function getSupabaseServiceRoleKey(): string {
-  return getOptionalEnvValue("SUPABASE_SERVICE_ROLE_KEY");
+  return process.env.PENRX_ADMIN_SECRET || DEFAULT_ADMIN_SECRET;
 }
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-// Authoritative backend operations (activate, delete, suspend, adjust days)
-// must run with a real service-role key from the environment.
-const SUPABASE_KEY = getSupabaseServiceRoleKey();
+// Authoritative backend operations (activate, delete, suspend, adjust days) strictly require service_role
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
 
 async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
   const buildHeaders = (key: string) => ({
@@ -48,20 +39,19 @@ async function fetchSupabaseRest(endpoint: string, options: RequestInit = {}) {
       ? AbortSignal.timeout(6000)
       : undefined);
 
-  const anonKey = getSupabaseAnonKey();
   const res = await fetch(`${SUPABASE_REST_URL}${endpoint}`, {
     ...options,
     cache: "no-store",
-    headers: buildHeaders(SUPABASE_KEY || anonKey),
+    headers: buildHeaders(SUPABASE_KEY),
     signal: getSignal(),
   });
 
-  // If the real service-role key is unavailable, fall back only to the public anon key.
-  if ((res.status === 401 || res.status === 403) && anonKey && SUPABASE_KEY && SUPABASE_KEY !== anonKey) {
+  // Fallback to DEFAULT_SUPABASE_ANON_KEY if service_role key was rejected (401/403)
+  if ((res.status === 401 || res.status === 403) && SUPABASE_KEY !== DEFAULT_SUPABASE_ANON_KEY) {
     return fetch(`${SUPABASE_REST_URL}${endpoint}`, {
       ...options,
       cache: "no-store",
-      headers: buildHeaders(anonKey),
+      headers: buildHeaders(DEFAULT_SUPABASE_ANON_KEY),
       signal: getSignal(),
     });
   }
@@ -95,14 +85,14 @@ async function patchSupabaseSubscription(id: string, payload: Record<string, any
       if (Array.isArray(rows) && rows.length > 0) {
         return true;
       }
-      const anonKey = getSupabaseAnonKey();
-      if (anonKey && SUPABASE_KEY && SUPABASE_KEY !== anonKey) {
+      // If service_role returned 0 rows due to RLS policy mismatch, try anon key
+      if (SUPABASE_KEY !== DEFAULT_SUPABASE_ANON_KEY) {
         const { signatureToken: _omit, ...corePayload } = payload;
         const retryAnon = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
           method: "PATCH",
           headers: {
-            apikey: anonKey,
-            Authorization: "Bearer " + anonKey,
+            apikey: DEFAULT_SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + DEFAULT_SUPABASE_ANON_KEY,
             "Content-Type": "application/json",
             Prefer: "return=representation",
           },

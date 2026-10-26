@@ -1,5 +1,5 @@
 import { SavedPrescription } from "@/store/usePrescriptionStore";
-import { getSupabaseServiceRoleKey } from "@/lib/subscriptionManager";
+import { DEFAULT_SUPABASE_SERVICE_ROLE_KEY } from "@/lib/subscriptionManager";
 
 export interface ClinicMetaInfo {
   name?: string;
@@ -10,7 +10,10 @@ export interface ClinicMetaInfo {
 }
 
 const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || getSupabaseServiceRoleKey();
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
 
 const supabaseHeaders = {
   apikey: SUPABASE_KEY,

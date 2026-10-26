@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="scroll-smooth overflow-x-hidden">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PenRX+&lrm; | المنظومة الطبية الذكية لإدارة العيادات والروشتات الإلكترونية</title>
+  <meta name="description" content="حمّل منظومة PenRX+&lrm; الطبية المتطورة للكمبيوتر والهاتف المحمول. محرك بحث دوائي يبحث في أكثر من مليون صنف ومستحضر، تحذيرات التداخلات بالذكاء الاصطناعي، ومزامنة سحابية آمنة." />
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="icon" type="image/jpeg" href="logo-penrx.jpg" />
+
+  <!-- Google Fonts: Cairo & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+            outfit: ['Outfit', 'sans-serif'],
+          },
+          colors: {
+            slate: {
+              950: '#070b14',
+              900: '#0c1322',
+              850: '#111a2e',
+              800: '#17233d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #070b14;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    .glass-card {
+      background: rgba(12, 19, 34, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-card-hover {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-card-hover:hover {
+      transform: translateY(-4px);
+      border-color: rgba(16, 185, 129, 0.35);
+      box-shadow: 0 20px 40px -15px rgba(16, 185, 129, 0.15);
+    }
+    .glow-emerald {
+      box-shadow: 0 0 50px -10px rgba(16, 185, 129, 0.35);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 50px -10px rgba(6, 182, 212, 0.35);
+    }
+    .mesh-gradient {
+      background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.15) 0%, transparent 60%),
+                  radial-gradient(circle at 10% 30%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
+                  radial-gradient(circle at 90% 70%, rgba(16, 185, 129, 0.08) 0%, transparent 50%);
+    }
+    @keyframes pulseSlow {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.05); }
+    }
+    .ambient-glow {
+      animation: pulseSlow 8s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen relative selection:bg-emerald-500 selection:text-slate-950 overflow-x-hidden w-full">
+
+  <!-- Ambient Light Orbs -->
+  <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+    <div class="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/20 rounded-full blur-[120px] ambient-glow"></div>
+    <div class="absolute top-1/2 -left-40 w-96 h-96 bg-cyan-500/15 rounded-full blur-[140px] ambient-glow" style="animation-delay: 3s;"></div>
+    <div class="absolute -bottom-40 right-1/3 w-96 h-96 bg-teal-500/15 rounded-full blur-[130px] ambient-glow" style="animation-delay: 5s;"></div>
+  </div>
+
+  <div class="relative z-10 flex flex-col min-h-screen">
+    
+    <!-- Navigation Bar -->
+    <header class="sticky top-0 z-50 glass-card border-b border-slate-800/80">
+      <div class="max-w-6xl mx-auto px-3.5 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-2">
+        
+        <!-- Brand Logo & Name -->
+        <div class="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+          <div class="relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl p-0.5 shadow-xl shadow-emerald-950/60 border border-emerald-500/40 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0">
+            <img
+              src="logo-penrx.jpg"
+              onerror="if(!this.dataset.retry){this.dataset.retry=1;this.src='docs/logo-penrx.jpg';}else if(this.dataset.retry=='1'){this.dataset.retry=2;this.src='public/logo-penrx.jpg';}else if(this.dataset.retry=='2'){this.dataset.retry=3;this.src='./logo-penrx.jpg';}"
+              alt="PenRX+ Official Logo"
+              class="w-full h-full object-cover rounded-[10px] sm:rounded-[14px]"
+            />
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 sm:gap-2" dir="ltr">
+              <span class="font-black text-lg sm:text-2xl text-white tracking-tight font-outfit inline-flex items-center select-none" dir="ltr">
+                PenRX<span class="text-emerald-400 font-extrabold leading-none">+</span>
+              </span>
+              <span class="app-pkg-version text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-outfit">v1.37</span>
+            </div>
+            <p class="text-[10px] sm:text-[11px] text-slate-400 font-semibold hidden md:block truncate">منظومة الروشتة الطبية الذكية وإدارة العيادات</p>
+          </div>
+        </div>
+
+        <!-- Quick Action Nav (Single sleek responsive button) -->
+        <div class="flex items-center gap-2 shrink-0">
+          <a
+            href="#download-section"
+            class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs sm:text-sm font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+            title="الانتقال إلى خيارات التنزيل"
+          >
+            <i data-lucide="download-cloud" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0"></i>
+            <span>صفحة التنزيلات</span>
+          </a>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- Hero Section -->
+    <main class="flex-1">
+      <section class="max-w-5xl mx-auto px-4 sm:px-6 pt-8 sm:pt-14 pb-8 sm:pb-12 text-center">
+        
+        <!-- Live Status Pill (Linked to package.json version) -->
+        <div class="inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] sm:text-xs font-bold mb-5 sm:mb-6 max-w-full">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-ping"></span>
+          <span class="truncate">الإصدار الرسمي <span class="app-pkg-version font-mono font-bold">v1.37</span> متاح الآن للتحميل المباشر</span>
+        </div>
+
+        <!-- Main Title -->
+        <h1 class="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-snug sm:leading-tight mb-4 sm:mb-6">
+          العيادة الذكية بين يديك<br />
+          <span class="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+            أسرع روشتة طبية إلكترونية
+          </span>
+        </h1>
+
+        <p class="text-xs sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed mb-8 sm:mb-10 font-medium px-2">
+          صُممت خصيصاً لتوفير وقت الطبيب؛ كتابة وطباعة الروشتة في ثوانٍ معدودة، تنبيهات التداخلات الدوائية بالذكاء الاصطناعي، وتعمل بكفاءة تامة دون الحاجة لإنترنت.
+        </p>
+
+        <!-- Direct Download Cards Anchor -->
+        <div id="download-section" class="scroll-mt-24 pt-4">
+          
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6 max-w-6xl mx-auto text-right">
+            
+            <!-- WINDOWS DESKTOP CARD -->
+            <div id="card-windows" class="glass-card glass-card-hover rounded-3xl p-6 sm:p-7 border border-slate-800 relative overflow-hidden flex flex-col justify-between">
+              <div class="absolute -top-16 -left-16 w-32 h-32 bg-cyan-500/10 rounded-full blur-xl pointer-events-none"></div>
+              
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <div class="w-13 h-13 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-950/40">
+                    <svg class="w-7 h-7 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M0 3.449L9.75 2.1v9.451H0V3.449zm10.949-9.602L24 0v11.4H10.949V2.247zM0 12.6h9.75v9.451L0 20.699V12.6zm10.949 0H24V24l-13.051-1.8V12.6z"/>
+                    </svg>
+                  </div>
+                  <span class="text-[11px] font-bold px-3 py-1 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                    كمبيوتر العيادة • Windows
+                  </span>
+                </div>
+
+                <h3 class="text-xl sm:text-2xl font-black text-white mb-2">برنامج الكمبيوتر للويندوز</h3>
+                <p class="text-xs sm:text-sm text-slate-400 leading-relaxed mb-5 font-medium">
+                  نسخة سطح المكتب المتكاملة لأجهزة العيادة والمستشفى. طباعة مباشرة A4 / A5 وتوافق مع كافة الطابعات.
+                </p>
+
+                <!-- Specs -->
+                <div class="space-y-2 text-xs text-slate-300 mb-6">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400 shrink-0"></i>
+                    <span>متوافق مع Windows 10 و 11 (64-bit)</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400 shrink-0"></i>
+                    <span>محرك بحث ذكي مدمج (+200,000 دواء ومستحضر) وتحديث صامت تلقائي</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-cyan-400 shrink-0"></i>
+                    <span>تعبئة ذكية للجرعات وتثبيت بنقرة واحدة بدون إنترنت</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <!-- DIRECT DOWNLOAD BUTTON (WINDOWS) -->
+                <a
+                  id="btn-download-windows"
+                  href="https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe"
+                  download
+                  class="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-black text-sm sm:text-base hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-cyan-950/60 flex items-center justify-center gap-2.5 cursor-pointer group"
+                >
+                  <svg class="w-5 h-5 text-slate-950 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M0 3.449L9.75 2.1v9.451H0V3.449zm10.949-9.602L24 0v11.4H10.949V2.247zM0 12.6h9.75v9.451L0 20.699V12.6zm10.949 0H24V24l-13.051-1.8V12.6z"/>
+                  </svg>
+                  <span>تحميل مباشر للويندوز (.exe)</span>
+                </a>
+                <p class="text-[11px] text-slate-500 text-center mt-2.5 font-medium">
+                  تنزيل مباشر وسريع من سيرفرات GitHub
+                </p>
+              </div>
+
+            </div>
+
+            <!-- ANDROID MOBILE CARD -->
+            <div id="card-android" class="glass-card glass-card-hover rounded-3xl p-6 sm:p-7 border border-slate-800 relative overflow-hidden flex flex-col justify-between">
+              <div class="absolute -top-16 -left-16 w-32 h-32 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <div class="w-13 h-13 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-950/40">
+                    <svg class="w-7 h-7 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.412 13.8533 8.1 12 8.1s-3.5902.312-5.1368.8497L4.8409 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/>
+                    </svg>
+                  </div>
+                  <span class="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    الهاتف والتابلت • Android 🤖
+                  </span>
+                </div>
+
+                <h3 class="text-xl sm:text-2xl font-black text-white mb-2">تطبيق الهاتف (أندرويد)</h3>
+                <p class="text-xs sm:text-sm text-slate-400 leading-relaxed mb-5 font-medium">
+                  احمل عيادتك في جيبك؛ روشتات، وسجلات المرضى، ومشاركة الروشتة مباشرة للمريض PDF عبر واتساب.
+                </p>
+
+                <!-- Specs -->
+                <div class="space-y-2 text-xs text-slate-300 mb-6">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 shrink-0"></i>
+                    <span>متوافق مع هواتف وتابلت أندرويد (Android 8.0+)</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 shrink-0"></i>
+                    <span>بنك أدوية فائق السرعة (+200,000 دواء) وتعبئة ذكية للجرعات</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 shrink-0"></i>
+                    <span>إرسال الروشتة للمريض PDF عبر واتساب ومزامنة فورية</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <!-- DIRECT DOWNLOAD BUTTON (ANDROID) -->
+                <a
+                  id="btn-download-android"
+                  href="https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
+                  download
+                  class="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-slate-950 font-black text-sm sm:text-base hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2.5 cursor-pointer group"
+                >
+                  <svg class="w-5 h-5 text-slate-950 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.412 13.8533 8.1 12 8.1s-3.5902.312-5.1368.8497L4.8409 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/>
+                  </svg>
+                  <span>تحميل مباشر للأندرويد (.apk)</span>
+                </a>
+                <div class="flex items-center justify-center gap-2 mt-2.5">
+                  <button
+                    type="button"
+                    onclick="toggleQrModal()"
+                    class="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+                    <span>أو امسح رمز الـ QR بكاميرا هاتفك</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- APPLE IOS / IPHONE CARD -->
+            <div id="card-ios" class="glass-card glass-card-hover rounded-3xl p-6 sm:p-7 border border-slate-800 relative overflow-hidden flex flex-col justify-between">
+              <div class="absolute -top-16 -left-16 w-32 h-32 bg-amber-500/10 rounded-full blur-xl pointer-events-none"></div>
+
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <div class="w-13 h-13 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-100 shadow-lg shadow-slate-950/40">
+                    <svg class="w-7 h-7 text-slate-100 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.64-.78 1.08-1.86.96-2.95-1 .04-2.18.66-2.83 1.43-.58.67-1.09 1.77-.95 2.83 1.11.09 2.21-.57 2.82-1.31z"/>
+                    </svg>
+                  </div>
+                  <span class="text-[11px] font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-200 border border-slate-700">
+                    هواتف الآيفون • Apple iOS
+                  </span>
+                </div>
+
+                <h3 class="text-xl sm:text-2xl font-black text-white mb-2">تطبيق الآيفون والآيباد</h3>
+                <p class="text-xs sm:text-sm text-slate-400 leading-relaxed mb-4 font-medium">
+                  يعمل كتطبيق كامل ومستقل على شاشة الآيفون مع حفظ السجلات والمزامنة دون الحاجة لملفات تثبيت.
+                </p>
+
+                <!-- 3 Quick Steps on iPhone -->
+                <div class="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 space-y-2 text-xs text-slate-300 mb-6">
+                  <div class="font-bold text-amber-300 text-[11px] flex items-center gap-1.5 pb-1 border-b border-slate-800">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <span>خطوات التثبيت للآيفون بنقرتين:</span>
+                  </div>
+                  <div class="flex items-start gap-2 text-[11px] text-slate-300">
+                    <span class="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                    <span>افتح الرابط في متصفح <strong>Safari</strong> على الآيفون.</span>
+                  </div>
+                  <div class="flex items-start gap-2 text-[11px] text-slate-300">
+                    <span class="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                    <span>اضغط على أيقونة <strong>المشاركة (Share ⬆️)</strong> بالأسفل.</span>
+                  </div>
+                  <div class="flex items-start gap-2 text-[11px] text-slate-300">
+                    <span class="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                    <span>اختر <strong>"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</strong>.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <!-- ACTION BUTTON (IOS) -->
+                <button
+                  type="button"
+                  onclick="toggleIosGuideModal()"
+                  class="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 font-black text-sm sm:text-base hover:brightness-110 active:scale-95 transition-all shadow-xl shadow-amber-950/60 flex items-center justify-center gap-2 cursor-pointer group"
+                >
+                  <svg class="w-5 h-5 text-slate-950 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.64-.78 1.08-1.86.96-2.95-1 .04-2.18.66-2.83 1.43-.58.67-1.09 1.77-.95 2.83 1.11.09 2.21-.57 2.82-1.31z"/>
+                  </svg>
+                  <span>دليل تثبيت الآيفون بالصور 📲</span>
+                </button>
+                <div class="flex items-center justify-center gap-2 mt-2.5">
+                  <button
+                    type="button"
+                    onclick="toggleIosGuideModal()"
+                    class="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+                    <span>امسح الرمز لفتحه فوراً على الآيفون</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- 3-Step Setup Guide Section -->
+      <section class="max-w-4xl mx-auto px-4 sm:px-6 py-14 border-t border-slate-800/80">
+        <div class="text-center mb-10">
+          <span class="text-emerald-400 font-black text-xs tracking-wider uppercase">سهولة تامة</span>
+          <h2 class="text-2xl sm:text-3xl font-black text-white mt-1">كيف تبدأ العمل على <span dir="ltr" class="inline-block font-outfit">PenRX+</span> في دقيقة واحدة؟</h2>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 text-right">
+          
+          <div class="glass-card rounded-2xl p-6 border border-slate-800 relative">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-black font-outfit text-lg flex items-center justify-center mb-4">
+              1
+            </div>
+            <h4 class="font-bold text-white text-base mb-1.5">تنزيل وتثبيت البرنامج</h4>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              حمّل النسخة المتوافقة مع جهازك (كمبيوتر ويندوز، هاتف أندرويد، أو آيفون) وافتح البرنامج بنقرة واحدة.
+            </p>
+          </div>
+
+          <div class="glass-card rounded-2xl p-6 border border-slate-800 relative">
+            <div class="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400 font-black font-outfit text-lg flex items-center justify-center mb-4">
+              2
+            </div>
+            <h4 class="font-bold text-white text-base mb-1.5">اختيار الباقة وطريقة الدفع</h4>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              اختر باقتك المفضلة (أو التجربة المجانية 30 يوماً)، وحوّل المبلغ بسهولة عبر فودافون كاش أو انستاباي إلى الرقم الموضح داخل صفحة الدفع.
+            </p>
+          </div>
+
+          <div class="glass-card rounded-2xl p-6 border border-slate-800 relative">
+            <div class="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-black font-outfit text-lg flex items-center justify-center mb-4">
+              3
+            </div>
+            <h4 class="font-bold text-white text-base mb-1.5">تأكيد الطلب والتفعيل الفوري</h4>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              اكتب بيانات الطبيب والعيادة ورقم العملية (Ref ID) لتأكيد الاشتراك؛ يتم ربط جهازك وتفعيل اشتراكك فوراً لتبدأ العمل بكامل مميزات الذكاء الاصطناعي.
+            </p>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Key Advantages Grid: Comprehensive Feature Showcase -->
+      <section class="max-w-6xl mx-auto px-4 sm:px-6 py-14 border-t border-slate-800/80">
+        <div class="text-center mb-12">
+          <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/30 mb-3">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+            <span>منظومة متكاملة لا ينقصها شيء</span>
+          </div>
+          <h2 class="text-2xl sm:text-4xl font-black text-white">مميزات استثنائية صُممت للطبيب العصري</h2>
+          <p class="text-xs sm:text-sm text-slate-400 max-w-2xl mx-auto mt-2.5 font-medium leading-relaxed">
+            تم بناء كل تفصيلة في PenRX+ لتختصر وقت الكشف، وتضمن أقصى أمان للمريض، وتمنح عيادتك مظهراً طبياً متطوراً.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 text-right">
+          
+          <!-- 1. Drug Engine (1,000,000+ items across 5 tiers & Self-Evolving) -->
+          <div class="glass-card glass-card-hover rounded-3xl p-6 border border-slate-800/90 relative overflow-hidden flex flex-col justify-between">
+            <div class="absolute -top-12 -left-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mb-4 shadow-lg shadow-emerald-950/40">
+                <i data-lucide="sparkles" class="w-6 h-6 stroke-[2]"></i>
+              </div>
+              <div class="inline-block px-2.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 text-[10px] font-bold mb-2">
+                محرك ذاتي التطور • أكثر من مليون صنف
+              </div>
+              <h4 class="font-black text-white text-lg mb-2">محرك بحث ذكي يتطور ذاتياً (Self-Learning)</h4>
+              <p class="text-xs text-slate-400 leading-relaxed font-medium">
+                محرك هجين فائق السرعة يبحث في <strong>أكثر من 1,000,000 دواء ومستحضر</strong> و<strong>يتعلم تلقائياً من نمط وصفاتك</strong>؛ فيرفع الأدوية الأكثر استخداماً في عيادتك إلى صدارة النتائج، مع استيعاب فوري لأي دواء أو تركيبة جديدة ومزامنتها سحابياً ومحلياً فور كتابتها.
+              </p>
+            </div>
+            <div class="pt-4 mt-3 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] text-emerald-400 font-bold">
+              <i data-lucide="check" class="w-3.5 h-3.5"></i>
+              <span>يتعلم من تكرار وصفاتك ويرفع أدويتك المفضلة للمقدمة تلقائياً</span>
+            </div>
+          </div>
+
+          <!-- 2. AI Interaction Advisor -->
+          <div class="glass-card glass-card-hover rounded-3xl p-6 border border-slate-800/90 relative overflow-hidden flex flex-col justify-between">
+            <div class="absolute -top-12 -left-12 w-24 h-24 bg-teal-500/10 rounded-full blur-xl pointer-events-none"></div>
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-teal-500/15 border border-teal-500/30 text-teal-400 flex items-center justify-center mb-4 shadow-lg shadow-teal-950/40">
+                <i data-lucide="bot" class="w-6 h-6 stroke-[2]"></i>
+              </div>
+              <div class="inline-block px-2.5 py-0.5 rounded-md bg-teal-500/15 text-teal-300 text-[10px] font-bold mb-2">
+                ذكاء اصطناعي سريري
+              </div>
+              <h4 class="font-black text-white text-lg mb-2">مساعد الذكاء الاصطناعي وتعارض الأدوية</h4>
+              <p class="text-xs text-slate-400 leading-relaxed font-medium">
+                فاحص استباقي يحلل الروشتة في أجزاء من الثانية؛ لتنبيهك فوراً بأي تعارضات أو تفاعلات دوائية خطيرة (Drug-Drug Interactions) مع اقتراح البدائل والجرعات الآمنة تلقائياً.
+              </p>
+            </div>
+            <div class="pt-4 mt-3 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] text-teal-400 font-bold">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+              <span>أمان طبي كامل وتفادي الأخطاء الدوائية</span>
+            </div>
+          </div>
+
+          <!-- 3. Records & Archive -->
+          <div class="glass-card glass-card-hover rounded-3xl p-6 border border-slate-800/90 relative overflow-hidden flex flex-col justify-between">
+            <div class="absolute -top-12 -left-12 w-24 h-24 bg-cyan-500/10 rounded-full blur-xl pointer-events-none"></div>
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 flex items-center justify-center mb-4 shadow-lg shadow-cyan-950/40">
+                <i data-lucide="folder-clock" class="w-6 h-6 stroke-[2]"></i>
+              </div>
+              <div class="inline-block px-2.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 text-[10px] font-bold mb-2">
+                أرشيف العيادة الرقمي
+              </div>
+              <h4 class="font-black text-white text-lg mb-2">سجلات وأرشفة شاملة للمرضى والروشتات</h4>
+              <p class="text-xs text-slate-400 leading-relaxed font-medium">
+                سجل إلكتروني متكامل لكل مريض وتاريخ زياراته وتشخيصاته وأدويته؛ مع ميزة تكرار الروشتة السابقة (Re-order Rx) بنقرة واحدة لتوفير وقت إعادة الإدخال في الزيارات الدورية.
+              </p>
+            </div>
+            <div class="pt-4 mt-3 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] text-cyan-400 font-bold">
+              <i data-lucide="check" class="w-3.5 h-3.5"></i>
+              <span>بحث فوري برقم الهاتف أو اسم المريض أو التاريخ</span>
+            </div>
+          </div>
+
+          <!-- 4. WhatsApp Direct Sharing -->
+          <div class="glass-card glass-card-hover rounded-3xl p-6 border border-slate-800/90 relative overflow-hidden flex flex-col justify-between">
+            <div class="absolute -top-12 -left-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mb-4 shadow-lg shadow-emerald-950/40">
+                <i data-lucide="message-circle" class="w-6 h-6 stroke-[2]"></i>
+              </div>
+              <div class="inline-block px-2.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 text-[10px] font-bold mb-2">
+                تواصل سريع وعصري
+              </div>
+              <h4 class="font-black text-white text-lg mb-2">دعم الإرسال المباشر عبر واتساب</h4>
+              <p class="text-xs text-slate-400 leading-relaxed font-medium">
+                أرسل الروشتة الطبية المعتمدة للمريض بصيغة PDF أنيقة أو صورة عالية الوضوح مباشرة على محادثة واتساب بنقرة واحدة، دون الحاجة لحفظ رقم هاتف المريض في جهات اتصالك.
+              </p>
+            </div>
+            <div class="pt-4 mt-3 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] text-emerald-400 font-bold">
+              <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+              <span>روشتة رقمية واضحة لا تضيع من المريض أبداً</span>
+            </div>
+          </div>
+
+          <!-- 5. Advanced Printing -->
+          <div class="glass-card glass-card-hover rounded-3xl p-6 border border-slate-800/90 relative overflow-hidden flex flex-col justify-between">
+            <div class="absolute -top-12 -left-12 w-24 h-24 bg-blue-500/10 rounded-full blur-xl pointer-events-none"></div>
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center mb-4 shadow-lg shadow-blue-950/40">
+                <i data-lucide="printer" class="w-6 h-6 stroke-[2]"></i>
+              </div>
+              <div class="inline-block px-2.5 py-0.5 rounded-md bg-blue-500/15 text-blue-300 text-[10px] font-bold mb-2">
+                طباعة مرنة ومتطورة
+              </div>
+              <h4 class="font-black text-white text-lg mb-2">دعم طباعة فائق وتخصيص الهوامش</h4>
+              <p class="text-xs text-slate-400 leading-relaxed font-medium">
+                طباعة فورية متوافقة مع مقاسات A4 و A5 والطابعات الحرارية وطابعات الليزر؛ مع تحكم كامل بالهوامش العلوية والسفلية للطباعة المباشرة على ورق العيادة المطبوع مسبقاً (Letterhead).
+              </p>
+            </div>
+            <div class="pt-4 mt-3 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] text-blue-400 font-bold">
+              <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+              <span>ضبط الهوامش بالملليمتر وتفادي تداخل الترويسة</span>
+            </div>
+          </div>
+
+          <!-- 6. Custom Templates & Branch Branding -->
+          <div class="glass-card glass-card-hover rounded-3xl p-6 border border-slate-800/90 relative overflow-hidden flex flex-col justify-between">
+            <div class="absolute -top-12 -left-12 w-24 h-24 bg-purple-500/10 rounded-full blur-xl pointer-events-none"></div>
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center mb-4 shadow-lg shadow-purple-950/40">
+                <i data-lucide="layout-template" class="w-6 h-6 stroke-[2]"></i>
+              </div>
+              <div class="inline-block px-2.5 py-0.5 rounded-md bg-purple-500/15 text-purple-300 text-[10px] font-bold mb-2">
+                هوية بصرية فخمة
+              </div>
+              <h4 class="font-black text-white text-lg mb-2">قوالب روشتات وهوية المركز والفروع</h4>
+              <p class="text-xs text-slate-400 leading-relaxed font-medium">
+                اختر من بين تشكيلة من القوالب الطبية العصرية، مع تخصيص كامل للوجو العيادة، اسم الطبيب ودرجته العلمية، والتخصص، وعناوين الفروع المتعددة، ومواعيد العيادة مع رمز QR للتحقق.
+              </p>
+            </div>
+            <div class="pt-4 mt-3 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] text-purple-400 font-bold">
+              <i data-lucide="palette" class="w-3.5 h-3.5"></i>
+              <span>إظهار الفروع والمواعيد بلمسة أنيقة وجذابة</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 2 Secondary Pillar Highlights: Offline + Cloud Security -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5 text-right">
+          
+          <div class="glass-card rounded-3xl p-6 border border-slate-800/80 flex items-start gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+              <i data-lucide="wifi-off" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h4 class="font-black text-white text-base mb-1">العمل بكفاءة تامة بدون إنترنت (Offline-First)</h4>
+              <p class="text-xs text-slate-400 leading-relaxed">
+                العيادة لا تتوقف إطلاقاً؛ استمر في الكشف وكتابة وطباعة الروشتات حتى لو انقطعت شبكة الإنترنت أو السيرفرات دون أدنى بطء.
+              </p>
+            </div>
+          </div>
+
+          <div class="glass-card rounded-3xl p-6 border border-slate-800/80 flex items-start gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-950/40">
+              <svg class="w-6 h-6 stroke-[2] fill-none" viewBox="0 0 24 24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 16.2A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/>
+                <rect width="8" height="6" x="12" y="14" rx="1"/>
+                <path d="M14 14v-2a2 2 0 0 1 4 0v2"/>
+              </svg>
+            </div>
+            <div>
+              <h4 class="font-black text-white text-base mb-1">مزامنة سحابية خلفية وتشفير سيبراني</h4>
+              <p class="text-xs text-slate-400 leading-relaxed font-medium">
+                طابور مزامنة ذكي يحفظ الروشتات في السحابة فور توفر الإنترنت، وتأمين وحماية كاملة للبيانات برقم معرّف الجهاز (Device Security Fingerprint).
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="glass-card border-t border-slate-800/80 py-8 text-center text-xs text-slate-400">
+      <div class="max-w-5xl mx-auto px-4 space-y-2.5">
+        <p class="font-bold text-slate-300">
+          منظومة <span dir="ltr" class="inline-block text-white font-black font-outfit">PenRX+</span> الطبية المتكاملة • جميع الحقوق محفوظة © 2026
+        </p>
+        <p class="text-[11px] text-slate-500">
+          تطوير وإشراف هندسي طبي مخصص لدعم الأطباء والمراكز التخصصية
+        </p>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- QR CODE MODAL FOR MOBILE SCAN -->
+  <div id="qr-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="glass-card border-2 border-emerald-500/40 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center space-y-4 shadow-2xl relative">
+      <button
+        type="button"
+        onclick="toggleQrModal()"
+        class="absolute top-4 left-4 p-2 text-slate-400 hover:text-white rounded-xl bg-slate-900 border border-slate-800 transition-colors cursor-pointer"
+      >
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+
+      <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+        <i data-lucide="qr-code" class="w-6 h-6"></i>
+      </div>
+
+      <h3 class="text-lg font-black text-white">مسح الرمز للتحميل على هاتفك</h3>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        افتح كاميرا هاتفك المحمول ووجهها نحو الرمز لبدء تحميل تطبيق الأندرويد (.apk) مباشرة.
+      </p>
+
+      <!-- QR Canvas / Image -->
+      <div class="p-3 bg-white rounded-2xl inline-block shadow-inner mx-auto">
+        <img
+          id="qr-image"
+          src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Femontal110%2FPenRx-%2Freleases%2Flatest%2Fdownload%2FPenRX%2B.apk"
+          alt="QR Code to Download Android APK"
+          class="w-48 h-48 block rounded-lg"
+        />
+      </div>
+
+      <a
+        href="https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
+        download
+        class="block w-full py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold text-xs hover:bg-emerald-500/25 transition-all text-center"
+      >
+        أو انقر هنا لبدء التحميل مباشرة
+      </a>
+    </div>
+  </div>
+
+  <!-- IOS GUIDE MODAL -->
+  <div id="ios-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="glass-card border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 max-w-md w-full text-center space-y-4 shadow-2xl relative text-right">
+      <button
+        type="button"
+        onclick="toggleIosGuideModal()"
+        class="absolute top-4 left-4 p-2 text-slate-400 hover:text-white rounded-xl bg-slate-900 border border-slate-800 transition-colors cursor-pointer"
+      >
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+
+      <div class="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 text-slate-100 flex items-center justify-center mx-auto mb-1">
+        <svg class="w-6 h-6 text-slate-100 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.64-.78 1.08-1.86.96-2.95-1 .04-2.18.66-2.83 1.43-.58.67-1.09 1.77-.95 2.83 1.11.09 2.21-.57 2.82-1.31z"/>
+        </svg>
+      </div>
+
+      <div class="text-center">
+        <h3 class="text-lg sm:text-xl font-black text-white">تثبيت <span dir="ltr" class="inline-block font-outfit">PenRX+</span> على شاشة الآيفون</h3>
+        <p class="text-xs text-slate-400 mt-1">
+          بسبب قيود نظام Apple iOS، يتم تثبيت التطبيق بنقرتين ليعمل كتطبيق كامل ومستقل (PWA):
+        </p>
+      </div>
+
+      <!-- Steps Visual Container -->
+      <div class="space-y-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 text-xs text-slate-200">
+        
+        <div class="flex items-start gap-3">
+          <div class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center shrink-0 text-xs">
+            1
+          </div>
+          <div>
+            <span class="font-bold text-white block">افتح الرابط في متصفح Safari:</span>
+            <span class="text-[11px] text-slate-400">تأكد من فتح الرابط داخل متصفح سفاري الرسمي الخاص بالآيفون.</span>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3">
+          <div class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center shrink-0 text-xs">
+            2
+          </div>
+          <div>
+            <span class="font-bold text-white block">اضغط على زر المشاركة (Share ⬆️):</span>
+            <span class="text-[11px] text-slate-400">ستجده في الشريط السفلي للمتصفح بالمنتصف (أيقونة مربع به سهم للأعلى).</span>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3">
+          <div class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center shrink-0 text-xs">
+            3
+          </div>
+          <div>
+            <span class="font-bold text-white block">اختر "إضافة إلى الشاشة الرئيسية" (Add to Home Screen):</span>
+            <span class="text-[11px] text-slate-400">مرر للأسفل قليلاً ثم اضغط عليها ثم اضغط "إضافة (Add)".</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- QR Code for Desktop Visitors -->
+      <div class="p-3 bg-white rounded-2xl inline-block shadow-inner mx-auto text-center">
+        <img
+          src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=https%3A%2F%2Femontal110.github.io%2FPenRx-%2F"
+          alt="QR Code for iPhone"
+          class="w-36 h-36 block rounded-lg mx-auto"
+        />
+        <span class="text-[10px] text-slate-700 font-bold block pt-1.5">امسح الكود بكاميرا الآيفون لفتحه فوراً</span>
+      </div>
+
+      <button
+        type="button"
+        onclick="toggleIosGuideModal()"
+        class="block w-full py-2.5 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs hover:bg-amber-500/30 transition-all text-center cursor-pointer"
+      >
+        حسناً، فهمت الطريقة ✓
+      </button>
+
+    </div>
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // Toggle QR Code Modal (Android)
+    function toggleQrModal() {
+      const modal = document.getElementById('qr-modal');
+      if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    // Toggle iOS Guide Modal (iPhone)
+    function toggleIosGuideModal() {
+      const modal = document.getElementById('ios-modal');
+      if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    // Auto-highlight recommended version based on client user agent
+    (function detectDevice() {
+      const ua = navigator.userAgent || navigator.vendor || window.opera;
+      const isAndroid = /android/i.test(ua);
+      const isIos = /iphone|ipad|ipod/i.test(ua);
+      const isWindows = /windows/i.test(ua);
+
+      if (isIos) {
+        const iosCard = document.getElementById('card-ios');
+        if (iosCard) {
+          iosCard.classList.add('ring-2', 'ring-amber-400', 'shadow-2xl', 'shadow-amber-950/80');
+        }
+      } else if (isAndroid) {
+        const androidCard = document.getElementById('card-android');
+        if (androidCard) {
+          androidCard.classList.add('ring-2', 'ring-emerald-500', 'shadow-2xl', 'shadow-emerald-950/80');
+        }
+      } else if (isWindows) {
+        const windowsCard = document.getElementById('card-windows');
+        if (windowsCard) {
+          windowsCard.classList.add('ring-2', 'ring-cyan-500', 'shadow-2xl', 'shadow-cyan-950/80');
+        }
+      }
+    })();
+
+    // Dynamically sync and display version with package.json
+    async function syncVersionWithPackage() {
+      try {
+        const res = await fetch('package.json', { cache: 'no-store' });
+        if (res.ok) {
+          const pkg = await res.json();
+          if (pkg && pkg.version) {
+            const vStr = pkg.version.startsWith('v') ? pkg.version : 'v' + pkg.version;
+            document.querySelectorAll('.app-pkg-version').forEach(el => el.textContent = vStr);
+            document.querySelectorAll('.app-pkg-version-num').forEach(el => el.textContent = pkg.version);
+          }
+        }
+      } catch (err) {
+        // Fallback silently to static version
+      }
+    }
+    syncVersionWithPackage();
+  </script>
+</body>
+</html>
