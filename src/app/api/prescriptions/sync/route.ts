@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import {
   LeanCloudPrescription,
   LeanPrescriptionItem,
@@ -6,34 +5,30 @@ import {
   decompressPrescription,
 } from "@/lib/prescriptionSync";
 import {
-  getSubscriptionBySubscriberId,
-  validateAdminAuthorization,
-  machineOwnsSubscription,
-  DEFAULT_SUPABASE_SERVICE_ROLE_KEY,
-} from "@/lib/subscriptionManager";
-import {
-  savePrescriptionRelational,
   deletePrescriptionRelational,
+  savePrescriptionRelational,
 } from "@/lib/relationalStorage";
+import { apiError, apiJson, cleanSubscriberId, preflight, readJsonBody } from "@/lib/apiHttp";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
+import { readDeviceToken } from "@/lib/deviceAuth";
+import { isAdminRequest } from "@/lib/adminAuth";
+import { supabaseRest } from "@/lib/supabaseRest";
+import { getSubscriptionBySubscriberId, machineOwnsSubscription } from "@/lib/subscriptionService";
 
 export const dynamic = "force-dynamic";
 
-const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
+const TABLE = "CloudPrescription";
+const MAX_RECORDS = 300;
 
-// High-Speed Server In-Memory Cache (Multi-Tenant, Partitioned by Subscriber ID)
-const serverPrescriptionsCache = new Map<string, Map<string, LeanCloudPrescription>>();
-let lastCloudPurgeAt = 0;
+export async function OPTIONS(request: Request) {
+  return preflight(request);
+}
 
-/**
- * Minifies medication items before storing in Supabase JSONB to save 65%+ database space on the Free Tier
- */
+/** Minifies medication items before storing in JSONB to keep free-tier usage low. */
 function minifyItemsForDb(items: LeanPrescriptionItem[]): LeanPrescriptionItem[] {
   if (!Array.isArray(items)) return [];
-  return items.map((it) => {
+  return items.slice(0, 60).map((it) => {
     const out: LeanPrescriptionItem = { n: String(it.n || "").trim().slice(0, 120) };
     if (it.a && String(it.a).trim()) out.a = String(it.a).trim().slice(0, 120);
     if (it.q && String(it.q).trim() && String(it.q).trim() !== "1") out.q = String(it.q).trim().slice(0, 20);
@@ -45,322 +40,197 @@ function minifyItemsForDb(items: LeanPrescriptionItem[]): LeanPrescriptionItem[]
   });
 }
 
-/**
- * Purge records older than 365 days from the server cache and Supabase (throttled to once every 6 hours)
- */
-function purgeExpiredRecords(force = false): number {
-  const now = Date.now();
-  let purged = 0;
-
-  for (const [subId, rxMap] of serverPrescriptionsCache.entries()) {
-    for (const [rxId, rx] of rxMap.entries()) {
-      if (rx.arc) continue;
-      const rxTime = new Date(rx.ts).getTime();
-      if (!isNaN(rxTime) && now - rxTime > RETENTION_MS) {
-        rxMap.delete(rxId);
-        purged++;
-      }
-    }
-    if (rxMap.size === 0) {
-      serverPrescriptionsCache.delete(subId);
-    }
-  }
-
-  if (force || now - lastCloudPurgeAt > 6 * 60 * 60 * 1000) {
-    lastCloudPurgeAt = now;
-    try {
-      const minDate = new Date(now - RETENTION_MS).toISOString();
-      fetch(`${SUPABASE_REST_URL}/CloudPrescription?createdAt=lt.${encodeURIComponent(minDate)}`, {
-        method: "DELETE",
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }).catch(() => {});
-    } catch {}
-  }
-
-  return purged;
+function toLean(row: any): LeanCloudPrescription {
+  return {
+    id: row.id,
+    subId: row.subscriberId,
+    pNo: row.prescriptionNo,
+    bId: row.branchId || undefined,
+    bName: row.branchName || undefined,
+    pName: row.patientName,
+    pPhone: row.patientPhone || undefined,
+    pAge: row.patientAge || undefined,
+    pGen: row.patientGender || undefined,
+    diag: row.diagnosis || undefined,
+    notes: row.notes || undefined,
+    items: Array.isArray(row.itemsJson) ? row.itemsJson : [],
+    ts: row.createdAt,
+    arc: row.isArchived ? true : undefined,
+    arcAt: row.archivedAt || undefined,
+  } as LeanCloudPrescription;
 }
 
-// ===== GET: Retrieve prescriptions for a specific subscriber (Last 365 Days) =====
-export async function GET(request: Request) {
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/prescriptions/sync");
+/**
+ * Tenant gate. Access requires a device token minted by this server for an ACTIVE
+ * subscription; the subscription is re-read every call so suspension or expiry is
+ * enforced immediately, and the token's device must still belong to it.
+ */
+async function authorizeTenant(
+  request: Request
+): Promise<{ ok: true; subscriberId: string } | { ok: false; message: string; status: number }> {
+  const token = readDeviceToken(request);
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      message: "انتهت صلاحية رمز الجهاز. سيتم إعادة التحقق من الاشتراك تلقائياً.",
+    };
   }
+
+  const subscriberId = cleanSubscriberId(token.subscriberId);
+  if (!subscriberId) return { ok: false, status: 400, message: "معرّف مشترك غير صالح." };
+
+  const sub = await getSubscriptionBySubscriberId(subscriberId).catch(() => null);
+  if (!sub) return { ok: false, status: 403, message: "حساب المشترك غير مسجل." };
+  if (sub.status !== "ACTIVE") {
+    return { ok: false, status: 403, message: "الاشتراك موقوف أو منتهي. يرجى التجديد للوصول للسجلات السحابية." };
+  }
+  if (!machineOwnsSubscription(sub, token.machineId)) {
+    return { ok: false, status: 403, message: "هذا الجهاز غير مرتبط بحساب المشترك المطلوب." };
+  }
+
+  return { ok: true, subscriberId };
+}
+
+/** The doctor's own prescriptions inside the retention window, always read from PostgreSQL. */
+export async function GET(request: Request) {
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/prescriptions/sync");
 
   if (!checkRateLimit(request, { maxRequests: 30, windowMs: 60_000, prefix: "rx-sync-get" })) {
-    return rateLimitExceededResponse(60);
+    return rateLimitExceededResponse(request, 60);
   }
 
-  const { searchParams } = new URL(request.url);
-  const subscriberId = searchParams.get("subscriberId");
-  const machineId = searchParams.get("machineId");
+  const auth = await authorizeTenant(request);
+  if (!auth.ok) return apiError(request, auth.message, auth.status);
 
-  if (!subscriberId) {
-    return NextResponse.json(
-      { error: "subscriberId is required for multi-tenant isolation" },
-      { status: 400 }
-    );
+  const minDate = new Date(Date.now() - RETENTION_MS).toISOString();
+  let rows: any[] | null;
+  try {
+    rows = await supabaseRest<any[]>(TABLE, {
+      query:
+        `subscriberId=eq.${encodeURIComponent(auth.subscriberId)}` +
+        `&createdAt=gte.${encodeURIComponent(minDate)}` +
+        `&order=createdAt.desc&limit=${MAX_RECORDS}`,
+    });
+  } catch (err: any) {
+    console.error("[RxSync GET]", err?.message || err);
+    return apiError(request, "تعذر الوصول للسجلات السحابية حالياً.", 502);
   }
 
-  const sub = await getSubscriptionBySubscriberId(subscriberId);
-  const isAdmin = validateAdminAuthorization(request);
-
-  if (!sub && !isAdmin) {
-    return NextResponse.json(
-      { error: "حساب المشترك غير مسجل أو غير مصرح له بالوصول" },
-      { status: 403 }
-    );
-  }
-
-  if (sub && sub.status !== "ACTIVE" && !sub.isTrial && !isAdmin) {
-    return NextResponse.json(
-      { error: "الاشتراك معلق أو غير نشط. يرجى تجديد الترخيص للوصول للسجلات السحابية" },
-      { status: 403 }
-    );
-  }
-
-  if (sub && !isAdmin) {
-    if (!machineId) {
-      return NextResponse.json(
-        { error: "machineId is required to access cloud prescriptions" },
-        { status: 403 }
-      );
-    }
-    if (!machineOwnsSubscription(sub, machineId.trim())) {
-      return NextResponse.json(
-        { error: "هذا الجهاز غير مرتبط بحساب المشترك المطلوب" },
-        { status: 403 }
-      );
-    }
-  }
-
-  purgeExpiredRecords();
-
-  let rxMap = serverPrescriptionsCache.get(subscriberId);
-  const now = Date.now();
-
-  if (!rxMap || rxMap.size === 0) {
-    try {
-      const minDate = new Date(now - RETENTION_MS).toISOString();
-      const sRes = await fetch(
-        `${SUPABASE_REST_URL}/CloudPrescription?subscriberId=eq.${encodeURIComponent(subscriberId)}&createdAt=gte.${encodeURIComponent(minDate)}&order=createdAt.desc&limit=300`,
-        {
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-          },
-          cache: "no-store",
-        }
-      );
-      if (sRes.ok) {
-        const rows = await sRes.json();
-        if (Array.isArray(rows) && rows.length > 0) {
-          if (!serverPrescriptionsCache.has(subscriberId)) {
-            serverPrescriptionsCache.set(subscriberId, new Map());
-          }
-          const map = serverPrescriptionsCache.get(subscriberId)!;
-          for (const row of rows) {
-            const lean: LeanCloudPrescription = {
-              id: row.id,
-              subId: row.subscriberId,
-              pNo: row.prescriptionNo,
-              bId: row.branchId || undefined,
-              bName: row.branchName || undefined,
-              pName: row.patientName,
-              pPhone: row.patientPhone || undefined,
-              pAge: row.patientAge || undefined,
-              pGen: row.patientGender || undefined,
-              diag: row.diagnosis || undefined,
-              notes: row.notes || undefined,
-              items: Array.isArray(row.itemsJson) ? row.itemsJson : [],
-              ts: row.createdAt,
-            };
-            map.set(lean.id, lean);
-          }
-          rxMap = map;
-        }
-      }
-    } catch {}
-  }
-
-  const prescriptions: LeanCloudPrescription[] = [];
-  if (rxMap) {
-    for (const rx of rxMap.values()) {
-      const rxTime = new Date(rx.ts).getTime();
-      if (!isNaN(rxTime) && now - rxTime <= RETENTION_MS) {
-        prescriptions.push(rx);
-      }
-    }
-  }
-
-  prescriptions.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
-
-  return NextResponse.json({
+  const prescriptions = (Array.isArray(rows) ? rows : []).map(toLean);
+  return apiJson(request, {
     success: true,
-    subscriberId,
+    subscriberId: auth.subscriberId,
     prescriptions,
     count: prescriptions.length,
-    retentionDays: 365,
+    retentionDays: Math.round(RETENTION_MS / 86_400_000),
   });
 }
 
-// ===== POST: Save, Delete, or Purge Prescriptions =====
+/**
+ * SAVE and DELETE are persisted before responding. Acknowledging a write that was
+ * never stored is how prescriptions get silently lost, so failures return 502 and
+ * the device keeps the item in its retry queue.
+ */
 export async function POST(request: Request) {
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/prescriptions/sync");
-  }
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/prescriptions/sync");
 
   if (!checkRateLimit(request, { maxRequests: 60, windowMs: 60_000, prefix: "rx-sync-post" })) {
-    return rateLimitExceededResponse(60);
+    return rateLimitExceededResponse(request, 60);
   }
 
+  const body = await readJsonBody<{
+    action?: string;
+    prescriptionId?: string;
+    data?: any;
+  }>(request, 256 * 1024);
+  if (!body.ok) return apiError(request, "محتوى الطلب غير صالح.", 400);
+
+  const { action, prescriptionId, data } = body.data;
+
+  if (action === "PURGE_OLD") {
+    if (!isAdminRequest(request)) return apiError(request, "جلسة إدارية مطلوبة.", 401);
+    const minDate = new Date(Date.now() - RETENTION_MS).toISOString();
+    const removed = await supabaseRest<any[]>(TABLE, {
+      method: "DELETE",
+      query: `createdAt=lt.${encodeURIComponent(minDate)}`,
+      prefer: "return=representation",
+    }).catch(() => null);
+    return apiJson(request, { success: true, purgedCount: Array.isArray(removed) ? removed.length : 0 });
+  }
+
+  const auth = await authorizeTenant(request);
+  if (!auth.ok) return apiError(request, auth.message, auth.status);
+
   try {
-    const body = await request.json().catch(() => ({}));
-    const { action, subscriberId, prescriptionId, data, machineId } = body;
-
-    if (action === "PURGE_OLD") {
-      if (!validateAdminAuthorization(request)) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-      const count = purgeExpiredRecords(true);
-      return NextResponse.json({ success: true, purgedCount: count });
-    }
-
-    if (!subscriberId) {
-      return NextResponse.json(
-        { error: "subscriberId is required for multi-tenant isolation" },
-        { status: 400 }
-      );
-    }
-
-    const sub = await getSubscriptionBySubscriberId(subscriberId);
-    if (!sub || (sub.status !== "ACTIVE" && !sub.isTrial)) {
-      return NextResponse.json(
-        { error: "لا يمكن مزامنة الروشتات لحساب اشتراك غير مفعل" },
-        { status: 403 }
-      );
-    }
-
-    if (!machineId || !machineOwnsSubscription(sub, String(machineId).trim())) {
-      return NextResponse.json(
-        { error: "هذا الجهاز غير مرتبط بحساب المشترك المطلوب" },
-        { status: 403 }
-      );
-    }
-
-    if (!serverPrescriptionsCache.has(subscriberId)) {
-      serverPrescriptionsCache.set(subscriberId, new Map());
-    }
-    const subscriberMap = serverPrescriptionsCache.get(subscriberId)!;
-
-    // 2. SAVE Action (Single Canonical Ultra-Compact Upsert to CloudPrescription)
     if (action === "SAVE") {
-      if (!data || !data.id) {
-        return NextResponse.json({ error: "Prescription data is missing" }, { status: 400 });
-      }
+      if (!data || !data.id) return apiError(request, "بيانات الروشتة مفقودة.", 400);
 
       const rxTime = new Date(data.ts).getTime();
       if (!data.arc && !isNaN(rxTime) && Date.now() - rxTime > RETENTION_MS) {
-        return NextResponse.json({
-          success: false,
-          message: "Prescription is older than retention window",
-        });
+        return apiJson(request, { success: false, message: "الروشتة أقدم من فترة الاحتفاظ السحابي." });
       }
 
       const compactItems = minifyItemsForDb(data.items);
-      const compactData: LeanCloudPrescription = {
-        ...data,
-        items: compactItems,
+      const row = {
+        id: String(data.id).slice(0, 64),
+        subscriberId: auth.subscriberId,
+        prescriptionNo: String(data.pNo || "").slice(0, 40),
+        branchId: data.bId ? String(data.bId).slice(0, 64) : null,
+        branchName: data.bName ? String(data.bName).slice(0, 80) : null,
+        patientName: String(data.pName || "").slice(0, 120),
+        patientPhone: data.pPhone ? String(data.pPhone).replace(/\D/g, "").slice(0, 15) : null,
+        patientAge: data.pAge ? String(data.pAge).slice(0, 10) : null,
+        patientGender: data.pGen ? String(data.pGen).slice(0, 10) : null,
+        diagnosis: data.diag ? String(data.diag).slice(0, 500) : null,
+        notes: data.notes ? String(data.notes).slice(0, 1000) : null,
+        itemsJson: compactItems,
+        createdAt: data.ts || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
-      subscriberMap.set(data.id, compactData);
+      await supabaseRest(TABLE, {
+        method: "POST",
+        query: "on_conflict=id",
+        body: row,
+        prefer: "resolution=merge-duplicates,return=minimal",
+      });
 
-      // Optional relational write only if explicitly enabled via env (disabled by default to save 85% Supabase Free Tier storage)
       if (process.env.ENABLE_RELATIONAL_DUAL_WRITE === "true") {
-        try {
-          const richRx = decompressPrescription(compactData);
-          savePrescriptionRelational(richRx, undefined, subscriberId).catch(() => {});
-        } catch {}
+        savePrescriptionRelational(
+          decompressPrescription({ ...data, items: compactItems }),
+          undefined,
+          auth.subscriberId
+        ).catch((err) => console.warn("[RxSync dual-write] notice:", err?.message || err));
       }
 
-      try {
-        fetch(`${SUPABASE_REST_URL}/CloudPrescription?on_conflict=id`, {
-          method: "POST",
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-            "Content-Type": "application/json",
-            Prefer: "resolution=merge-duplicates",
-          },
-          body: JSON.stringify({
-            id: compactData.id,
-            subscriberId,
-            prescriptionNo: compactData.pNo,
-            branchId: compactData.bId || null,
-            branchName: compactData.bName || null,
-            patientName: compactData.pName,
-            patientPhone: compactData.pPhone || null,
-            patientAge: compactData.pAge || null,
-            patientGender: compactData.pGen || null,
-            diagnosis: compactData.diag || null,
-            notes: compactData.notes || null,
-            itemsJson: compactItems,
-            createdAt: compactData.ts,
-            updatedAt: new Date().toISOString(),
-          }),
-        }).catch(() => {});
-      } catch {}
-
-      return NextResponse.json({
+      return apiJson(request, {
         success: true,
         action: "SAVE",
-        prescriptionId: compactData.id,
-        storedInBucket: subscriberId,
+        prescriptionId: row.id,
+        storedInBucket: auth.subscriberId,
       });
     }
 
-    // 3. DELETE Action
     if (action === "DELETE") {
-      if (!prescriptionId) {
-        return NextResponse.json({ error: "prescriptionId is required" }, { status: 400 });
-      }
+      const id = String(prescriptionId || data?.id || "").slice(0, 64);
+      if (!id) return apiError(request, "معرّف الروشتة مطلوب.", 400);
 
-      subscriberMap.delete(prescriptionId);
+      await supabaseRest(TABLE, {
+        method: "DELETE",
+        query: `id=eq.${encodeURIComponent(id)}&subscriberId=eq.${encodeURIComponent(auth.subscriberId)}`,
+      });
 
       if (process.env.ENABLE_RELATIONAL_DUAL_WRITE === "true") {
-        try {
-          deletePrescriptionRelational(prescriptionId).catch(() => {});
-        } catch {}
+        deletePrescriptionRelational(id).catch((err) => console.warn("[RxSync dual-delete] notice:", err?.message || err));
       }
 
-      try {
-        fetch(
-          `${SUPABASE_REST_URL}/CloudPrescription?id=eq.${encodeURIComponent(prescriptionId)}&subscriberId=eq.${encodeURIComponent(subscriberId)}`,
-          {
-            method: "DELETE",
-            headers: {
-              apikey: SUPABASE_KEY,
-              Authorization: `Bearer ${SUPABASE_KEY}`,
-            },
-          }
-        ).catch(() => {});
-      } catch {}
-
-      return NextResponse.json({
-        success: true,
-        action: "DELETE",
-        prescriptionId,
-      });
+      return apiJson(request, { success: true, action: "DELETE", prescriptionId: id });
     }
 
-    return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
+    return apiError(request, `إجراء غير معروف: ${action}`, 400);
   } catch (err: any) {
-    console.error("[PrescriptionSyncAPI] Error:", err);
-    return NextResponse.json(
-      { error: "Internal server error during sync", details: err?.message },
-      { status: 500 }
-    );
+    console.error("[PrescriptionSyncAPI]", err?.message || err);
+    return apiError(request, "تعذر حفظ الروشتة سحابياً. ستعاد المحاولة تلقائياً من الجهاز.", 502);
   }
 }

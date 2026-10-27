@@ -232,7 +232,7 @@ export default function SubscriptionsPage() {
     features: [
       "تجربة مجانية بالكامل لمدة شهر (30 يوماً)",
       "🧠 مساعد الذكاء الاصطناعي لفحص وتنبيه تعارض وتداخل الأدوية (AI Drug Interactions) لحظياً",
-      "وصول كامل لبنك الأدوية الشامل (+200,000 دواء ومستحضر)",
+      "وصول كامل لبنك الأدوية الشامل (أكثر من 43,000 دواء ومستحضر)",
       "التعبئة التلقائية الذكية للجرعات والمواعيد والمدة حسب العائلة الدوائية",
       "طباعة الروشتات بجودة عالية وتصدير PDF ومشاركة واتساب مباشرة",
       "تخصيص لوجو العيادة وبيانات الطبيب بالكامل",
@@ -251,7 +251,7 @@ export default function SubscriptionsPage() {
       features: [
         "تجديد شهري مرن بقيمة 150 جنيه شهرياً",
         "🧠 مساعد الذكاء الاصطناعي لكشف تعارض وتداخل الأدوية والجرعات اللحظي لحماية المريض",
-        "وصول غير محدود لبنك الأدوية المحدث (+200,000 دواء ومستحضر) مع التعبئة الذكية للجرعات",
+        "وصول غير محدود لبنك الأدوية المحدث (أكثر من 43,000 دواء ومستحضر) مع التعبئة الذكية للجرعات",
         "تحديث صامت وتلقائي لقاعدة الأدوية والأسعار بشكل دوري دون تدخل يدوي",
         "طباعة روشتات ومشاركة واتساب مباشرة غير محدودة للمرضى",
         "تحديثات سحابية مستمرة ودعم فني سريع",
@@ -467,6 +467,9 @@ export default function SubscriptionsPage() {
       setCheckoutClinicName("");
       setSenderPhone("");
       setTransactionRef("");
+    } catch (err: any) {
+      // فشل الإرسال يبقى الطبيب على شاشة الدفع برسالته العربية بدل انهيار صامت
+      alert(err?.message || "تعذر إرسال طلب الاشتراك. تحقّق من الاتصال بالإنترنت ثم أعد المحاولة.");
     } finally {
       setIsSubmitting(false);
     }
@@ -481,6 +484,8 @@ export default function SubscriptionsPage() {
     try {
       await cancelPendingRequest();
       setIsCancelConfirmOpen(false);
+    } catch (err: any) {
+      alert(err?.message || "تعذر إلغاء الطلب. أعد المحاولة أو تواصل مع الدعم.");
     } finally {
       setIsCanceling(false);
     }
@@ -1393,7 +1398,7 @@ export default function SubscriptionsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 text-right">
-          {/* 1. Drug Engine (1,000,000+ items across 5 tiers & Self-Evolving) */}
+          {/* 1. Drug Engine (43,000+ items across 5 tiers & Self-Evolving) */}
           <div className="bg-slate-900/80 hover:bg-slate-900 transition-all rounded-3xl p-6 border border-slate-800/90 relative overflow-hidden flex flex-col justify-between shadow-xl">
             <div className="absolute -top-12 -left-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
             <div>
@@ -1405,7 +1410,7 @@ export default function SubscriptionsPage() {
               </div>
               <h4 className="font-black text-white text-base sm:text-lg mb-2">محرك بحث ذكي يتطور ذاتياً (Self-Learning)</h4>
               <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                محرك هجين فائق السرعة يبحث في <strong>أكثر من 1,000,000 دواء ومستحضر</strong> و<strong>يتعلم تلقائياً من نمط وصفاتك</strong>؛ فيرفع الأدوية الأكثر استخداماً في عيادتك إلى صدارة النتائج، مع استيعاب فوري لأي دواء أو تركيبة جديدة ومزامنتها سحابياً ومحلياً فور كتابتها.
+                محرك هجين فائق السرعة يبحث في <strong>أكثر من 43,000 دواء ومستحضر</strong> و<strong>يتعلم تلقائياً من نمط وصفاتك</strong>؛ فيرفع الأدوية الأكثر استخداماً في عيادتك إلى صدارة النتائج، مع استيعاب فوري لأي دواء أو تركيبة جديدة ومزامنتها سحابياً ومحلياً فور كتابتها.
               </p>
             </div>
             <div className="pt-4 mt-3 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] text-emerald-400 font-bold">

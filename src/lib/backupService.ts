@@ -13,9 +13,14 @@ import { usePrescriptionStore, SavedPrescription, PatientInfo } from "@/store/us
 import { useClinicStore, ClinicSettings, Branch } from "@/store/useClinicStore";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { getApiUrl } from "@/lib/cloudProxy";
+import { deviceAuthHeaders } from "@/lib/deviceAuthClient";
 
-const MAGIC_HEADER = "PRX_ENC_V2";
+/** Current format: key material is a device-local random secret. */
+const MAGIC_HEADER = "PRX_ENC_V3";
+/** Legacy format: key material was derived from the subscriber/machine id. */
+const LEGACY_MAGIC_HEADER = "PRX_ENC_V2";
 const MACHINE_KEY_PREFIX = "PenRX_MK_2026_";
+const VAULT_KEY_STORAGE = "penrx_backup_vault_key";
 
 export interface BackupMetadata {
   version: string;
@@ -35,6 +40,26 @@ export interface BackupPayload {
   prescriptions: SavedPrescription[];
   patients: PatientInfo[];
   customDrugs?: any[];
+}
+
+/**
+ * Device-local backup secret. Generated once and never uploaded, so a stolen
+ * database row or a leaked subscriber/machine id is not a decryption key.
+ */
+function getVaultKey(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const existing = localStorage.getItem(VAULT_KEY_STORAGE);
+    if (existing && existing.length >= 32) return existing;
+
+    const generated = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    localStorage.setItem(VAULT_KEY_STORAGE, generated);
+    return generated;
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -83,11 +108,21 @@ function getMachinePassphrase(): string {
 /**
  * Candidate passphrases for decryption (supports subscriber key, machine key, and universal fallback)
  */
-function getCandidateDecryptionPassphrases(userPassphrase?: string): string[] {
+function getCandidateDecryptionPassphrases(userPassphrase?: string, legacy = false): string[] {
   const candidates = new Set<string>();
   if (userPassphrase && userPassphrase.trim()) {
     candidates.add(userPassphrase.trim());
   }
+  if (!legacy) {
+    const vault = getVaultKey();
+    if (vault) candidates.add(vault);
+    if (typeof window !== "undefined") {
+      const installKey = localStorage.getItem("penrx_install_enc_key");
+      if (installKey) candidates.add(installKey);
+    }
+    return Array.from(candidates);
+  }
+
   const subPass = getSubscriberPassphrase();
   if (subPass) candidates.add(subPass);
 
@@ -235,7 +270,9 @@ export async function exportEncryptedBackup(userPassphrase?: string): Promise<{
 
   const compressedBytes = await compressData(jsonBytes);
 
-  const passphrase = userPassphrase?.trim() || getMachinePassphrase();
+  // A doctor-chosen passphrase is portable; otherwise the device-local vault key is
+  // used so the cloud never holds anything an attacker can derive from ids.
+  const passphrase = (userPassphrase?.trim() || getVaultKey() || getMachinePassphrase());
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(passphrase, salt);
@@ -306,7 +343,7 @@ export async function restoreFromBackupBuffer(
   restoredPatientsCount: number;
   metadata?: BackupMetadata;
 }> {
-  const headerLength = MAGIC_HEADER.length;
+  const headerLength = LEGACY_MAGIC_HEADER.length;
   if (data.length < headerLength + 16 + 12) {
     return {
       success: false,
@@ -318,7 +355,8 @@ export async function restoreFromBackupBuffer(
   }
 
   const headerStr = new TextDecoder().decode(data.slice(0, headerLength));
-  if (headerStr !== MAGIC_HEADER) {
+  const isLegacyFile = headerStr === LEGACY_MAGIC_HEADER;
+  if (headerStr !== MAGIC_HEADER && !isLegacyFile) {
     return {
       success: false,
       message: "صيغة الملف غير معروفة. يرجى اختيار ملف نسخة احتياطية معتمد (.penrx)",
@@ -333,7 +371,7 @@ export async function restoreFromBackupBuffer(
   const ciphertext = data.slice(headerLength + 16 + 12);
 
   let decryptedBytes: ArrayBuffer | null = null;
-  const passphrases = getCandidateDecryptionPassphrases(userPassphrase);
+  const passphrases = getCandidateDecryptionPassphrases(userPassphrase, isLegacyFile);
   for (const pass of passphrases) {
     try {
       const key = await deriveKey(pass, salt);
@@ -349,8 +387,10 @@ export async function restoreFromBackupBuffer(
   if (!decryptedBytes) {
     return {
       success: false,
-      message: "فشل فك التشفير. تأكد من صحة الملف وسلامته.",
-      error: "فشل فك التشفير. تأكد من صحة الملف وسلامته.",
+      message: userPassphrase
+        ? "فشل فك التشفير بكلمة المرور المدخلة. تأكد من صحتها ومن سلامة الملف."
+        : "هذه النسخة محمية بكلمة مرور أو بجهاز النسخة الأصلية. أدخل كلمة مرور النسخة الاحتياطية للمتابعة.",
+      error: "فشل فك التشفير.",
       restoredPrescriptionsCount: 0,
       restoredPatientsCount: 0,
     };
@@ -482,7 +522,7 @@ export async function uploadBackupToCloud(
 
   const res = await fetch(getApiUrl("/api/backup/cloud"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: deviceAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       subscriberId: targetKey,
       machineId,
@@ -524,7 +564,8 @@ export async function fetchLatestCloudBackupInfo(): Promise<{
   }
 
   const res = await fetch(
-    getApiUrl(`/api/backup/cloud?subscriberId=${encodeURIComponent(targetKey)}&machineId=${encodeURIComponent(machineId || "")}`)
+    getApiUrl(`/api/backup/cloud?subscriberId=${encodeURIComponent(targetKey)}&machineId=${encodeURIComponent(machineId || "")}`),
+    { headers: deviceAuthHeaders(), cache: "no-store" }
   );
   if (!res.ok) {
     return { exists: false, message: "تعذر الاتصال بخدمة النسخ السحابي" };

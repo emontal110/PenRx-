@@ -134,6 +134,9 @@ export function MobileBiometricLock() {
     }
   }
 
+  const [pinFailCount, setPinFailCount] = useState(0);
+  const [pinLockUntil, setPinLockUntil] = useState(0);
+
   // Fallback PIN / Passcode unlock
   function handlePinSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -143,25 +146,41 @@ export function MobileBiometricLock() {
       return;
     }
 
+    if (pinLockUntil > Date.now()) {
+      setPinError(`تم إيقاف المحاولة مؤقتاً بعد عدة محاولات فاشلة. أعد المحاولة بعد ${Math.ceil((pinLockUntil - Date.now()) / 60000)} دقيقة.`);
+      return;
+    }
+
     const clinicPhoneClean = (clinic?.phone || "").replace(/\D/g, "");
     const enteredClean = clean.replace(/\D/g, "");
 
+    // Only secrets the doctor already owns: no built-in master code, because any
+    // code shipped in the app is public to everyone who reads the UI text.
     const isMatch =
-      clean === "3060630" || // PenRX Master Secret PIN
-      clean === "30630" || // PenRX Master Secret PIN (variant)
-      clean === "1234" || // Universal fallback
-      (clinicPhoneClean && enteredClean.endsWith(clinicPhoneClean.slice(-8))) ||
+      (clinicPhoneClean.length >= 8 && enteredClean.endsWith(clinicPhoneClean.slice(-8))) ||
       (clinic?.syndicateId && clean === clinic.syndicateId.trim()) ||
-      branches.some((b) => b.phone && enteredClean.endsWith(b.phone.replace(/\D/g, "").slice(-8)));
+      branches.some(
+        (b) => b.phone && b.phone.replace(/\D/g, "").length >= 8 && enteredClean.endsWith(b.phone.replace(/\D/g, "").slice(-8))
+      );
 
     if (isMatch) {
       setIsLocked(false);
       setShowPinModal(false);
       setErrorMsg(null);
       setPinError(null);
+      setPinFailCount(0);
+      setPinLockUntil(0);
       showGlobalToast("✅ تم فتح المنظومة برمز التحقق بنجاح", "success");
     } else {
-      setPinError("رمز التحقق غير صحيح. استخدم رقم هاتف العيادة المسجل أو الرمز 1234");
+      const fails = pinFailCount + 1;
+      setPinFailCount(fails);
+      if (fails >= 5) {
+        setPinLockUntil(Date.now() + 5 * 60 * 1000);
+        setPinFailCount(0);
+        setPinError("تم إيقاف المحاولات لمدة 5 دقائق لحماية بيانات المرضى.");
+      } else {
+        setPinError("رمز التحقق غير صحيح. استخدم رقم هاتف العيادة المسجل أو رقم النقابة.");
+      }
     }
   }
 
@@ -303,7 +322,7 @@ export function MobileBiometricLock() {
               </div>
               <h3 className="text-base font-black text-white">الدخول برمز مرور العيادة</h3>
               <p className="text-xs text-slate-400">
-                أدخل رقم هاتف العيادة المسجل أو الرمز البديل (1234)
+                أدخل رقم هاتف العيادة المسجل أو رقم النقابة الخاص بك
               </p>
             </div>
 

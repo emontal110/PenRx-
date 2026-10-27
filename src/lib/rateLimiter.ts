@@ -1,102 +1,76 @@
 /**
- * PenRX+ Server-Side Rate Limiter
+ * Sliding-window in-memory rate limiter for PenRX+ API routes.
  *
- * A sliding-window, in-memory rate limiter for API route protection.
- * Prevents brute-force, DoS, and enumeration attacks.
- *
- * Usage:
- *   const allowed = checkRateLimit(request, { maxRequests: 10, windowMs: 60000 });
- *   if (!allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+ * Per-server-instance is acceptable here: it is a brute-force damper, not the
+ * authorization layer. Keys combine the route purpose and the client IP so a
+ * noisy mobile poller cannot exhaust the admin login budget.
  */
 
 interface RateLimitEntry {
   timestamps: number[];
 }
 
-// Global store: key → list of request timestamps within window
 const rateLimitStore = new Map<string, RateLimitEntry>();
+const ENTRY_RETENTION_MS = 10 * 60 * 1000;
 
-/**
- * Clean up stale entries periodically to avoid memory growth.
- * Runs automatically every 5 minutes.
- */
 let cleanupScheduled = false;
 function scheduleCleanup(): void {
   if (cleanupScheduled) return;
   cleanupScheduled = true;
-  setInterval(() => {
+  const timer = setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of rateLimitStore.entries()) {
-      entry.timestamps = entry.timestamps.filter((t) => now - t < 10 * 60 * 1000);
-      if (entry.timestamps.length === 0) {
-        rateLimitStore.delete(key);
-      }
+      entry.timestamps = entry.timestamps.filter((t) => now - t < ENTRY_RETENTION_MS);
+      if (entry.timestamps.length === 0) rateLimitStore.delete(key);
     }
   }, 5 * 60 * 1000);
+  timer.unref?.();
 }
 
-/**
- * Extracts a client identifier from the request for rate limit keying.
- * Uses X-Forwarded-For, X-Real-IP, or falls back to a constant for local.
- */
-function getClientKey(request: Request, prefix: string): string {
-  const fwd = request.headers.get("x-forwarded-for");
-  const realIp = request.headers.get("x-real-ip");
-  const ip = (fwd?.split(",")[0] || realIp || "localhost").trim();
-  return `${prefix}:${ip}`;
+function clientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const first = forwarded?.split(",")[0]?.trim();
+  return first || request.headers.get("x-real-ip")?.trim() || "local";
 }
 
-/**
- * Checks if the request exceeds the rate limit.
- * @returns true if request is ALLOWED, false if it should be BLOCKED (429)
- */
 export function checkRateLimit(
   request: Request,
-  options: {
-    maxRequests: number;
-    windowMs: number;
-    prefix?: string;
-  }
+  options: { maxRequests: number; windowMs: number; prefix?: string; keySuffix?: string }
 ): boolean {
   scheduleCleanup();
 
-  const { maxRequests, windowMs, prefix = "api" } = options;
-  const key = getClientKey(request, prefix);
+  const { maxRequests, windowMs, prefix = "api", keySuffix = "" } = options;
+  const key = `${prefix}:${clientIp(request)}:${keySuffix}`;
   const now = Date.now();
-
   const entry = rateLimitStore.get(key) || { timestamps: [] };
 
-  // Slide window: remove timestamps older than windowMs
   entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
-
   if (entry.timestamps.length >= maxRequests) {
     rateLimitStore.set(key, entry);
-    return false; // BLOCKED
+    return false;
   }
 
   entry.timestamps.push(now);
   rateLimitStore.set(key, entry);
-  return true; // ALLOWED
+  return true;
 }
 
-/**
- * Returns a standard 429 Too Many Requests response.
- */
-export function rateLimitExceededResponse(retryAfterSeconds = 60) {
+export function retryAfterSeconds(options: { windowMs: number }): number {
+  return Math.max(1, Math.ceil(options.windowMs / 1000));
+}
+
+/** Builds a 429 response; CORS/no-store headers come from the shared helpers. */
+export function rateLimitExceededResponse(request: Request, retryAfter = 60) {
+  // Imported lazily so this module stays usable from non-route contexts.
   const { NextResponse } = require("next/server");
   return NextResponse.json(
-    {
-      error: "طلبات كثيرة جداً. يرجى المحاولة لاحقاً.",
-      retryAfterSeconds,
-    },
+    { error: "طلبات كثيرة جداً. يرجى المحاولة لاحقاً.", success: false, retryAfterSeconds: retryAfter },
     {
       status: 429,
       headers: {
-        "Retry-After": String(retryAfterSeconds),
-        "X-RateLimit-Limit": "10",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-key, x-master-secret, apikey",
+        "Retry-After": String(retryAfter),
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
       },
     }
   );

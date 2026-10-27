@@ -7,23 +7,15 @@ import {
 } from "@/lib/drugSearchEngine";
 import { suggestDrugWithGemini } from "@/lib/gemini";
 import { synthesizeClinicalAiDrug } from "@/lib/clinicalAiSynthesis";
-
-const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+import { corsHeaders, securityHeaders } from "@/lib/httpSecurity";
+import { supabaseRest } from "@/lib/supabaseRest";
+import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
-// CORS: the static mobile page (GitHub Pages / file://) calls this route cross-origin
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+/** Requests may only originate from the configured allowlist (no wildcard CORS). */
+function responseHeaders(request: Request): Record<string, string> {
+  return { ...securityHeaders(), ...corsHeaders(request) };
 }
 
 // ── In-Memory LRU Cache for External APIs (1 Hour TTL) ────────────────────────
@@ -40,40 +32,33 @@ async function syncCommunityDrugsInBackground() {
   lastCommunitySync = Date.now();
 
   try {
-    const res = await fetch(`${SUPABASE_REST_URL}/Drug?select=*&order=createdAt.desc&limit=200`, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      signal: AbortSignal.timeout(1200),
+    const dbMatches = await supabaseRest<any[]>("Drug", {
+      query: "select=*&order=createdAt.desc&limit=200",
     });
 
-    if (res.ok) {
-      const dbMatches = await res.json();
-      if (Array.isArray(dbMatches) && dbMatches.length > 0) {
-        COMMUNITY_CACHE = dbMatches.map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          nameAr: d.nameAr || undefined,
-          activeIngredient: d.activeIngredient,
-          company: d.company || "مساهمة من طبيب",
-          price: d.price || undefined,
-          dosageForm: d.dosageForm || "Tablet",
-          category: d.category || "عام",
-          isControlled: d.isControlled || false,
-          sourceOrigin: "Doctor Community" as const,
-          isCrowdSourced: true,
-        }));
+    if (Array.isArray(dbMatches) && dbMatches.length > 0) {
+      COMMUNITY_CACHE = dbMatches.map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        nameAr: d.nameAr || undefined,
+        activeIngredient: d.activeIngredient,
+        company: d.company || "مساهمة من طبيب",
+        price: d.price || undefined,
+        dosageForm: d.dosageForm || "Tablet",
+        category: d.category || "عام",
+        isControlled: d.isControlled || false,
+        sourceOrigin: "Doctor Community" as const,
+        isCrowdSourced: true,
+      }));
 
-        // Automatically persist cloud price updates into in-memory engine
-        updateDrugPricesFromCloud(
-          COMMUNITY_CACHE.map((d) => ({
-            name: d.name,
-            price: d.price,
-            dosageForm: d.dosageForm,
-          }))
-        );
-      }
+      // Automatically persist cloud price updates into in-memory engine
+      updateDrugPricesFromCloud(
+        COMMUNITY_CACHE.map((d) => ({
+          name: d.name,
+          price: d.price,
+          dosageForm: d.dosageForm,
+        }))
+      );
     }
   } catch {
     // Supabase offline or slow — proceed cleanly with memory
@@ -183,7 +168,14 @@ async function fetchDailyMed(query: string): Promise<DrugRecord[]> {
   }
 }
 
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: responseHeaders(request) });
+}
+
 export async function GET(request: Request) {
+  // The packaged desktop runtime holds no keys, so catalogue search is served by the cloud API.
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/drugs/search");
+
   const startTime = Date.now();
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q") || "";
@@ -199,7 +191,7 @@ export async function GET(request: Request) {
         executionTimeMs: Date.now() - startTime,
         source: "empty",
       },
-      { headers: CORS_HEADERS }
+      { headers: responseHeaders(request) }
     );
   }
 
@@ -379,6 +371,6 @@ export async function GET(request: Request) {
       hasAiResults: aiResults.length > 0,
       aiEngine: aiResults.length > 0 ? "Google Gemini 3.8 Flash" : undefined,
     },
-    { headers: CORS_HEADERS }
+    { headers: responseHeaders(request) }
   );
 }

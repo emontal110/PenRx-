@@ -7,8 +7,8 @@ android {
         applicationId "com.penrxplus.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 58
-        versionName "1.61"
+        versionCode 60
+        versionName "1.63"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -24,9 +24,22 @@ android {
                 def envKeyAlias = System.getenv("KEY_ALIAS")
                 def envKeyPass = System.getenv("KEY_PASSWORD")
 
-                storePassword = (envStorePass != null && !envStorePass.trim().isEmpty()) ? envStorePass.trim() : "penrx123456"
-                keyAlias = (envKeyAlias != null && !envKeyAlias.trim().isEmpty()) ? envKeyAlias.trim() : "penrx"
-                keyPassword = (envKeyPass != null && !envKeyPass.trim().isEmpty()) ? envKeyPass.trim() : "penrx123456"
+                // No built-in passphrases: a checked-in default would let anyone
+                // rebuild and "legitimately" sign a malicious PenRX+ release.
+                def missing = []
+                if (envStorePass == null || envStorePass.trim().isEmpty()) missing << "KEYSTORE_PASSWORD"
+                if (envKeyAlias == null || envKeyAlias.trim().isEmpty()) missing << "KEY_ALIAS"
+                if (envKeyPass == null || envKeyPass.trim().isEmpty()) missing << "KEY_PASSWORD"
+                if (!missing.isEmpty()) {
+                    throw new GradleException(
+                        "Release keystore is present but these signing environment variables are not set: "
+                        + missing.join(", ")
+                        + ". Export them (from the CI secrets) or remove penrx-release.keystore for an explicitly unsigned test build (-Ppenrx.allowUnsigned=true).")
+                }
+
+                storePassword = envStorePass.trim()
+                keyAlias = envKeyAlias.trim()
+                keyPassword = envKeyPass.trim()
                 v1SigningEnabled true
                 v2SigningEnabled true
                 enableV3Signing = true
@@ -35,11 +48,15 @@ android {
     }
     buildTypes {
         release {
-            if (file("penrx-release.keystore").exists()) {
+            def ownerKeystore = file("penrx-release.keystore").exists()
+            if (ownerKeystore) {
                 signingConfig signingConfigs.release
-            } else {
+            } else if (project.hasProperty("penrx.allowUnsigned")) {
+                // Explicit CI/local opt-in for a NON-DISTRIBUTABLE test APK.
                 signingConfig signingConfigs.debug
             }
+            // Otherwise the release APK is emitted unsigned on purpose; the CI
+            // gate refuses to publish it.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

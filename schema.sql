@@ -299,37 +299,50 @@ DO $$ BEGIN
     DROP POLICY IF EXISTS "service_role_all_sub" ON "Subscription";
 EXCEPTION WHEN undefined_object THEN null; END $$;
 
--- 1. Allow inserting new subscription requests
-CREATE POLICY "anon_insert_pending_sub" ON "Subscription"
-    FOR INSERT
-    TO anon, authenticated
-    WITH CHECK (true);
+-- 1. مفتاح anon لا يملك أي صلاحية على الاشتراكات: كل القراءة والكتابة تمر عبر
+--    خوادم PenRX+ فقط (service_role)، بعد التحقق من ملكية الجهاز أو جلسة المدير.
+REVOKE ALL ON TABLE "Subscription" FROM anon, authenticated;
 
--- 2. Allow querying subscriptions for client & portal verification
-CREATE POLICY "anon_select_sub" ON "Subscription"
-    FOR SELECT
-    TO anon, authenticated
-    USING (true);
-
--- 3. Allow Portal & API activation, device linking, and profile updates
-CREATE POLICY "anon_update_sub" ON "Subscription"
-    FOR UPDATE
-    TO anon, authenticated
-    USING (true)
-    WITH CHECK (true);
-
--- 4. Allow Portal & API cancellation/deletion of subscriptions
-CREATE POLICY "anon_delete_sub" ON "Subscription"
-    FOR DELETE
-    TO anon, authenticated
-    USING (true);
-
--- 5. Full access for service_role
+-- 2. Full access for service_role
+DROP POLICY IF EXISTS "service_role_all_sub" ON "Subscription";
 CREATE POLICY "service_role_all_sub" ON "Subscription"
     FOR ALL
     TO service_role
     USING (true)
     WITH CHECK (true);
+
+-- =========================================================================
+-- سجل تدقيق عمليات الإدارة على الاشتراكات (يكتبه الخادم فقط)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS "AdminAuditLog" (
+    "id" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "subscriptionId" TEXT,
+    "subscriberId" TEXT,
+    "detail" JSONB NOT NULL DEFAULT '{}'::jsonb,
+    "ip" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AdminAuditLog_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "AdminAuditLog_createdAt_idx" ON "AdminAuditLog"("createdAt" DESC);
+
+ALTER TABLE "AdminAuditLog" ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE "AdminAuditLog" FROM anon, authenticated;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS "service_role_all_audit" ON "AdminAuditLog";
+EXCEPTION WHEN undefined_object THEN null; END $$;
+
+CREATE POLICY "service_role_all_audit" ON "AdminAuditLog"
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+-- إضافة الأدوية من الأطباء تُنسب لمشتركها حتى يمكن مراجعتها قبل نشرها
+ALTER TABLE "Drug" ADD COLUMN IF NOT EXISTS "addedBy" TEXT;
 
 -- =========================================================================
 -- Table for Cloud Synchronization of Prescriptions (Multi-Tenant)
@@ -375,25 +388,11 @@ CREATE POLICY "service_role_prescriptions" ON "CloudPrescription"
     WITH CHECK (true);
 
 
--- Seed Admin User and System Clinic in Database
+-- Seed النظام للعيادة الإدارية فقط. بيانات دخول المدير لم تعد تُخزن في القاعدة:
+-- تُقرأ من متغيرات البيئة PENRX_ADMIN_EMAIL وPENRX_ADMIN_PASSWORD_HASH وPENRX_ADMIN_PIN_HASH.
 INSERT INTO "Clinic" ("id", "name", "specialty", "primaryColor", "updatedAt")
 VALUES ('clinic-admin-001', 'Rosheta System Administration', 'System Administration', '#059669', NOW())
 ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "User" ("id", "clinicId", "name", "email", "role", "title", "passwordHash", "updatedAt")
-VALUES (
-    'user-admin-001',
-    'clinic-admin-001',
-    'Rosheta System Administrator',
-    'emontal.33@gmail.com',
-    'ADMIN',
-    'System Admin',
-    'd864f9ef7a371d39f5ae82167cd1add8baf1422e5b70b6e2b16a5efc92cac61b0f36f00773f3fa6e01755d0382d3df27aa84b5316e87e5b7ce02cac9677a5a7e',
-    NOW()
-)
-ON CONFLICT ("email") DO UPDATE SET
-    "role" = 'ADMIN',
-    "passwordHash" = 'd864f9ef7a371d39f5ae82167cd1add8baf1422e5b70b6e2b16a5efc92cac61b0f36f00773f3fa6e01755d0382d3df27aa84b5316e87e5b7ce02cac9677a5a7e';
 
 -- =========================================================================
 -- Table for Multi-Tenant Secure Cloud Backups (Partitioned by subscriberId)
@@ -425,6 +424,33 @@ CREATE POLICY "service_role_cloud_backup" ON "CloudBackup"
     TO service_role
     USING (true)
     WITH CHECK (true);
+
+-- =========================================================================
+-- Lockdown: لا يملك anon/authenticated أي وصول مباشر لبيانات الاشتراك أو المرضى.
+-- التطبيق والبورتال يمران عبر خوادم PenRX+ التي تستخدم service_role فقط.
+-- =========================================================================
+DO $$
+DECLARE
+    t TEXT;
+BEGIN
+    FOREACH t IN ARRAY ARRAY[
+        'Subscription', 'CloudPrescription', 'CloudBackup', 'AdminAuditLog',
+        'Clinic', 'Branch', 'User', 'Patient', 'Prescription', 'PrescriptionItem', 'Drug'
+    ] LOOP
+        IF to_regclass('public.' || t) IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+
+            IF t <> 'Drug' THEN
+                EXECUTE format('REVOKE ALL ON TABLE public.%I FROM anon, authenticated', t);
+            ELSE
+                EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.%I FROM anon, authenticated', t);
+                EXECUTE format('GRANT SELECT ON TABLE public.%I TO anon, authenticated', t);
+            END IF;
+
+            EXECUTE format('GRANT ALL ON TABLE public.%I TO service_role', t);
+        END IF;
+    END LOOP;
+END $$;
 
 -- Enable Realtime broadcasting on Subscription table for instant client sync
 DO $$ BEGIN

@@ -9,7 +9,7 @@ import { processSyncQueue } from "@/lib/prescriptionSync";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
 import { runDailySilentBackupAndAutoArchival } from "@/lib/backupService";
-import { initSubscriptionRealtimeListener } from "@/lib/supabaseRealtime";
+import { initSubscriptionRealtimeListener } from "@/lib/licenseWatcher";
 
 export function PaywallGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();

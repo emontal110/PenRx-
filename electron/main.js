@@ -6,6 +6,100 @@ const crypto = require("crypto");
 const http = require("http");
 const { exec, execSync, fork, spawn } = require("child_process");
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY POLICY (shared by IPC, window.open and navigation guards)
+//
+// The renderer only ever needs two kinds of outbound links:
+//   * official GitHub release artifacts (auto-update + download page)
+//   * WhatsApp hand-off for sending a prescription to the patient
+// Everything else is refused instead of being handed to the OS shell, so a
+// compromised or injected renderer script cannot launch arbitrary handlers.
+// ─────────────────────────────────────────────────────────────────────────────
+const EXTERNAL_HOST_ALLOWLIST = new Set([
+  "github.com",
+  "api.github.com",
+  "codeload.github.com",
+  "objects.githubusercontent.com",
+  "release-assets.githubusercontent.com",
+  "wa.me",
+  "api.whatsapp.com",
+]);
+
+// Non-HTTPS schemes that are legitimately handled by the OS (no network fetch).
+const EXTERNAL_SCHEME_ALLOWLIST = new Set(["whatsapp:", "mailto:"]);
+
+// The authoritative cloud deployment (same value cloudProxy.ts falls back to) is
+// also a permitted external destination, e.g. the "open web version" links.
+function getAllowedExternalHosts() {
+  const hosts = new Set(EXTERNAL_HOST_ALLOWLIST);
+  for (const candidate of [process.env.PENRX_CLOUD_API_URL, process.env.NEXT_PUBLIC_APP_URL]) {
+    try {
+      const raw = String(candidate || "").trim();
+      if (!raw) continue;
+      const parsed = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+      if (parsed.protocol === "https:") hosts.add(parsed.hostname);
+    } catch {}
+  }
+  return hosts;
+}
+
+/**
+ * True only for `https:` (or a whitelisted non-network scheme) destinations that
+ * are safe to hand to the operating system. Plain `http:` is never allowed out;
+ * the loopback server is handled separately by isInternalAppUrl().
+ */
+function isSafeExternalUrl(rawUrl) {
+  if (typeof rawUrl !== "string" || !rawUrl.trim()) return false;
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (EXTERNAL_SCHEME_ALLOWLIST.has(parsed.protocol)) return true;
+  if (parsed.protocol !== "https:") return false;
+  return getAllowedExternalHosts().has(parsed.hostname.toLowerCase());
+}
+
+/** True for the locally spawned Next.js server the app window must stay on. */
+function isInternalAppUrl(rawUrl) {
+  if (typeof rawUrl !== "string" || !rawUrl.trim()) return false;
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+}
+
+function openExternalSafely(rawUrl) {
+  if (!isSafeExternalUrl(rawUrl)) {
+    console.warn("[PenRX+ Security] Blocked external navigation to a non-allowlisted URL.");
+    return false;
+  }
+  shell.openExternal(rawUrl).catch(() => {});
+  return true;
+}
+
+/** WebPreferences shared by every window: no Node in the renderer, isolated context. */
+function buildWindowWebPreferences(extra = {}) {
+  return {
+    contextIsolation: true,
+    nodeIntegration: false,
+    // webSecurity stays enabled (Chromium default) on purpose: same-origin
+    // checks, mixed-content blocking and file:// isolation all matter for a
+    // build that displays patient data.
+    allowRunningInsecureContent: false,
+    sandbox: true,
+    webviewTag: false,
+    experimentalFeatures: false,
+    spellcheck: false,
+    ...extra,
+  };
+}
+
 // Force native Windows theme to dark so the top title bar and frame match the dark aesthetic of PenRX+
 if (nativeTheme) {
   nativeTheme.themeSource = "dark";
@@ -53,9 +147,11 @@ try {
   autoUpdater.disableWebInstaller = true;
   autoUpdater.allowDowngrade = false;
   autoUpdater.logger = console;
-  // Bypass Windows Authenticode code-signature enforcement for automated GitHub releases
-  // to ensure differential blockmap updates are NEVER discarded due to missing code signing certificates
-  autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(null);
+  // SECURITY: code-signature verification of downloaded updates is left at the
+  // electron-updater default (NsisUpdater → WinVerifyTrust based). It is a no-op
+  // until the owner publishes `publisherName` in the electron-builder `publish`
+  // config, at which point unsigned/mis-signed installers are rejected. The
+  // previous override here returned `null` unconditionally, which disabled it.
 
   // Patch Provider.prototype.getBlockMapFiles to seamlessly handle both 2-part (v1.45) and 3-part (v1.45.0) GitHub release tags
   // and URL-encoded '+' (%2B) in PenRX+-Setup.exe.blockmap
@@ -414,11 +510,7 @@ ipcMain.handle("get-app-version", () => {
 
 // IPC handler: open external URL safely in default system browser
 ipcMain.handle("open-external", async (_event, url) => {
-  if (url && (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("whatsapp://"))) {
-    await shell.openExternal(url);
-    return true;
-  }
-  return false;
+  return openExternalSafely(url);
 });
 
 // IPC handler: Native Desktop WhatsApp Direct File Share (Image PNG or PDF)
@@ -432,18 +524,38 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
       return { success: false, error: "Missing file data or phone number" };
     }
 
+    // Only digits may reach the WhatsApp URI / shell command (no quoting tricks).
+    const digitsOnly = String(cleanPhone).replace(/[^0-9]/g, "");
+    if (!/^\d{6,20}$/.test(digitsOnly)) {
+      return { success: false, error: "Invalid phone number" };
+    }
+
     const rawB64 = String(base64Data).includes(",")
       ? String(base64Data).split(",")[1]
       : String(base64Data);
+    // A prescription image/PDF is tiny; refuse anything absurd before writing it.
+    if (rawB64.length > 40 * 1024 * 1024) {
+      return { success: false, error: "Payload too large" };
+    }
     const buffer = Buffer.from(rawB64, "base64");
 
-    const safeName = (fileName || (mimeType === "application/pdf" ? "Prescription.pdf" : "Prescription.png"))
-      .replace(/[^a-zA-Z0-9._-]/g, "_");
+    const fallbackName = mimeType === "application/pdf" ? "Prescription.pdf" : "Prescription.png";
+    const safeName = String(fileName || fallbackName)
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      // strip traversal/hidden-file segments produced by dots in the original name
+      .replace(/^\.+/, "")
+      .slice(0, 80) || fallbackName;
+
     const tempDir = path.join(app.getPath("temp"), "PenRX_WhatsApp");
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
-    const filePath = path.join(tempDir, safeName);
+    // Contain the write inside the dedicated temp directory, whatever the
+    // renderer asked for as a file name.
+    const filePath = path.resolve(tempDir, safeName);
+    if (path.dirname(filePath) !== tempDir) {
+      return { success: false, error: "Invalid file name" };
+    }
     fs.writeFileSync(filePath, buffer);
 
     const isPdf = mimeType === "application/pdf" || safeName.endsWith(".pdf");
@@ -480,8 +592,8 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
     // ── OPEN NATIVE WHATSAPP DESKTOP APP (NOT WEB) ──
     // Priority 1: whatsapp:// URI scheme → opens WhatsApp Desktop app directly to patient chat
     // Priority 2: Fallback to api.whatsapp.com if app is not installed (opens browser)
-    const whatsappNativeUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=`;
-    const whatsappWebFallback = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}`;
+    const whatsappNativeUrl = `whatsapp://send?phone=${digitsOnly}&text=`;
+    const whatsappWebFallback = `https://api.whatsapp.com/send?phone=${digitsOnly}`;
 
     let openedNative = false;
     if (process.platform === "win32") {
@@ -500,7 +612,9 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
     }
 
     if (!openedNative) {
-      await shell.openExternal(whatsappNativeUrl).catch(() => shell.openExternal(whatsappWebFallback));
+      if (!openExternalSafely(whatsappNativeUrl)) {
+        openExternalSafely(whatsappWebFallback);
+      }
     }
 
     // ── AUTO-PASTE & AUTO-SEND via PowerShell SendKeys ──
@@ -1204,13 +1318,14 @@ function createSplashWindow() {
     backgroundColor: "#00000000",
     show: false,
     paintWhenInitiallyHidden: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
+    webPreferences: buildWindowWebPreferences(),
   });
 
   splashWindow.loadURL(buildSplashHtml(logoBase64));
+
+  // The splash content is a local data: URL with no links: deny everything.
+  splashWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  splashWindow.webContents.on("will-navigate", (event) => event.preventDefault());
 
   splashWindow.once("ready-to-show", () => {
     if (splashWindow && !splashWindow.isDestroyed()) {
@@ -1256,12 +1371,10 @@ function createMainWindow(targetUrl) {
           },
         }
       : {}),
-    webPreferences: {
+    webPreferences: buildWindowWebPreferences({
       preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
       additionalArguments: hwId ? [`--penrx-hw-id=${hwId}`] : [],
-    },
+    }),
   });
 
   Menu.setApplicationMenu(null);
@@ -1309,13 +1422,24 @@ function createMainWindow(targetUrl) {
     }
   });
 
+  // Never let the renderer spawn an Electron window: allowlisted links go to the
+  // system browser, everything else (file:, blob:, javascript:, unknown schemes,
+  // non-allowlisted hosts) is denied outright.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http:") || url.startsWith("https:") || url.startsWith("whatsapp:")) {
-      shell.openExternal(url);
-      return { action: "deny" };
-    }
-    return { action: "allow" };
+    openExternalSafely(url);
+    return { action: "deny" };
   });
+
+  // The main window must stay on the bundled local Next.js server.
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (isInternalAppUrl(url)) return;
+    event.preventDefault();
+    openExternalSafely(url);
+  });
+
+  // Sub-frames are never used by PenRX+; refuse them, and refuse any new
+  // webview/BrowserWindow created from this one.
+  mainWindow.webContents.on("will-attach-webview", (event) => event.preventDefault());
 
   mainWindow.webContents.on("did-fail-load", (_event, _errorCode, _errorDescription, validatedURL) => {
     if (validatedURL && validatedURL.includes("localhost")) {
@@ -1341,6 +1465,22 @@ function createMainWindow(targetUrl) {
 app.whenReady().then(() => {
   if (nativeTheme) {
     nativeTheme.themeSource = "dark";
+  }
+
+  // ── Permission lockdown ──
+  // Only the two capabilities the app actually ships are granted: the desktop
+  // expiry notification and the sanitized clipboard write used to paste a
+  // prescription into WhatsApp. Everything else (camera, microphone, geolocation,
+  // filesystem, MIDI, pointer lock, …) is refused without prompting.
+  const GRANTED_PERMISSIONS = new Set(["notifications", "clipboard-sanitized-write"]);
+  try {
+    const ses = session.defaultSession;
+    ses.setPermissionRequestHandler((_webContents, permission, callback) => {
+      callback(GRANTED_PERMISSIONS.has(permission));
+    });
+    ses.setPermissionCheckHandler((_webContents, permission) => GRANTED_PERMISSIONS.has(permission));
+  } catch (err) {
+    console.warn("[PenRX+ Security] Permission handler notice:", err.message);
   }
 
   // Auto clean HTTP/ServiceWorker cache (preserving localStorage) on version upgrade

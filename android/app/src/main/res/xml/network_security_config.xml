@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PenRX+ transports prescription and patient data, so the whole app is HTTPS-only.
+
+  * cleartextTrafficPermitted="false" replaces the previous global
+    android:usesCleartextTraffic="true": no http:// endpoint, captive-portal
+    fallback or plaintext dev server is ever reachable from the WebView.
+  * Only the Android system trust store is used. User- and app-installed CA
+    certificates are deliberately NOT trusted, so a rooted device or a
+    man-in-the-middle proxy (Charles / mitmproxy / Frida) cannot decrypt
+    medical traffic in the field.
+  * The explicit <domain-config> documents the two origins the shipped APK
+    legitimately talks to (the cloud deployment and Supabase REST/Realtime).
+    No <pin-set> is declared: pinning the wrong leaf/CA would brick every
+    installed app on the next certificate rotation. If the owner wants pinning,
+    add <pin-set> with SHA-256 SPKI fingerprints plus an <expiration> date.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">pen-rx.vercel.app</domain>
+        <domain includeSubdomains="true">supabase.co</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

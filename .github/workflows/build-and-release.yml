@@ -1,30 +1,78 @@
 name: Build & Release PenRX+ (Android APK & Windows Desktop)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Hardening notes (security audit remediation)
+#   * No credential or endpoint literal is stored in this public file. Every
+#     Supabase value now comes from repository secrets/variables. Nothing is ever
+#     echoed to the log and no secret is written to a committed file.
+#   * Release signing can no longer silently fall back to a throwaway keystore
+#     generated on the runner. Missing signing secrets fail the job, unless the
+#     owner explicitly checks `allow_unsigned_test_build` on a manual run — such
+#     builds are clearly labelled NON-PRODUCTION in the release body.
+#   * Third-party actions are pinned to the commit each tag resolves to today.
+#   * `permissions` is least-privilege per job: only the publish job writes.
+# ─────────────────────────────────────────────────────────────────────────────
+
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      allow_unsigned_test_build:
+        description: "DANGEROUS: produce UNSIGNED test artifacts if signing secrets are missing (never for distribution)"
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-android-apk:
     name: 📱 Build Real Android APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Enforce release signing configuration
+        shell: bash
+        env:
+          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+          HAS_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD != '' }}
+          HAS_KEY_ALIAS: ${{ secrets.KEY_ALIAS != '' }}
+          HAS_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD != '' }}
+          ALLOW_UNSIGNED: ${{ github.event.inputs.allow_unsigned_test_build == 'true' }}
+        run: |
+          missing=""
+          [ "$HAS_KEYSTORE" = "true" ] || missing="$missing KEYSTORE_BASE64"
+          [ "$HAS_KEYSTORE_PASSWORD" = "true" ] || missing="$missing KEYSTORE_PASSWORD"
+          [ "$HAS_KEY_ALIAS" = "true" ] || missing="$missing KEY_ALIAS"
+          [ "$HAS_KEY_PASSWORD" = "true" ] || missing="$missing KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "Release signing secrets are not configured. Missing:$missing"
+            if [ "$ALLOW_UNSIGNED" = "true" ]; then
+              echo "::warning::Unsigned TEST build requested — the APK will NOT be distributable."
+            else
+              echo "::error::Add the missing GitHub Actions secrets above, or run this workflow manually with 'allow_unsigned test build' checked for a non-distributable test APK."
+              exit 1
+            fi
+          fi
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: "npm"
 
       - name: Setup Java JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: "zulu"
           java-version: "17"
@@ -62,43 +110,100 @@ jobs:
       - name: Sync Android Native Assets
         run: npx cap sync android
 
-      - name: Setup Release Keystore
+      - name: Install Release Keystore
         working-directory: android/app
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'penrx123456' }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'penrx' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'penrx123456' }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > penrx-release.keystore
-          elif [ ! -f penrx-release.keystore ]; then
-            keytool -genkeypair -v -keystore penrx-release.keystore -alias "$KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -dname "CN=PenRX, OU=Medical, O=PenRX, L=Cairo, ST=Cairo, C=EG"
+          # Only the owner-provided keystore is ever used. No keytool fallback:
+          # a freshly generated keystore would break update-in-place installs and
+          # fake a "signed" release.
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "No owner keystore configured — continuing on the explicitly allowed unsigned test path."
+            rm -f penrx-release.keystore
+            exit 0
           fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > penrx-release.keystore
+          test -s penrx-release.keystore
 
       - name: Build Android Release APK via Gradle
         working-directory: android
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'penrx123456' }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'penrx' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'penrx123456' }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ALLOW_UNSIGNED: ${{ github.event.inputs.allow_unsigned_test_build }}
         run: |
           chmod +x gradlew
           ./gradlew --version
-          ./gradlew clean assembleRelease -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon --stacktrace
+          EXTRA_ARGS=""
+          if [ -z "$KEYSTORE_BASE64" ] && [ "$ALLOW_UNSIGNED" = "true" ]; then
+            EXTRA_ARGS="-Ppenrx.allowUnsigned=true"
+            echo "::warning::Building a NON-DISTRIBUTABLE unsigned test APK."
+          fi
+          ./gradlew clean assembleRelease $EXTRA_ARGS -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon --stacktrace
+
+      - name: Verify APK signature
+        shell: bash
+        env:
+          ALLOW_UNSIGNED: ${{ github.event.inputs.allow_unsigned_test_build == 'true' }}
+        run: |
+          APK=$(ls android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::No release APK was produced."
+            exit 1
+          fi
+          echo "Verifying $APK"
+          APKSIGNER=$(command -v apksigner || true)
+          if [ -z "$APKSIGNER" ]; then
+            APKSIGNER=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort | tail -1)
+          fi
+          if [ -z "$APKSIGNER" ]; then
+            echo "::warning::apksigner unavailable on this runner; signature verification skipped."
+            exit 0
+          fi
+          if ! "$APKSIGNER" verify --print-certs "$APK"; then
+            if [ "$ALLOW_UNSIGNED" = "true" ]; then
+              echo "::warning::APK is unsigned or DEBUG-signed — TEST BUILD ONLY, never distribute."
+            else
+              echo "::error::Release APK failed signature verification."
+              exit 1
+            fi
+          fi
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: PenRX-Android-APK
           path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
 
   build-windows-electron:
     name: 💻 Build Windows Desktop Electron App (.exe)
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Enforce Windows code signing
+        shell: bash
+        env:
+          HAS_CSC_LINK: ${{ secrets.WIN_CSC_LINK != '' }}
+          HAS_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD != '' }}
+          ALLOW_UNSIGNED: ${{ github.event.inputs.allow_unsigned_test_build == 'true' }}
+        run: |
+          if [ "$HAS_CSC_LINK" != "true" ] || [ "$HAS_CSC_KEY_PASSWORD" != "true" ]; then
+            echo "Windows Authenticode signing is not configured (WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD)."
+            if [ "$ALLOW_UNSIGNED" = "true" ]; then
+              echo "::warning::Unsigned TEST installer requested — auto-update signature checks will reject it."
+            else
+              echo "::error::Buy and configure a code-signing certificate, expose it as WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD, or run manually with 'allow_unsigned_test_build' for a non-distributable test .exe."
+              exit 1
+            fi
+          fi
 
       - name: Check if Release Assets Already Uploaded by Local Builder
         id: check_existing
@@ -109,14 +214,14 @@ jobs:
           RELEASE_TAG=$(node -p "try { require('./src/config/version.json').version } catch(e) { require('./package.json').version }")
           if gh release view "v${RELEASE_TAG}" --json assets --jq '.assets[].name' 2>/dev/null | grep -q "PenRX+-Setup.exe"; then
             echo "already_uploaded=true" >> $GITHUB_OUTPUT
-            echo "✓ Release v${RELEASE_TAG} already contains PenRX+-Setup.exe from local builder; skipping cloud rebuild to preserve exact blockmap parity."
+            echo "Release v${RELEASE_TAG} already contains PenRX+-Setup.exe from local builder; skipping cloud rebuild to preserve exact blockmap parity."
           else
             echo "already_uploaded=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Setup Node.js
         if: steps.check_existing.outputs.already_uploaded != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: "npm"
@@ -125,25 +230,16 @@ jobs:
         if: steps.check_existing.outputs.already_uploaded != 'true'
         run: npm install --no-audit
 
-      - name: Setup Environment Variables
-        if: steps.check_existing.outputs.already_uploaded != 'true'
-        shell: bash
-        run: |
-          printf "%s\n" \
-            "NEXT_PUBLIC_SUPABASE_URL=https://qspaigplwyvpqbmszpgc.supabase.co" \
-            "NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc" \
-            "NEXT_PUBLIC_APP_URL=http://localhost:3000" \
-            "PENRX_CLOUD_API_URL=https://pen-rx.vercel.app" \
-            "NEXT_TELEMETRY_DISABLED=1" > .env
-
+      # Next.js inlines NEXT_PUBLIC_* at build time, so the endpoints must be
+      # present in the build environment. They are injected as step env only —
+      # never written to a .env file that could be archived into the installer.
       - name: Build Web Application
         if: steps.check_existing.outputs.already_uploaded != 'true'
         run: npx next build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: "https://qspaigplwyvpqbmszpgc.supabase.co"
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc"
-          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
-          PENRX_CLOUD_API_URL: "https://pen-rx.vercel.app"
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+          PENRX_CLOUD_API_URL: ${{ vars.PENRX_CLOUD_API_URL }}
           NEXT_TELEMETRY_DISABLED: "1"
 
       - name: Build Native Windows Installer (.exe)
@@ -151,10 +247,12 @@ jobs:
         run: npx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Upload Windows Executables & Differential Update Metadata
         if: steps.check_existing.outputs.already_uploaded != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: PenRX-Windows-Desktop
           path: |
@@ -167,19 +265,21 @@ jobs:
     needs: [build-android-apk, build-windows-electron]
     if: always() && !cancelled() && (needs.build-android-apk.result == 'success' || needs.build-windows-electron.result == 'success')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Download Android APK
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         continue-on-error: true
         with:
           name: PenRX-Android-APK
           path: artifacts/android
 
       - name: Download Windows Desktop Installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         continue-on-error: true
         with:
           name: PenRX-Windows-Desktop
@@ -217,16 +317,22 @@ jobs:
           fi
           RELEASE_TAG=$(node -p "try { require('./src/config/version.json').version } catch(e) { require('./package.json').version }")
           echo "CURRENT_TAG=v$RELEASE_TAG" >> $GITHUB_ENV
+          # Fixed, non-secret label only: never interpolate env/secret values here.
+          if [ "${{ github.event.inputs.allow_unsigned_test_build }}" = "true" ]; then
+            echo "RELEASE_WARNING=⚠️ TEST BUILD — artifacts are NOT code-signed and must not be distributed. / بناء اختبار غير موقّع — ممنوع التوزيع" >> $GITHUB_ENV
+          else
+            echo "RELEASE_WARNING=" >> $GITHUB_ENV
+          fi
           echo "Files prepared for release (Tag: v$RELEASE_TAG):"
           ls -la release-files/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: release-files/*
           tag_name: ${{ env.CURRENT_TAG }}
           name: "PenRX+ Official Release ${{ env.CURRENT_TAG }}"
-          body: "تحديث رسمي لمنظومة PenRX+ الطبية (نسخة الكمبيوتر Windows .exe + نسخة الهاتف Android .apk)"
+          body: "تحديث رسمي لمنظومة PenRX+ الطبية (نسخة الكمبيوتر Windows .exe + نسخة الهاتف Android .apk)${{ env.RELEASE_WARNING }}"
           draft: false
           prerelease: false
         env:

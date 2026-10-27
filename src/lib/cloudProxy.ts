@@ -11,6 +11,8 @@
  * completely unaffected: same endpoints, same request/response shapes.
  */
 
+import { corsHeaders } from "@/lib/httpSecurity";
+
 const DEFAULT_CLOUD_API_URL = "https://pen-rx.vercel.app";
 
 function getSafeCloudBaseUrl(): string {
@@ -81,13 +83,6 @@ export function getApiUrl(endpoint: string): string {
 
 const PROXY_TIMEOUT_MS = 20_000;
 
-const PROXY_CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, x-admin-key, x-master-secret, apikey, Pragma, Cache-Control",
-};
-
 /**
  * True when this server instance holds server-side cloud credentials
  * (cloud deployment / local development with a full .env).
@@ -97,23 +92,33 @@ export function hasCloudCredentials(): boolean {
   if (process.env.VERCEL === "1" || process.env.NEXT_PUBLIC_VERCEL_ENV) {
     return true;
   }
-  // The desktop runtime (Electron) must always proxy to authoritative cloud
-  if (process.env.PENRX_DESKTOP_RUNTIME === "1" || process.env.ELECTRON_RUN_AS_NODE === "1") {
-    return false;
-  }
+  // The desktop runtime (Electron) must always proxy to authoritative cloud.
+  // electron/start-server.js sets PENRX_DESKTOP_RUNTIME=1 itself; ELECTRON_RUN_AS_NODE is
+  // deliberately NOT trusted here because it is inherited by any Electron-spawned shell,
+  // which would silently send local development traffic to the production deployment.
+  if (process.env.PENRX_DESKTOP_RUNTIME === "1") return false;
   return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.DATABASE_URL);
 }
 
 /**
- * Forwards a request to the cloud deployment, preserving method, query,
- * body, and authorization headers. Returns the cloud response as-is.
+ * Forwards a request to the cloud deployment, preserving method, query, body,
+ * session cookie and the admin CSRF marker. Set-Cookie from the cloud response
+ * is replayed so an admin can log in through the local desktop server too.
  */
 export async function proxyToCloud(request: Request, path: string): Promise<Response> {
   const incoming = new URL(request.url);
   const target = `${CLOUD_API_BASE}${path}${incoming.search}`;
 
   const headers = new Headers();
-  for (const name of ["authorization", "x-admin-key", "x-master-secret", "content-type", "accept"]) {
+  for (const name of [
+    "authorization",
+    "cookie",
+    "x-penrx-admin",
+    "x-device-token",
+    "content-type",
+    "accept",
+    "x-forwarded-for",
+  ]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -133,13 +138,25 @@ export async function proxyToCloud(request: Request, path: string): Promise<Resp
     });
 
     const text = await cloudRes.text();
-    return new Response(text, {
-      status: cloudRes.status,
-      headers: {
-        "Content-Type": cloudRes.headers.get("content-type") || "application/json",
-        ...PROXY_CORS_HEADERS,
-      },
+    const responseHeaders = new Headers({
+      "Content-Type": cloudRes.headers.get("content-type") || "application/json",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      ...corsHeaders(request),
     });
+
+    // Replay the cloud session cookie so an admin can sign in through the local
+    // desktop server. Its Domain is dropped: the local origin is not the cloud host.
+    const setCookies =
+      typeof cloudRes.headers.getSetCookie === "function"
+        ? cloudRes.headers.getSetCookie()
+        : [];
+    for (const cookie of setCookies) {
+      const withoutDomain = cookie.replace(/;\s*Domain=[^;]*/i, "");
+      responseHeaders.append("Set-Cookie", withoutDomain);
+    }
+
+    return new Response(text, { status: cloudRes.status, headers: responseHeaders });
   } catch (err: any) {
     const message =
       err?.name === "TimeoutError"
@@ -147,7 +164,7 @@ export async function proxyToCloud(request: Request, path: string): Promise<Resp
         : "تعذر الاتصال بخدمة PenRX+ السحابية. تحقق من اتصالك بالإنترنت.";
     return new Response(JSON.stringify({ error: message, proxied: true }), {
       status: 502,
-      headers: { "Content-Type": "application/json", ...PROXY_CORS_HEADERS },
+      headers: { "Content-Type": "application/json", ...corsHeaders(request) },
     });
   }
 }

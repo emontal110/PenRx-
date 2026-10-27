@@ -35,7 +35,9 @@ android/.idea/
 *.apk
 *.aab
 *.keystore
-!android/app/penrx-release.keystore
+# NOTE: the previous `!android/app/penrx-release.keystore` exception was removed —
+# it allowed `git add -A` to commit the private release signing key into the repo.
+# The keystore must stay outside Git (use the KEYSTORE_BASE64 CI secret instead).
 *.jks
 github-recovery-codes*.txt
 

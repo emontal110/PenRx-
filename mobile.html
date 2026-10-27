@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>PenRX+ | منظومة الروشتة الطبية الذكية للهواتف</title>
   
-  <!-- Favicon -->
-  <link rel="icon" type="image/x-icon" href="favicon.ico" />
-  <link rel="icon" type="image/jpeg" href="logo-penrx.jpg" />
+  <!-- Favicon & Unified iOS / APK Icons -->
+  <link rel="icon" type="image/png" href="icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -523,7 +523,7 @@
           </div>
         </div>
 
-        <!-- Submission Form (Direct Supabase Cloud Connected) -->
+        <!-- Submission Form (خوادم PenRX+ عبر /api/subscriptions) -->
         <form id="subscribe-form" onsubmit="handleSubscriptionSubmit(event)" class="space-y-2 pt-2 border-t border-slate-800">
           <div class="space-y-1">
             <label class="text-[11px] font-bold text-slate-300">الباقة المختارة:</label>
@@ -640,8 +640,16 @@
   <script>
     // All privileged operations go through the authoritative cloud API —
     // this static page never holds database credentials
-    const API_BASE = "https://pen-rx.vercel.app";
-    const ADMIN_PHONE = "201094085228";
+    // نقطة النهاية ثابتة في الكود: لا تُقرأ من التخزين المحلي حتى لا يُحوَّل
+    // فحص الترخيص إلى خادم وهمي. الأصل نفسه يُستخدم عند الاستضافة على نطاق المنتج.
+    const CLOUD_FALLBACK = "https://pen-rx.vercel.app";
+    const API_BASE = (() => {
+      const host = location.hostname;
+      const httpLike = location.protocol === "http:" || location.protocol === "https:";
+      const isLocalHost = host === "localhost" || host === "127.0.0.1" || host === "" || /^\d+\./.test(host);
+      return httpLike && !isLocalHost ? location.origin.replace(/\/+$/, "") : CLOUD_FALLBACK;
+    })();
+    const ADMIN_PHONE = "201094085228"; // للاستدعاء/واتساب دعم ما قبل البيع
 
     // Curated Egyptian & Arabic Medications Bank for Instant Offline Search (Bilingual)
     const POPULAR_DRUGS = [
@@ -682,15 +690,43 @@
     let currentSubscription = null;
     let currentRxMeds = [];
 
-    // 1. Machine ID Generator & Storage
+    // 1. Unified Immutable Hardware Machine ID Generator & Storage (shared across APK, Web, and Desktop)
     function getOrCreateMachineId() {
-      let id = localStorage.getItem("penrx_machine_id");
-      if (!id) {
-        const r1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const r2 = Math.random().toString(36).substring(2, 6).toUpperCase();
-        id = `PRX-MOB-${r1}-${r2}`;
-        localStorage.setItem("penrx_machine_id", id);
+      try {
+        if (window.PenRxNative && typeof window.PenRxNative.getHardwareDeviceId === "function") {
+          const hwId = window.PenRxNative.getHardwareDeviceId();
+          if (hwId && String(hwId).startsWith("PRX-")) {
+            localStorage.setItem("penrx_unique_machine_id", hwId);
+            localStorage.setItem("penrx_machine_id", hwId);
+            return hwId;
+          }
+        }
+        const uaMatch = (navigator.userAgent || "").match(/PenRxHwId\/(PRX-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})/i);
+        if (uaMatch && uaMatch[1]) {
+          const hwId = uaMatch[1].toUpperCase();
+          localStorage.setItem("penrx_unique_machine_id", hwId);
+          localStorage.setItem("penrx_machine_id", hwId);
+          return hwId;
+        }
+      } catch (e) {}
+
+      let id = localStorage.getItem("penrx_unique_machine_id") || localStorage.getItem("penrx_machine_id");
+      if (!id || !id.startsWith("PRX-")) {
+        const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
+        const navStr = `${navigator.userAgent}-${navigator.language}-${navigator.hardwareConcurrency || 4}`;
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Cairo";
+        let h1 = 2166136261;
+        const s1 = `${screenStr}#${navStr}#${tz}`;
+        for (let i = 0; i < s1.length; i++) {
+          h1 ^= s1.charCodeAt(i);
+          h1 += (h1 << 1) + (h1 << 4) + (h1 << 7) + (h1 << 8) + (h1 << 24);
+          h1 = h1 | 0;
+        }
+        const hex = Math.abs(h1 | 0).toString(16).toUpperCase().padStart(8, "0");
+        id = `PRX-ANDR-${hex.substring(0, 4)}-${hex.substring(4, 8)}`;
       }
+      localStorage.setItem("penrx_unique_machine_id", id);
+      localStorage.setItem("penrx_machine_id", id);
       return id;
     }
 
@@ -1198,46 +1234,198 @@
       showToast("تم حذف الروشتة من السجل", "info");
     }
 
-    // 7. Print & WhatsApp Sharing Action Handlers
+    // 7. Print & WhatsApp Sharing Action Handlers (Direct Image HD & PDF Attach)
+    let pendingMobileShareRx = null;
+
+    function normalizeMobileWhatsAppPhone(phone) {
+      let cleaned = String(phone || "").replace(/[^0-9]/g, "");
+      if (!cleaned) return "";
+      if (cleaned.startsWith("00")) cleaned = cleaned.substring(2);
+      if (cleaned.startsWith("20") && cleaned.length >= 11) return cleaned;
+      if (cleaned.startsWith("0")) return "2" + cleaned;
+      if (cleaned.startsWith("1") && cleaned.length === 10) return "20" + cleaned;
+      return "2" + cleaned;
+    }
+
+    function renderRxToCanvasDataUrl(rxObj) {
+      const canvas = document.createElement("canvas");
+      const width = 900;
+      const meds = rxObj.items || [];
+      const height = Math.max(1250, 560 + meds.length * 115);
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+
+      // Background
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+
+      // Header Banner
+      ctx.fillStyle = "#059669";
+      ctx.fillRect(0, 0, width, 150);
+
+      const clinicName = localStorage.getItem("penrx_clinic_name") || "العيادة الطبية التخصصية";
+      const docName = "د. " + (localStorage.getItem("penrx_doctor_name") || "طبيب العيادة");
+      const docSpec = localStorage.getItem("penrx_doctor_spec") || "استشاري";
+      const clinicPhone = localStorage.getItem("penrx_clinic_phone") || "";
+      const clinicAddress = localStorage.getItem("penrx_clinic_address") || "";
+
+      ctx.direction = "rtl";
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "900 32px Cairo, sans-serif";
+      ctx.fillText(docName, width - 40, 62);
+      ctx.font = "700 20px Cairo, sans-serif";
+      ctx.fillText(docSpec, width - 40, 102);
+
+      ctx.textAlign = "left";
+      ctx.font = "900 26px Cairo, sans-serif";
+      ctx.fillText(clinicName, 40, 62);
+      ctx.font = "700 18px Cairo, sans-serif";
+      ctx.fillText(clinicPhone, 40, 102);
+
+      // Patient Info Box
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(40, 175, width - 80, 110);
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(40, 175, width - 80, 110);
+
+      ctx.fillStyle = "#0f172a";
+      ctx.textAlign = "right";
+      ctx.font = "800 22px Cairo, sans-serif";
+      ctx.fillText("المريض: " + (rxObj.patient?.name || "مريض"), width - 65, 220);
+      if (rxObj.diagnosis) {
+        ctx.font = "700 19px Cairo, sans-serif";
+        ctx.fillStyle = "#059669";
+        ctx.fillText("التشخيص: " + rxObj.diagnosis, width - 65, 260);
+      }
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#475569";
+      ctx.font = "700 18px Cairo, sans-serif";
+      ctx.fillText("Rx: " + (rxObj.prescriptionNo || ""), 65, 220);
+      ctx.fillText("التاريخ: " + (rxObj.dateStr || new Date().toLocaleDateString("ar-EG")), 65, 260);
+
+      // Rx Symbol
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#059669";
+      ctx.font = "900 38px serif";
+      ctx.fillText("℞", width - 45, 345);
+
+      // Medications
+      let y = 395;
+      meds.forEach((m, idx) => {
+        ctx.fillStyle = "#f1f5f9";
+        ctx.fillRect(40, y - 35, width - 80, 92);
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "900 23px Cairo, sans-serif";
+        ctx.fillText((idx + 1) + ". " + (m.name || m.drugName || ""), width - 60, y);
+        ctx.fillStyle = "#059669";
+        ctx.font = "700 19px Cairo, sans-serif";
+        ctx.fillText("الجرعة: " + (m.dose || ((m.doseQuantity || "1") + " " + (m.frequency || ""))), width - 65, y + 36);
+        y += 112;
+      });
+
+      // Footer
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.beginPath();
+      ctx.moveTo(40, height - 95);
+      ctx.lineTo(width - 40, height - 95);
+      ctx.stroke();
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#475569";
+      ctx.font = "700 18px Cairo, sans-serif";
+      ctx.fillText((clinicAddress ? "📍 " + clinicAddress + "  •  " : "") + "مع تمنياتنا بالشفاء العاجل ودوام الصحة والعافية", width / 2, height - 48);
+
+      return canvas.toDataURL("image/png");
+    }
+
+    function openMobileWhatsAppModal(rxObj) {
+      pendingMobileShareRx = rxObj;
+      let modal = document.getElementById("mobile-wa-share-modal");
+      if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "mobile-wa-share-modal";
+        modal.className = "fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md";
+        modal.innerHTML = `
+          <div class="w-full max-w-md bg-slate-900 border border-emerald-500/30 rounded-3xl p-5 space-y-4 text-right shadow-2xl" dir="rtl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 class="text-sm font-black text-white">إرسال الروشتة عبر واتساب 💬</h3>
+              <button type="button" onclick="document.getElementById('mobile-wa-share-modal').classList.add('hidden')" class="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div class="space-y-1.5 text-xs">
+              <label class="font-bold text-slate-300 block">رقم واتساب المريض (+2):</label>
+              <input id="mobile-wa-phone-input" type="tel" dir="ltr" placeholder="01012345678" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono font-bold text-left" />
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-1">
+              <button type="button" onclick="dispatchMobileWhatsApp('image')" class="p-4 rounded-2xl bg-emerald-950/50 border-2 border-emerald-500/40 hover:border-emerald-400 text-right space-y-1">
+                <div class="text-emerald-400 font-black text-xs">🖼️ صورة الروشتة (HD)</div>
+                <p class="text-[10px] text-slate-400">إرفاق كصورة وإرسال لمحادثة المريض فوراً</p>
+              </button>
+              <button type="button" onclick="dispatchMobileWhatsApp('pdf')" class="p-4 rounded-2xl bg-cyan-950/50 border-2 border-cyan-500/40 hover:border-cyan-400 text-right space-y-1">
+                <div class="text-cyan-400 font-black text-xs">📄 ملف الروشتة (PDF)</div>
+                <p class="text-[10px] text-slate-400">إرفاق كملف وإرسال لمحادثة المريض فوراً</p>
+              </button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+      modal.classList.remove("hidden");
+      const phoneInput = document.getElementById("mobile-wa-phone-input");
+      if (phoneInput) phoneInput.value = rxObj.patient?.phone || "";
+    }
+
+    function dispatchMobileWhatsApp(mode) {
+      if (!pendingMobileShareRx) return;
+      const phoneInput = document.getElementById("mobile-wa-phone-input");
+      const cleanPhone = normalizeMobileWhatsAppPhone(phoneInput ? phoneInput.value : pendingMobileShareRx.patient?.phone);
+      if (!cleanPhone || cleanPhone.length < 10) {
+        showToast("⚠️ يرجى إدخال رقم واتساب المريض أولاً", "error");
+        return;
+      }
+      const pngDataUrl = renderRxToCanvasDataUrl(pendingMobileShareRx);
+      const safeNo = (pendingMobileShareRx.prescriptionNo || "RX").replace(/[^a-zA-Z0-9_-]/g, "_");
+      const caption = "📋 الروشتة الطبية الخاصة بـ: " + (pendingMobileShareRx.patient?.name || "المريض");
+
+      if (window.PenRxNative && typeof window.PenRxNative.shareFileToWhatsAppDirect === "function") {
+        window.PenRxNative.shareFileToWhatsAppDirect(
+          pngDataUrl,
+          "Prescription_" + safeNo + ".png",
+          "image/png",
+          cleanPhone,
+          caption
+        );
+        document.getElementById("mobile-wa-share-modal")?.classList.add("hidden");
+        return;
+      }
+
+      window.open("https://api.whatsapp.com/send?phone=" + encodeURIComponent(cleanPhone), "_blank");
+      document.getElementById("mobile-wa-share-modal")?.classList.add("hidden");
+    }
+
     function shareRxWhatsApp() {
       if (currentRxMeds.length === 0) {
         alert("يرجى كتابة أو إضافة دواء واحد على الأقل قبل الإرسال.");
         return;
       }
-
       savePrescriptionToHistory();
-
-      const pName = document.getElementById("rx-p-name").value.trim() || "المريض";
-      const pPhone = document.getElementById("rx-p-phone").value.trim();
-      const diag = document.getElementById("rx-diagnosis").value.trim();
-      const clinicName = localStorage.getItem("penrx_clinic_name") || "العيادة الذكية";
-      const docName = localStorage.getItem("penrx_doctor_name") || "طبيب العيادة";
-
-      let text = `🏥 *روشتة طبية معتمدة - ${clinicName}*\n`;
-      text += `👨‍⚕️ الطبيب المعالج: *${docName}*\n`;
-      text += `👤 المريض: *${pName}*\n`;
-      if (diag) text += `📋 التشخيص: ${diag}\n`;
-      text += `\n*الأدوية الموصوفة والجرعات:*\n`;
-      currentRxMeds.forEach((m, idx) => {
-        text += `${idx + 1}. 💊 *${m.name}*\n   الجرعة: ${m.dose}\n`;
+      openMobileWhatsAppModal({
+        prescriptionNo: document.getElementById("rx-number-display").textContent,
+        patient: {
+          name: document.getElementById("rx-p-name").value.trim() || "المريض",
+          phone: document.getElementById("rx-p-phone").value.trim(),
+        },
+        diagnosis: document.getElementById("rx-diagnosis").value.trim(),
+        items: currentRxMeds,
+        dateStr: new Date().toLocaleDateString("ar-EG"),
       });
-      text += `\nمع تمنياتنا بالشفاء العاجل! 🌿\nمنظومة PenRX+ الطبية`;
-
-      const target = pPhone ? (pPhone.startsWith("01") ? "2" + pPhone : pPhone) : "";
-      const url = target ? `https://wa.me/${target}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
-      window.open(url, "_blank");
     }
 
     function reshareFromHistory(rx) {
-      const pName = rx.patient?.name || "المريض";
-      const pPhone = rx.patient?.phone || "";
-      const clinicName = localStorage.getItem("penrx_clinic_name") || "العيادة";
-      let text = `🏥 *روشتة طبية معتمدة - ${clinicName}*\n👤 المريض: *${pName}*\n\n*الأدوية:*\n`;
-      (rx.items || []).forEach((m, idx) => {
-        text += `${idx + 1}. 💊 *${m.name}*: ${m.dose}\n`;
-      });
-      const target = pPhone ? (pPhone.startsWith("01") ? "2" + pPhone : pPhone) : "";
-      window.open(target ? `https://wa.me/${target}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+      openMobileWhatsAppModal(rx);
     }
 
     function printPrescription() {
@@ -1393,33 +1581,47 @@
         updatedAt: new Date().toISOString()
       };
 
+      localStorage.setItem("penrx_pending_sub_id", record.id);
+      localStorage.setItem("penrx_last_subscriber_id", record.subscriberId);
+      localStorage.setItem("penrx_was_pending", "true");
+
       try {
         const res = await fetch(`${API_BASE}/api/subscriptions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(record),
+          body: JSON.stringify({
+            id: record.id,
+            planId,
+            paymentMethod: "vodafone",
+            senderPhone,
+            transactionRef,
+            machineId: activeMid,
+            allowedMachineIds: [activeMid],
+            doctorName: record.doctorName,
+            clinicName: record.clinicName,
+          }),
         });
 
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (data && data.subscription) {
-            Object.assign(record, data.subscription);
-          }
-          showToast("🎉 تم إرسال طلب الاشتراك للبورتال بنجاح! سيتم التفعيل فور مراجعة التحويل.", "success");
-          localStorage.setItem("penrx_last_sub", JSON.stringify(record));
-          checkSubscriptionStatus();
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          console.error("Subscription API response error:", errData);
-          showToast("تم تسجيل الطلب وجاري إرساله للسحابة.", "info");
-          localStorage.setItem("penrx_last_sub", JSON.stringify(record));
-          checkSubscriptionStatus();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.subscription) {
+          // الطلب لم يصل للبورتال: لا يُحفظ كطلب معلّق ولا يوهم الطبيب بأنه مُرسل
+          localStorage.removeItem("penrx_pending_sub_id");
+          localStorage.removeItem("penrx_was_pending");
+          showToast(data && data.error ? data.error : "تعذر إرسال الطلب للبورتال. تحقّق من الاتصال ثم أعد المحاولة.", "error");
+          return;
         }
+
+        Object.assign(record, data.subscription);
+        localStorage.setItem("penrx_pending_sub_id", record.id);
+        localStorage.setItem("penrx_last_subscriber_id", record.subscriberId);
+        localStorage.setItem("penrx_last_sub", JSON.stringify(record));
+        showToast("🎉 تم إرسال طلب الاشتراك للبورتال بنجاح! سيتم فتح التطبيق فور مراجعة التحويل.", "success");
+        checkSubscriptionStatus();
       } catch (err) {
         console.error("Network error submitting subscription:", err);
-        localStorage.setItem("penrx_last_sub", JSON.stringify(record));
-        showToast("تم حفظ الطلب محلياً وجاري المزامنة.", "info");
-        checkSubscriptionStatus();
+        localStorage.removeItem("penrx_pending_sub_id");
+        localStorage.removeItem("penrx_was_pending");
+        showToast("تعذر الاتصال بالبورتال. تحقّق من الإنترنت ثم أعد المحاولة.", "error");
       } finally {
         btn.disabled = false;
         btn.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i><span>إرسال بيانات التحويل لتفعيل الحساب ⚡</span>`;
@@ -1501,13 +1703,13 @@
 
     async function checkSubscriptionStatus() {
       const activeMid = machineId || getOrCreateMachineId();
-      let matchedSub = null;
 
       let confirmedSub = null;
       let serverResponded = false;
       let serverReportedNoSub = false;
 
-      // 1. Check via Cloud API
+      // الحالة تُقرأ من خوادم المنتج فقط: /api/subscriptions لا يستخدم أي كاش
+      // ويقرأ PostgreSQL مباشرة، فلا حاجة لاتصال مباشر بقاعدة البيانات من المتصفح.
       try {
         const encodedId = encodeURIComponent(activeMid);
         const savedSub = localStorage.getItem("penrx_last_sub");
@@ -1520,6 +1722,7 @@
 
         const res = await fetch(url, {
           cache: "no-store",
+          headers: { "Pragma": "no-cache", "Cache-Control": "no-cache, no-store, must-revalidate" },
           signal: AbortSignal.timeout(5000),
         });
 
@@ -1536,51 +1739,31 @@
         console.warn("Cloud API status fetch deferred:", err);
       }
 
-      // 2. Direct Supabase Cloud REST verification (ensures instant sync even if serverless is cold/sleeping)
-      let supaResponded = false;
-      let supaReportedNoSub = false;
-      try {
-        const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
-        const savedSub = localStorage.getItem("penrx_last_sub");
-        let subId = "";
-        if (savedSub) {
-          try { subId = JSON.parse(savedSub).subscriberId || ""; } catch {}
-        }
-        let orConditions = `machineId.eq.${encodeURIComponent(activeMid)},allowedMachineIds.cs.{${encodeURIComponent(activeMid)}}`;
-        if (subId) {
-          orConditions += `,subscriberId.eq.${encodeURIComponent(subId)}`;
-        }
-        const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orConditions})&order=updatedAt.desc&limit=1`;
-        const supaRes = await fetch(supaUrl, {
-          headers: {
-            apikey: supaKey,
-            Authorization: "Bearer " + supaKey,
-          },
-          signal: AbortSignal.timeout(5000),
-        });
-        if (supaRes.ok) {
-          supaResponded = true;
-          const list = await supaRes.json();
-          if (Array.isArray(list)) {
-            if (list.length > 0) {
-              confirmedSub = list[0];
-            } else {
-              supaReportedNoSub = true;
-            }
-          }
-        }
-      } catch {}
 
       if (confirmedSub) {
+        const wasPending =
+          (currentSubscription && currentSubscription.status === "PENDING") ||
+          localStorage.getItem("penrx_was_pending") === "true";
         currentSubscription = confirmedSub;
         localStorage.setItem("penrx_last_sub", JSON.stringify(currentSubscription));
+        if (confirmedSub.subscriberId) {
+          localStorage.setItem("penrx_last_subscriber_id", confirmedSub.subscriberId);
+        }
+        if (confirmedSub.status === "ACTIVE") {
+          localStorage.removeItem("penrx_pending_sub_id");
+          if (wasPending) {
+            localStorage.removeItem("penrx_was_pending");
+            showToast("🎉 تم تفعيل وتنشيط اشتراكك بنجاح! يمكنك الآن استخدام المنظومة بالكامل.", "success");
+            switchTab("home");
+          }
+        }
         updateUiForSubscription(currentSubscription);
         return;
       }
 
-      // If cloud database explicitly confirmed that no subscription exists (deleted or revoked on portal)
-      // Require direct cloud confirmation (supaResponded && supaReportedNoSub) so transient serverless cold starts never revoke an active subscription
-      if (supaResponded && supaReportedNoSub && (serverReportedNoSub || !serverResponded)) {
+      // إلغاء الاشتراك يُطبَّق فقط عندما يرد الخادم صراحةً بعدم وجود اشتراك،
+      // حتى لا يؤدي انقطاع الشبكة أو برودة الخادم إلى إغلاق التطبيق على الطبيب.
+      if (serverResponded && serverReportedNoSub) {
         localStorage.removeItem("penrx_last_sub");
         currentSubscription = null;
         updateUiForSubscription(null);
@@ -1667,7 +1850,7 @@
               <span class="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 font-bold text-[10px]">${sub.planName}</span>
             </div>
             <p class="text-[11px] text-slate-300">انتهت مدة اشتراكك. يرجى تجديد الاشتراك لمتابعة إنشاء الروشتات وإدارة العيادة.</p>
-            <button type="button" onclick="switchTab('pricing')" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+            <button type="button" onclick="switchTab('subscriptions')" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
               <span>تجديد الاشتراك الآن ⚡</span>
             </button>
           `;
@@ -1749,7 +1932,7 @@
       renderHomeStats();
 
       checkSubscriptionStatus();
-      setInterval(checkSubscriptionStatus, 8000); // Live poll cloud portal smoothly
+      setInterval(checkSubscriptionStatus, 4000); // Reduced to 4s for faster post-activation detection
 
       lucide.createIcons();
     });

@@ -523,7 +523,7 @@
           </div>
         </div>
 
-        <!-- Submission Form (Direct Supabase Cloud Connected) -->
+        <!-- Submission Form (خوادم PenRX+ عبر /api/subscriptions) -->
         <form id="subscribe-form" onsubmit="handleSubscriptionSubmit(event)" class="space-y-2 pt-2 border-t border-slate-800">
           <div class="space-y-1">
             <label class="text-[11px] font-bold text-slate-300">الباقة المختارة:</label>
@@ -640,8 +640,16 @@
   <script>
     // All privileged operations go through the authoritative cloud API —
     // this static page never holds database credentials
-    const API_BASE = "https://pen-rx.vercel.app";
-    const ADMIN_PHONE = "201094085228";
+    // نقطة النهاية ثابتة في الكود: لا تُقرأ من التخزين المحلي حتى لا يُحوَّل
+    // فحص الترخيص إلى خادم وهمي. الأصل نفسه يُستخدم عند الاستضافة على نطاق المنتج.
+    const CLOUD_FALLBACK = "https://pen-rx.vercel.app";
+    const API_BASE = (() => {
+      const host = location.hostname;
+      const httpLike = location.protocol === "http:" || location.protocol === "https:";
+      const isLocalHost = host === "localhost" || host === "127.0.0.1" || host === "" || /^\d+\./.test(host);
+      return httpLike && !isLocalHost ? location.origin.replace(/\/+$/, "") : CLOUD_FALLBACK;
+    })();
+    const ADMIN_PHONE = "201094085228"; // للاستدعاء/واتساب دعم ما قبل البيع
 
     // Curated Egyptian & Arabic Medications Bank for Instant Offline Search (Bilingual)
     const POPULAR_DRUGS = [
@@ -1573,53 +1581,47 @@
         updatedAt: new Date().toISOString()
       };
 
-      const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
       localStorage.setItem("penrx_pending_sub_id", record.id);
       localStorage.setItem("penrx_last_subscriber_id", record.subscriberId);
       localStorage.setItem("penrx_was_pending", "true");
-
-      // Direct Supabase REST persist (unified with desktop/web store)
-      try {
-        await fetch(`${SUPABASE_REST_URL}?on_conflict=id`, {
-          method: "POST",
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            "Content-Type": "application/json",
-            Prefer: "resolution=merge-duplicates,return=representation",
-          },
-          body: JSON.stringify(record),
-        });
-      } catch (e) {}
 
       try {
         const res = await fetch(`${API_BASE}/api/subscriptions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(record),
+          body: JSON.stringify({
+            id: record.id,
+            planId,
+            paymentMethod: "vodafone",
+            senderPhone,
+            transactionRef,
+            machineId: activeMid,
+            allowedMachineIds: [activeMid],
+            doctorName: record.doctorName,
+            clinicName: record.clinicName,
+          }),
         });
 
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (data && data.subscription) {
-            Object.assign(record, data.subscription);
-          }
-          showToast("🎉 تم إرسال طلب الاشتراك للبورتال بنجاح! سيتم التفعيل فور مراجعة التحويل.", "success");
-          localStorage.setItem("penrx_last_sub", JSON.stringify(record));
-          checkSubscriptionStatus();
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          console.error("Subscription API response error:", errData);
-          showToast("تم تسجيل الطلب وجاري إرساله للسحابة.", "info");
-          localStorage.setItem("penrx_last_sub", JSON.stringify(record));
-          checkSubscriptionStatus();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.subscription) {
+          // الطلب لم يصل للبورتال: لا يُحفظ كطلب معلّق ولا يوهم الطبيب بأنه مُرسل
+          localStorage.removeItem("penrx_pending_sub_id");
+          localStorage.removeItem("penrx_was_pending");
+          showToast(data && data.error ? data.error : "تعذر إرسال الطلب للبورتال. تحقّق من الاتصال ثم أعد المحاولة.", "error");
+          return;
         }
+
+        Object.assign(record, data.subscription);
+        localStorage.setItem("penrx_pending_sub_id", record.id);
+        localStorage.setItem("penrx_last_subscriber_id", record.subscriberId);
+        localStorage.setItem("penrx_last_sub", JSON.stringify(record));
+        showToast("🎉 تم إرسال طلب الاشتراك للبورتال بنجاح! سيتم فتح التطبيق فور مراجعة التحويل.", "success");
+        checkSubscriptionStatus();
       } catch (err) {
         console.error("Network error submitting subscription:", err);
-        localStorage.setItem("penrx_last_sub", JSON.stringify(record));
-        showToast("تم حفظ الطلب محلياً وجاري المزامنة.", "info");
-        checkSubscriptionStatus();
+        localStorage.removeItem("penrx_pending_sub_id");
+        localStorage.removeItem("penrx_was_pending");
+        showToast("تعذر الاتصال بالبورتال. تحقّق من الإنترنت ثم أعد المحاولة.", "error");
       } finally {
         btn.disabled = false;
         btn.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i><span>إرسال بيانات التحويل لتفعيل الحساب ⚡</span>`;
@@ -1701,13 +1703,13 @@
 
     async function checkSubscriptionStatus() {
       const activeMid = machineId || getOrCreateMachineId();
-      let matchedSub = null;
 
       let confirmedSub = null;
       let serverResponded = false;
       let serverReportedNoSub = false;
 
-      // 1. Check via Cloud API
+      // الحالة تُقرأ من خوادم المنتج فقط: /api/subscriptions لا يستخدم أي كاش
+      // ويقرأ PostgreSQL مباشرة، فلا حاجة لاتصال مباشر بقاعدة البيانات من المتصفح.
       try {
         const encodedId = encodeURIComponent(activeMid);
         const savedSub = localStorage.getItem("penrx_last_sub");
@@ -1737,54 +1739,6 @@
         console.warn("Cloud API status fetch deferred:", err);
       }
 
-      // 2. Direct Supabase Cloud REST verification (ensures instant sync even if serverless is cold/sleeping)
-      let supaResponded = false;
-      let supaReportedNoSub = false;
-      try {
-        const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
-        const savedSub = localStorage.getItem("penrx_last_sub");
-        let subId = "";
-        let subRecId = "";
-        if (savedSub) {
-          try {
-            const parsedSub = JSON.parse(savedSub);
-            subId = parsedSub.subscriberId || "";
-            subRecId = parsedSub.id || "";
-          } catch {}
-        }
-        const orParts = [`machineId.ilike.${encodeURIComponent(activeMid)}`];
-        if (subId) {
-          orParts.push(`subscriberId.ilike.${encodeURIComponent(subId)}`);
-        }
-        if (subRecId) {
-          orParts.push(`id.eq.${encodeURIComponent(subRecId)}`);
-        }
-        const supaUrl = `https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription?or=(${orParts.join(",")})&order=updatedAt.desc&limit=5`;
-        const supaRes = await fetch(supaUrl, {
-          headers: {
-            apikey: supaKey,
-            Authorization: "Bearer " + supaKey,
-          },
-          cache: "no-store",
-          signal: AbortSignal.timeout(5000),
-        });
-        if (supaRes.ok) {
-          supaResponded = true;
-          const list = await supaRes.json();
-          if (Array.isArray(list)) {
-            if (list.length > 0) {
-              const activeMatch = list.find((r) => r.status === "ACTIVE");
-              const bestMatch = activeMatch || list[0];
-              // Always prefer Supabase Direct ACTIVE over a stale Cloud API PENDING response
-              if (!confirmedSub || bestMatch.status === "ACTIVE") {
-                confirmedSub = bestMatch;
-              }
-            } else {
-              supaReportedNoSub = true;
-            }
-          }
-        }
-      } catch {}
 
       if (confirmedSub) {
         const wasPending =
@@ -1807,9 +1761,9 @@
         return;
       }
 
-      // If cloud database explicitly confirmed that no subscription exists (deleted or revoked on portal)
-      // Require direct cloud confirmation (supaResponded && supaReportedNoSub) so transient serverless cold starts never revoke an active subscription
-      if (supaResponded && supaReportedNoSub && (serverReportedNoSub || !serverResponded)) {
+      // إلغاء الاشتراك يُطبَّق فقط عندما يرد الخادم صراحةً بعدم وجود اشتراك،
+      // حتى لا يؤدي انقطاع الشبكة أو برودة الخادم إلى إغلاق التطبيق على الطبيب.
+      if (serverResponded && serverReportedNoSub) {
         localStorage.removeItem("penrx_last_sub");
         currentSubscription = null;
         updateUiForSubscription(null);

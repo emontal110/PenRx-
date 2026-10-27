@@ -1,306 +1,187 @@
-import { NextResponse } from "next/server";
 import {
-  getAllSubscriptions,
-  getSubscriptionById,
-  getSubscriptionByMachine,
-  getSubscriptionBySubscriberId,
-  pickBestSubscription,
-  submitSubscription,
-  linkDeviceToSubscriber,
-  updateSubscriptionDoctorProfile,
-  deleteSubscription,
-  validateAdminAuthorization,
-  machineOwnsSubscription,
-  forceHydrateCache,
-  SubscriptionRecord,
-} from "@/lib/subscriptionManager";
+  apiError,
+  apiJson,
+  cleanMachineId,
+  cleanOrderId,
+  cleanPhone,
+  cleanSubscriberId,
+  preflight,
+  readJsonBody,
+} from "@/lib/apiHttp";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
+import {
+  cancelPendingSubscription,
+  linkDeviceToSubscriber,
+  resolveDeviceSubscription,
+  submitSubscription,
+  updateSubscriptionDoctorProfile,
+} from "@/lib/subscriptionService";
 
 export const dynamic = "force-dynamic";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-key, x-master-secret, apikey, Pragma, Cache-Control",
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: CORS_HEADERS,
-  });
+export async function OPTIONS(request: Request) {
+  return preflight(request);
 }
 
-function jsonResponse(data: any, init?: { status?: number }) {
-  return NextResponse.json(
-    { ...data, serverTime: Date.now() },
-    {
-      status: init?.status || 200,
-      headers: {
-        ...CORS_HEADERS,
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
-      },
-    }
-  );
-}
-
+/**
+ * GET returns the caller's own subscription. Payment evidence is redacted unless
+ * the requesting device provably owns the record, so an order id cannot be used to
+ * read another doctor's data.
+ */
 export async function GET(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/subscriptions");
-  }
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/subscriptions");
 
-  // Rate Limit: 120 requests per minute per IP (allows fast mobile polling without 429 errors)
   if (!checkRateLimit(request, { maxRequests: 120, windowMs: 60_000, prefix: "sub-get" })) {
-    return rateLimitExceededResponse(60);
+    return rateLimitExceededResponse(request, 30);
   }
 
-  try {
-    const { searchParams } = new URL(request.url);
-    const machineId = searchParams.get("machineId");
-    const altMachineId = searchParams.get("altMachineId");
-    const subscriberId = searchParams.get("subscriberId");
-    const subIdParam = searchParams.get("id");
+  const { searchParams } = new URL(request.url);
+  const machineId = cleanMachineId(searchParams.get("machineId"));
+  const altMachineId = cleanMachineId(searchParams.get("altMachineId"));
+  const subscriberId = cleanSubscriberId(searchParams.get("subscriberId"));
+  const orderId = cleanOrderId(searchParams.get("id"));
 
-    // Redact payment metadata unless the caller's machine or subscriber ID owns the record
-    const redactPaymentFields = (sub: any) =>
-      sub ? { ...sub, senderPhone: undefined, transactionRef: undefined } : sub;
-
-    // Machine-specific or Subscriber-specific or Order ID lookup
-    if (machineId || altMachineId || subscriberId || subIdParam) {
-      const cleanMachineId = (machineId || "").trim();
-      const cleanAltMachineId = (altMachineId || "").trim();
-      const cleanSubId = (subscriberId || "").trim();
-      const cleanOrderId = (subIdParam || "").trim();
-
-      // Force-refresh the in-memory cache from Supabase on every lookup
-      await forceHydrateCache();
-
-      const candidates: SubscriptionRecord[] = [];
-
-      // Query all provided identifiers in parallel so an ACTIVE record on any identifier is never missed
-      const [byOrder, byMachine, byAltMachine, bySubId] = await Promise.all([
-        cleanOrderId ? getSubscriptionById(cleanOrderId) : Promise.resolve(null),
-        cleanMachineId ? getSubscriptionByMachine(cleanMachineId) : Promise.resolve(null),
-        cleanAltMachineId && cleanAltMachineId !== cleanMachineId
-          ? getSubscriptionByMachine(cleanAltMachineId)
-          : Promise.resolve(null),
-        cleanSubId && cleanSubId !== "SUB-0000"
-          ? getSubscriptionBySubscriberId(cleanSubId)
-          : Promise.resolve(null),
-      ]);
-
-      if (byOrder) candidates.push(byOrder);
-      if (byMachine) candidates.push(byMachine);
-      if (byAltMachine) candidates.push(byAltMachine);
-      if (bySubId) candidates.push(bySubId);
-
-      let match: any = pickBestSubscription(candidates);
-
-      if (
-        match &&
-        cleanMachineId &&
-        !machineOwnsSubscription(match, cleanMachineId) &&
-        (!cleanAltMachineId || !machineOwnsSubscription(match, cleanAltMachineId)) &&
-        (!cleanSubId || (match.subscriberId || "").toUpperCase() !== cleanSubId.toUpperCase())
-      ) {
-        match = redactPaymentFields(match);
-      }
-
-      return jsonResponse({ subscription: match });
-    }
-
-    // CRITICAL SECURITY CHECK: Viewing all subscriptions requires Master Administrative Secret
-    if (!validateAdminAuthorization(request)) {
-      return jsonResponse(
-        { error: "Unauthorized: Master Administrative credentials required to list all subscriptions" },
-        { status: 401 }
-      );
-    }
-
-    const subscriptions = await getAllSubscriptions();
-    return jsonResponse({ success: true, subscriptions });
-  } catch (err: any) {
-    return jsonResponse({ error: err.message || "Failed to fetch subscriptions" }, { status: 500 });
+  if (!machineId && !subscriberId && !orderId) {
+    return apiError(request, "machineId أو subscriberId أو id مطلوب.", 400);
   }
+  if (!machineId) {
+    // Without a device id there is no ownership proof: nothing is returned.
+    return apiJson(request, { subscription: null });
+  }
+
+  const subscription = await resolveDeviceSubscription({
+    machineId,
+    altMachineId: altMachineId || undefined,
+    subscriberId: subscriberId || undefined,
+    orderId: orderId || undefined,
+  });
+
+  if (!subscription) return apiJson(request, { subscription: null });
+
+  const owns =
+    subscription.machineId === machineId ||
+    (subscription.allowedMachineIds || []).includes(machineId) ||
+    (subscriberId && subscription.subscriberId === subscriberId);
+
+  const payload = owns
+    ? subscription
+    : { ...subscription, senderPhone: undefined, transactionRef: undefined };
+
+  return apiJson(request, { subscription: payload });
 }
 
+/**
+ * Doctor-facing actions: submit a payment request, link an extra device, cancel a
+ * pending request, or correct the clinic profile. Prices and durations are always
+ * taken from the server plan catalogue.
+ */
 export async function POST(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/subscriptions");
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/subscriptions");
+
+  if (!checkRateLimit(request, { maxRequests: 15, windowMs: 10 * 60_000, prefix: "sub-post" })) {
+    return rateLimitExceededResponse(request, 600);
   }
 
-  // Rate Limit: 15 subscription operations per 10 minutes per IP
-  if (!checkRateLimit(request, { maxRequests: 15, windowMs: 10 * 60_000, prefix: "sub-post" })) {
-    return rateLimitExceededResponse(600);
-  }
+  const body = await readJsonBody<Record<string, any>>(request);
+  if (!body.ok) return apiError(request, "محتوى الطلب غير صالح.", 400);
+
+  const data = body.data;
+  const action = String(data.action || "").trim();
 
   try {
-    const body = await request.json();
-    const { action } = body;
-
-    // Doctor linking their second/third device to existing subscriber ID
     if (action === "link_device") {
-      const { subscriberId, machineId, verificationPhone } = body;
-      if (!subscriberId || !machineId) {
-        return jsonResponse(
-          { error: "معرّف المشترك وكود الجهاز مطلوبان لإتمام عملية الربط" },
-          { status: 400 }
-        );
-      }
-      if (!verificationPhone || !String(verificationPhone).trim()) {
-        return jsonResponse(
-          { error: "رقم هاتف التحقق مطلوب لإتمام ربط الجهاز الجديد (يجب أن يطابق الرقم المسجل)" },
-          { status: 400 }
-        );
-      }
+      const subscriberId = cleanSubscriberId(data.subscriberId);
+      const machineId = cleanMachineId(data.machineId);
+      const phone = cleanPhone(data.verificationPhone);
 
-      const result = await linkDeviceToSubscriber(subscriberId, machineId, verificationPhone);
-      if (!result.success) {
-        return jsonResponse({ error: result.error || "فشل ربط الجهاز" }, { status: 400 });
-      }
+      if (!subscriberId || !machineId) return apiError(request, "كود المشترك وكود الجهاز مطلوبان.", 400);
+      if (!phone) return apiError(request, "رقم هاتف التحقق مطلوب لإتمام ربط الجهاز الجديد.", 400);
 
-      return jsonResponse({
+      const result = await linkDeviceToSubscriber(subscriberId, machineId, phone);
+      if (!result.success) return apiError(request, result.error || "فشل ربط الجهاز.", 400);
+
+      return apiJson(request, {
         success: true,
         message: "تم ربط الجهاز الجديد بنجاح بحساب المشترك",
         subscription: result.subscription,
       });
     }
 
-    // Doctor cancelling their own PENDING request before admin review
     if (action === "cancel_request") {
-      const { id, subscriberId, machineId } = body;
-      if (!id || !machineId) {
-        return jsonResponse(
-          { error: "معرّف الطلب وكود الجهاز مطلوبان لإلغاء الطلب" },
-          { status: 400 }
-        );
-      }
+      const id = cleanOrderId(data.id);
+      const machineId = cleanMachineId(data.machineId);
+      if (!id || !machineId) return apiError(request, "معرّف الطلب وكود الجهاز مطلوبان.", 400);
 
-      const sub =
-        (await getSubscriptionById(String(id).trim())) ||
-        (subscriberId
-          ? await getSubscriptionBySubscriberId(String(subscriberId).trim())
-          : await getSubscriptionByMachine(String(machineId).trim()));
-      if (!sub || sub.id !== id) {
-        return jsonResponse({ error: "لم يتم العثور على الطلب المطلوب إلغاؤه" }, { status: 404 });
-      }
-      if (sub.status !== "PENDING") {
-        return jsonResponse(
-          { error: "لا يمكن إلغاء طلب تمت مراجعته أو تفعيله مسبقاً" },
-          { status: 400 }
-        );
-      }
-      if (
-        !machineOwnsSubscription(sub, String(machineId).trim()) &&
-        (!subscriberId || (sub.subscriberId || "").toUpperCase() !== String(subscriberId).trim().toUpperCase())
-      ) {
-        return jsonResponse(
-          { error: "هذا الجهاز غير مصرح له بإلغاء هذا الطلب" },
-          { status: 403 }
-        );
-      }
+      const cancelled = await cancelPendingSubscription(id, machineId);
+      if (!cancelled) return apiError(request, "لم يتم العثور على الطلب المطلوب إلغاؤه.", 404);
 
-      await deleteSubscription(sub.id);
-      return jsonResponse({
-        success: true,
-        message: "تم إلغاء طلب الاشتراك وحذفه من البورتال بنجاح",
-      });
+      return apiJson(request, { success: true, message: "تم إلغاء طلب الاشتراك وحذفه." });
     }
 
-    // Update mandatory doctor/clinic profile on subscription for Admin Portal sync
     if (action === "update_profile") {
-      const { subscriberId, machineId, doctorName, clinicName, phone } = body;
-      if (!machineId) {
-        return jsonResponse(
-          { error: "كود الجهاز (machineId) مطلوب لتحديث بيانات الاشتراك" },
-          { status: 400 }
-        );
-      }
+      const machineId = cleanMachineId(data.machineId);
+      if (!machineId) return apiError(request, "كود الجهاز مطلوب لتحديث بيانات الاشتراك.", 400);
 
-      const existing = subscriberId
-        ? (await getSubscriptionBySubscriberId(String(subscriberId).trim())) ||
-          (await getSubscriptionByMachine(String(machineId).trim()))
-        : await getSubscriptionByMachine(String(machineId).trim());
-      if (!existing) {
-        return jsonResponse(
-          { error: "لم يتم العثور على اشتراك مطابق لتحديث بيانات الطبيب" },
-          { status: 404 }
-        );
-      }
+      const own = await resolveDeviceSubscription({ machineId, subscriberId: cleanSubscriberId(data.subscriberId) || undefined });
+      if (!own) return apiError(request, "لم يتم العثور على اشتراك مطابق.", 404);
 
       const updated = await updateSubscriptionDoctorProfile(
-        existing.subscriberId || String(machineId).trim(),
-        doctorName || "",
-        clinicName || "",
-        phone || ""
+        own.subscriberId,
+        String(data.doctorName || ""),
+        String(data.clinicName || ""),
+        String(data.phone || "")
       );
 
-      return jsonResponse({
+      return apiJson(request, {
         success: true,
-        message: "تم تحديث ومزامنة بيانات الطبيب والعيادة مع البورتال بنجاح",
+        message: "تم تحديث ومزامنة بيانات الطبيب والعيادة مع البورتال",
         subscription: updated,
       });
     }
 
-    // New subscription submission
-    const {
-      id,
-      subscriberId,
-      planId,
-      planName,
-      price,
-      paymentMethod,
-      senderPhone,
-      transactionRef,
+    // New subscription request
+    const machineId = cleanMachineId(data.machineId);
+    if (!machineId) return apiError(request, "كود الجهاز مطلوب.", 400);
+
+    const subscription = await submitSubscription({
+      id: cleanOrderId(data.id) || undefined,
+      planId: String(data.planId || ""),
+      paymentMethod: String(data.paymentMethod || "vodafone"),
+      senderPhone: String(data.senderPhone || ""),
+      transactionRef: String(data.transactionRef || ""),
       machineId,
-      allowedMachineIds,
-      doctorName,
-      clinicName,
-      durationDays,
-      isTrial,
-    } = body;
-
-    if (!machineId) {
-      return jsonResponse({ error: "Machine ID is required" }, { status: 400 });
-    }
-
-    // Security: Prevent Free Trial Abuse on the server
-    const wantsTrial = Boolean(isTrial) || planId === "trial";
-    if (wantsTrial) {
-      const existing = await getSubscriptionByMachine(machineId);
-      if (existing && existing.id !== id && (existing.isTrial || existing.planId === "trial") && existing.status === "ACTIVE") {
-        return jsonResponse(
-          { error: "لقد تم الاستفادة من الفترة التجريبية المجانية مسبقاً على هذا الجهاز" },
-          { status: 400 }
-        );
-      }
-    }
-
-    const newSub = await submitSubscription({
-      id,
-      subscriberId,
-      planId: planId || "standard",
-      planName: planName || "باقة الاشتراك",
-      price: wantsTrial ? 0 : Number(price) || 0,
-      paymentMethod: paymentMethod || "vodafone",
-      senderPhone: senderPhone || "",
-      transactionRef: transactionRef || "",
-      machineId,
-      allowedMachineIds: Array.isArray(allowedMachineIds) ? allowedMachineIds : [machineId],
-      doctorName,
-      clinicName,
-      durationDays: wantsTrial ? 30 : Number(durationDays) || 30,
-      isTrial: wantsTrial,
+      allowedMachineIds: Array.isArray(data.allowedMachineIds) ? data.allowedMachineIds : [machineId],
+      doctorName: String(data.doctorName || ""),
+      clinicName: String(data.clinicName || ""),
     });
 
-    return jsonResponse({ success: true, subscription: newSub });
+    return apiJson(request, { success: true, subscription });
   } catch (err: any) {
-    console.error("Subscription create error:", err);
-    return jsonResponse({ error: err.message || "Failed to process request" }, { status: 500 });
+    const message =
+      err?.name === "SupabaseRestError"
+        ? "تعذر حفظ طلب الاشتراك حالياً. حاول مرة أخرى بعد لحظات."
+        : err?.message || "تعذر تنفيذ الطلب.";
+    console.error("[Subscriptions POST]", err?.message || err);
+    return apiError(request, message, err?.name === "SupabaseRestError" ? 502 : 400);
   }
+}
+
+/** Kept for older installed builds: a pending request can also be withdrawn with DELETE. */
+export async function DELETE(request: Request) {
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/subscriptions");
+
+  if (!checkRateLimit(request, { maxRequests: 10, windowMs: 10 * 60_000, prefix: "sub-delete" })) {
+    return rateLimitExceededResponse(request, 600);
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = cleanOrderId(searchParams.get("id"));
+  const machineId = cleanMachineId(searchParams.get("machineId"));
+  if (!id || !machineId) return apiError(request, "معرّف الطلب وكود الجهاز مطلوبان.", 400);
+
+  const cancelled = await cancelPendingSubscription(id, machineId);
+  if (!cancelled) return apiError(request, "لم يتم العثور على الطلب.", 404);
+
+  return apiJson(request, { success: true, message: "تم إلغاء طلب الاشتراك." });
 }

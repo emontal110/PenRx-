@@ -465,7 +465,7 @@ export function InlineDrugPadInput({
               }`}
             >
               <Search className="w-3 h-3" />
-              <span>بحث الأدوية الذكي (+200,000)</span>
+              <span>بحث الأدوية الذكي (43,000+ دواء)</span>
             </button>
 
             <button
@@ -710,7 +710,7 @@ export function InlineDrugPadInput({
               ) : isSearching ? (
                 <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-                  <span>جاري فحص بنك الأدوية (+200,000)...</span>
+                  <span>جاري فحص بنك الأدوية (43,000+ دواء)...</span>
                 </div>
               ) : (
                 <div className="p-4 text-center space-y-2">

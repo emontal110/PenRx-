@@ -73,12 +73,49 @@ interface SubscriptionStoreState {
   revokeLocallyAndClear: (reason?: string) => void;
 }
 
-const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
+/**
+ * The browser never talks to the database. License state comes only from the
+ * PenRX+ API, and the device token minted by /api/system/verify unlocks the
+ * medical-data endpoints.
+ */
 
 let _hasTriggeredCloudDataRecovery = false;
+
+/** CSRF marker the API requires on every admin mutation (see src/lib/adminAuth.ts). */
+const ADMIN_CSRF_HEADER = "x-penrx-admin";
+
+/**
+ * Single gateway for all privileged calls: cookie session for admin actions, and
+ * no optimistic local mutation is ever treated as a granted license.
+ */
+async function apiRequest(path: string, init: RequestInit = {}): Promise<any> {
+  const res = await fetch(getApiUrl(path), {
+    credentials: "include",
+    cache: "no-store",
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init.headers || {}) },
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || "تعذر الاتصال بخدمة الاشتراكات. تحقق من الاتصال بالإنترنت.");
+  }
+  if (data?.serverTime) recordServerTime(data.serverTime);
+  return data;
+}
+
+/** Administrative changes are only valid when made by a logged-in admin session. */
+async function adminAction(
+  id: string,
+  body: Record<string, unknown>,
+  method: "PATCH" | "DELETE" = "PATCH"
+): Promise<any> {
+  return apiRequest(`/api/admin/subscriptions/${encodeURIComponent(id)}`, {
+    method,
+    headers: { [ADMIN_CSRF_HEADER]: "1" },
+    body: method === "PATCH" ? JSON.stringify(body) : undefined,
+  });
+}
 
 /**
  * Automatically recovers the doctor's Clinic Profile, Patients, and Prescriptions
@@ -344,10 +381,10 @@ function pickBestCandidate(candidates: (SubscriptionRecord | null | undefined)[]
   const anyActive = valid.find((s) => s.status === "ACTIVE");
   if (anyActive) return anyActive;
 
-  const pending = valid.find((s) => s.status === "PENDING");
-  if (pending) return pending;
-
-  return valid[0];
+  // بلا ACTIVE: آخر قرار إداري هو الذي يُعرض، حتى لا يُخفي إيقاف حديث طلباً معلّقاً قديماً
+  return [...valid].sort(
+    (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+  )[0];
 }
 
 export const useSubscriptionStore = create<SubscriptionStoreState>()(
@@ -434,21 +471,11 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             (get().subscriptions || []).find((s) => s.status === "ACTIVE" || s.status === "PENDING");
 
           if (activeOrPendingSub && activeOrPendingSub.id && prevMid && prevMid !== newId) {
-            const mergedIds = Array.from(
-              new Set([...(activeOrPendingSub.allowedMachineIds || []), activeOrPendingSub.machineId, ...allKnownMids].filter(Boolean))
-            );
-            fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(activeOrPendingSub.id)}`, {
-              method: "PATCH",
-              headers: {
-                apikey: SUPABASE_ANON_KEY,
-                Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                allowedMachineIds: mergedIds,
-                updatedAt: new Date().toISOString(),
-              }),
-            }).catch(() => {});
+            // The server owns the device list: the new hardware id is verified and
+            // linked there, never written from the client.
+            get()
+              .syncWithServer(true)
+              .catch(() => {});
           }
 
           if (prevMid !== newId) {
@@ -514,74 +541,61 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           } catch {}
         }
 
+        // The request is persisted by the API only. If it fails, the pending record
+        // is rolled back so the doctor is never told a payment was received when it
+        // was not — an undelivered request is the one failure mode a paid product
+        // cannot afford to hide.
         try {
-          const directSupaRes = await fetch(`${SUPABASE_REST_URL}?on_conflict=id`, {
+          const data = await apiRequest("/api/subscriptions", {
             method: "POST",
-            headers: {
-              apikey: SUPABASE_ANON_KEY,
-              Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-              "Content-Type": "application/json",
-              Prefer: "resolution=merge-duplicates,return=representation",
-            },
-            body: JSON.stringify(newRecord),
+            body: JSON.stringify({
+              id,
+              planId: req.planId,
+              paymentMethod: req.paymentMethod,
+              senderPhone: req.senderPhone,
+              transactionRef: req.transactionRef,
+              doctorName: req.doctorName || "",
+              clinicName: req.clinicName || "",
+              machineId,
+              allowedMachineIds,
+            }),
           });
-          if (directSupaRes.ok) {
-            console.log("[SubscriptionStore] Direct Supabase Cloud submission confirmed.");
+
+          if (data?.subscription) {
+            const mergedSub: SubscriptionRecord = {
+              ...data.subscription,
+              allowedMachineIds: Array.from(
+                new Set([...(data.subscription.allowedMachineIds || []), ...allowedMachineIds])
+              ),
+            };
+
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem("penrx_pending_sub_id", mergedSub.id);
+                localStorage.setItem("penrx_last_sub", JSON.stringify(mergedSub));
+              } catch {}
+            }
+
+            set((state) => ({
+              subscriberId: mergedSub.subscriberId || subscriberId,
+              currentSubscription: mergedSub,
+              subscriptions: [mergedSub, ...state.subscriptions.filter((s) => s.id !== mergedSub.id)],
+            }));
+
+            return mergedSub;
           }
-        } catch (supaErr) {
-          console.warn("[SubscriptionStore] Direct Supabase Cloud notice:", supaErr);
-        }
-
-        try {
-          let res: Response | null = null;
-          try {
-            res = await fetch(getApiUrl("/api/subscriptions"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(newRecord),
-            });
-          } catch {}
-
-          if (!res || !res.ok) {
+        } catch (err: any) {
+          set((state) => ({
+            subscriptions: state.subscriptions.filter((s) => s.id !== id),
+            currentSubscription: state.currentSubscription?.id === id ? null : state.currentSubscription,
+          }));
+          if (typeof window !== "undefined") {
             try {
-              res = await fetch("https://pen-rx.vercel.app/api/subscriptions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(newRecord),
-              });
+              localStorage.removeItem("penrx_pending_sub_id");
+              localStorage.removeItem("penrx_was_pending");
             } catch {}
           }
-
-          if (res && res.ok) {
-            const data = await res.json();
-            if (data?.serverTime) {
-              recordServerTime(data.serverTime);
-            }
-            if (data && data.subscription) {
-              autoRestoreClinicAndPatientData(data.subscription);
-              set((state) => {
-                if (state.currentSubscription?.status === "ACTIVE") {
-                  return state;
-                }
-                const mergedSub: SubscriptionRecord = {
-                  ...data.subscription,
-                  allowedMachineIds: Array.from(
-                    new Set([...(data.subscription.allowedMachineIds || []), ...allowedMachineIds])
-                  ),
-                };
-                return {
-                  subscriberId: mergedSub.subscriberId || subscriberId,
-                  currentSubscription: mergedSub,
-                  subscriptions: [
-                    mergedSub,
-                    ...state.subscriptions.filter((s) => s.id !== mergedSub.id),
-                  ],
-                };
-              });
-            }
-          }
-        } catch (err) {
-          console.warn("Server subscription sync deferred:", err);
+          throw err;
         }
 
         return newRecord;
@@ -614,39 +628,15 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           }));
 
           try {
-            await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(pending.id)}`, {
-              method: "DELETE",
-              headers: {
-                apikey: SUPABASE_ANON_KEY,
-                Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-              },
+            await apiRequest("/api/subscriptions", {
+              method: "POST",
+              body: JSON.stringify({
+                action: "cancel_request",
+                id: pending.id,
+                subscriberId: pending.subscriberId,
+                machineId,
+              }),
             });
-          } catch {}
-
-          const cancelPayload = {
-            action: "cancel_request",
-            id: pending.id,
-            subscriberId: pending.subscriberId,
-            machineId,
-          };
-
-          try {
-            let res: Response | null = null;
-            try {
-              res = await fetch(getApiUrl("/api/subscriptions"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(cancelPayload),
-              });
-            } catch {}
-
-            if (!res || !res.ok) {
-              await fetch("https://pen-rx.vercel.app/api/subscriptions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(cancelPayload),
-              });
-            }
           } catch (err) {
             console.warn("Server subscription cancel deferred:", err);
           }
@@ -657,32 +647,17 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         const machineId = get().machineId || getOrCreateMachineId();
         const cleanSubId = targetSubscriberId.toUpperCase().trim();
 
-        const linkPayload = {
-          action: "link_device",
-          subscriberId: cleanSubId,
-          machineId,
-          verificationPhone: verificationPhone?.trim(),
-        };
-
         try {
-          let res: Response | null = null;
-          try {
-            res = await fetch(getApiUrl("/api/subscriptions"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(linkPayload),
-            });
-          } catch {}
+          const data = await apiRequest("/api/subscriptions", {
+            method: "POST",
+            body: JSON.stringify({
+              action: "link_device",
+              subscriberId: cleanSubId,
+              machineId,
+              verificationPhone: verificationPhone?.trim(),
+            }),
+          });
 
-          if (!res || !res.ok) {
-            res = await fetch("https://pen-rx.vercel.app/api/subscriptions", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(linkPayload),
-            });
-          }
-
-          const data = await res.json();
           if (data.success && data.subscription) {
             if (typeof window !== "undefined") {
               try {
@@ -710,131 +685,44 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }
       },
 
+      /**
+       * Admin-only operations. They never mutate the local license optimistically:
+       * a doctor-side code path must not be able to flip PENDING to ACTIVE, so the
+       * state is re-read from the server after the admin session performs the change.
+       */
       activateSubscription: async (id, customDays) => {
-        const target = get().subscriptions.find((s) => s.id === id);
-        const duration = customDays || target?.durationDays || 30;
-        const now = new Date();
-        const expires = new Date(now.getTime() + duration * 24 * 60 * 60 * 1000);
-
-        set((state) => ({
-          subscriptions: state.subscriptions.map((s) =>
-            s.id === id
-              ? {
-                  ...s,
-                  status: "ACTIVE",
-                  durationDays: duration,
-                  activatedAt: now.toISOString(),
-                  expiresAt: expires.toISOString(),
-                  updatedAt: new Date().toISOString(),
-                }
-              : s
-          ),
-        }));
-
-        try {
-          await fetch(getApiUrl("/api/system/verify"), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, action: "ACTIVATE", durationDays: duration }),
-          });
-        } catch {}
+        await adminAction(id, { action: "ACTIVATE", durationDays: customDays });
+        await get().syncWithServer(true);
       },
 
       suspendSubscription: async (id) => {
-        set((state) => ({
-          subscriptions: state.subscriptions.map((s) =>
-            s.id === id ? { ...s, status: "SUSPENDED", updatedAt: new Date().toISOString() } : s
-          ),
-        }));
-
-        try {
-          await fetch(getApiUrl("/api/system/verify"), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, action: "SUSPEND" }),
-          });
-        } catch {}
+        await adminAction(id, { action: "SUSPEND" });
+        await get().syncWithServer(true);
       },
 
       deleteSubscription: async (id) => {
-        set((state) => ({
-          subscriptions: state.subscriptions.filter((s) => s.id !== id),
-        }));
-
-        try {
-          await fetch(getApiUrl(`/api/system/verify?id=${encodeURIComponent(id)}`), {
-            method: "DELETE",
-          });
-        } catch {}
+        await adminAction(id, {}, "DELETE");
+        get().revokeLocallyAndClear("deleted-by-admin");
       },
 
       adjustSubscriptionDays: async (id, daysDelta) => {
-        set((state) => ({
-          subscriptions: state.subscriptions.map((s) => {
-            if (s.id !== id) return s;
-            const currentExpiry = s.expiresAt ? new Date(s.expiresAt).getTime() : Date.now();
-            const newExpiry = new Date(currentExpiry + daysDelta * 24 * 60 * 60 * 1000);
-            return {
-              ...s,
-              expiresAt: newExpiry.toISOString(),
-              durationDays: Math.max(1, (s.durationDays || 30) + daysDelta),
-              status: "ACTIVE",
-              updatedAt: new Date().toISOString(),
-            };
-          }),
-        }));
-
-        try {
-          await fetch(getApiUrl("/api/system/verify"), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, action: "ADJUST_DAYS", daysDelta }),
-          });
-        } catch {}
+        await adminAction(id, { action: "ADJUST_DAYS", daysDelta });
+        await get().syncWithServer(true);
       },
 
       addDeviceToSubscriber: async (subscriptionId, newMachineId) => {
-        const cleanMachine = newMachineId.trim();
+        const cleanMachine = (newMachineId || "").trim().toUpperCase();
         if (!cleanMachine) return;
-
-        set((state) => ({
-          subscriptions: state.subscriptions.map((s) => {
-            if (s.id !== subscriptionId) return s;
-            const list = s.allowedMachineIds || [];
-            if (!list.includes(cleanMachine)) {
-              return { ...s, allowedMachineIds: [...list, cleanMachine] };
-            }
-            return s;
-          }),
-        }));
-
-        try {
-          await fetch(getApiUrl("/api/system/verify"), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: subscriptionId, action: "ADD_DEVICE", machineId: cleanMachine }),
-          });
-        } catch {}
+        await adminAction(subscriptionId, { action: "ADD_DEVICE", machineId: cleanMachine });
+        await get().syncWithServer(true);
       },
 
       removeDeviceFromSubscriber: async (subscriptionId, targetMachineId) => {
-        set((state) => ({
-          subscriptions: state.subscriptions.map((s) => {
-            if (s.id !== subscriptionId) return s;
-            return {
-              ...s,
-              allowedMachineIds: (s.allowedMachineIds || []).filter((m) => m !== targetMachineId),
-            };
-          }),
-        }));
-
-        try {
-          await fetch(getApiUrl("/api/system/verify"), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: subscriptionId, action: "REMOVE_DEVICE", machineId: targetMachineId }),
-          });
-        } catch {}
+        await adminAction(subscriptionId, {
+          action: "REMOVE_DEVICE",
+          machineId: (targetMachineId || "").trim().toUpperCase(),
+        });
+        await get().syncWithServer(true);
       },
 
       syncWithServer: async (force?: boolean) => {
@@ -870,7 +758,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             (get().subscriberId && get().subscriberId !== "SUB-0000" ? get().subscriberId : "");
 
           const effectiveOrderId = savedPendingId || currentLocalSub?.id || "";
-          const offlineToken = get().signatureToken;
 
           const hasPendingSub =
             localSubs.some((s) => s.status === "PENDING") ||
@@ -879,13 +766,10 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
 
           let apiSubRecord: SubscriptionRecord | null = null;
           let verifySubRecord: SubscriptionRecord | null = null;
-          let supaSubRecord: SubscriptionRecord | null = null;
           let newSignatureToken: string | null = null;
 
           let serverResponded = false;
           let serverReportedNoSub = false;
-          let supaResponded = false;
-          let supaReportedNoSub = false;
 
           const buildApiQuery = () => {
             const params = new URLSearchParams();
@@ -900,86 +784,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           const apiQueryStr = buildApiQuery();
 
           await Promise.allSettled([
-            // ── CHANNEL 1: Direct Supabase Cloud REST Verification ──
-            (async () => {
-              try {
-                const orParts: string[] = [];
-                for (const mid of allKnownMids) {
-                  orParts.push(`machineId.ilike.${encodeURIComponent(mid)}`);
-                }
-                if (orParts.length === 0 && machineId) {
-                  orParts.push(`machineId.ilike.${encodeURIComponent(machineId)}`);
-                }
-                if (effectiveSubId && effectiveSubId !== "SUB-0000") {
-                  orParts.push(`subscriberId.ilike.${encodeURIComponent(effectiveSubId)}`);
-                }
-                if (effectiveOrderId) {
-                  orParts.push(`id.eq.${encodeURIComponent(effectiveOrderId)}`);
-                }
-                if (
-                  currentLocalSub?.id &&
-                  currentLocalSub.id !== effectiveOrderId
-                ) {
-                  orParts.push(`id.eq.${encodeURIComponent(currentLocalSub.id)}`);
-                }
-
-                const supaUrl = `${SUPABASE_REST_URL}?or=(${orParts.join(",")})&order=updatedAt.desc&limit=10`;
-                const supaRes = await fetch(supaUrl, {
-                  headers: {
-                    apikey: SUPABASE_ANON_KEY,
-                    Authorization: "Bearer " + SUPABASE_ANON_KEY,
-                    "Pragma": "no-cache",
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                  },
-                  cache: "no-store",
-                  signal: safeTimeoutSignal(6000),
-                });
-
-                if (supaRes.ok) {
-                  supaResponded = true;
-                  const supaDateHdr = supaRes.headers.get("date");
-                  if (supaDateHdr) {
-                    const dt = new Date(supaDateHdr).getTime();
-                    if (!isNaN(dt) && dt > 0) recordServerTime(dt);
-                  }
-                  const supaData = await supaRes.json();
-                  if (Array.isArray(supaData) && supaData.length > 0) {
-                    supaSubRecord = pickBestCandidate(supaData);
-                    return;
-                  } else if (Array.isArray(supaData) && supaData.length === 0) {
-                    supaReportedNoSub = true;
-                  }
-                }
-
-                if (effectiveOrderId && !supaSubRecord) {
-                  const directIdRes = await fetch(
-                    `${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(effectiveOrderId)}&limit=1`,
-                    {
-                      headers: {
-                        apikey: SUPABASE_ANON_KEY,
-                        Authorization: "Bearer " + SUPABASE_ANON_KEY,
-                        "Pragma": "no-cache",
-                        "Cache-Control": "no-cache, no-store, must-revalidate",
-                      },
-                      cache: "no-store",
-                      signal: safeTimeoutSignal(5000),
-                    }
-                  );
-                  if (directIdRes.ok) {
-                    supaResponded = true;
-                    const rows = await directIdRes.json();
-                    if (Array.isArray(rows) && rows.length > 0) {
-                      supaSubRecord = pickBestCandidate(rows);
-                      supaReportedNoSub = false;
-                    } else if (Array.isArray(rows) && rows.length === 0) {
-                      supaReportedNoSub = true;
-                    }
-                  }
-                }
-              } catch {}
-            })(),
-
-            // ── CHANNEL 2: App Subscriptions API (/api/subscriptions) ──
+            // ── CHANNEL 1: Doctor-facing subscriptions API (ownership-scoped) ──
             (async () => {
               try {
                 const res = await fetch(getApiUrl(`/api/subscriptions?${apiQueryStr}`), {
@@ -1011,14 +816,10 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               } catch {}
             })(),
 
-            // ── CHANNEL 3: System License Verification API (/api/system/verify) ──
+            // ── CHANNEL 2: License verification (/api/system/verify) — mints the device token ──
             (async () => {
               try {
-                let verifyUrl = `/api/system/verify?${apiQueryStr}`;
-                if (offlineToken) {
-                  verifyUrl += `&offlineToken=${encodeURIComponent(offlineToken)}`;
-                }
-                const res = await fetch(getApiUrl(verifyUrl), {
+                const res = await fetch(getApiUrl(`/api/system/verify?${apiQueryStr}`), {
                   cache: "no-store",
                   headers: {
                     "Pragma": "no-cache",
@@ -1055,7 +856,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             })(),
           ]);
 
-          const confirmedSub = pickBestCandidate([supaSubRecord, verifySubRecord, apiSubRecord]);
+          const confirmedSub = pickBestCandidate([verifySubRecord, apiSubRecord]);
 
           if (confirmedSub) {
             const mergedAllowed = Array.from(
@@ -1118,13 +919,9 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
 
           // Authoritative deletion / revocation sync:
           // If at least one channel verified zero subscriptions, OR any responding channel confirms no active sub:
-          const anyChannelConfirmedNoSub =
-            (supaResponded && supaReportedNoSub) ||
-            (serverResponded && serverReportedNoSub);
+          const serverConfirmedNoSub = serverResponded && serverReportedNoSub;
 
-          const atLeastOneChannelResponded = supaResponded || serverResponded;
-
-          if (anyChannelConfirmedNoSub || (atLeastOneChannelResponded && !hasPendingSub)) {
+          if (serverConfirmedNoSub || (serverResponded && !hasPendingSub)) {
             console.warn("[PenRX+ License] Online verification confirmed subscription was deleted or does not exist.");
             get().revokeLocallyAndClear("Authoritative server verified zero active subscriptions");
             return;

@@ -1,0 +1,31 @@
+Copyright (c) 2026 PenRX+ Medical Systems — All rights reserved.
+
+PenRX+ (بن آر إكس +) — prescription-writing and clinic-management software for
+licensed physicians. This repository and the shipped Windows, Android and web
+builds are PROPRIETARY and are NOT offered under any open-source licence.
+
+No part of this software, its source code, its bundled drug catalogue
+(43,713 records), its artwork or its documentation may be copied, modified,
+redistributed, sublicensed, sold, reverse-engineered, publicly hosted, or used
+to build a derivative product, in whole or in part, without prior written
+permission from the copyright holder.
+
+Use of the software is governed by the End User Licence Agreement, the Terms of
+Service, the Privacy Policy and the Medical Disclaimer:
+
+  * docs/EULA.md
+  * docs/TERMS.md
+  * docs/PRIVACY.md
+  * docs/MEDICAL-DISCLAIMER.md
+
+Third-party components remain under their own licences (Next.js, React,
+Lucide, Tailwind CSS, Capacitor, Electron, jsPDF, Zustand, Supabase client
+libraries); nothing in this file grants rights over them.
+
+Licence requests and institutional enquiries: <support@your-domain>
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. PenRX+ is a documentation aid for
+licensed prescribers and is not a diagnostic or treatment tool; the prescribing
+doctor is solely responsible for every prescription issued with it.

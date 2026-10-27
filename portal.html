@@ -223,6 +223,34 @@
           <p id="login-error" class="text-rose-400 text-[11px] font-bold hidden text-center pt-1.5 leading-relaxed"></p>
         </div>
 
+        <!-- Admin Control Key (optional): forwarded to the server, never compared or stored in the browser -->
+        <div class="space-y-1.5 text-right">
+          <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
+            <i data-lucide="terminal" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>مفتاح التحكم الإداري (اختياري):</span>
+          </label>
+          <div class="relative">
+            <input
+              id="admin-secret-input"
+              name="admin_control_key"
+              type="password"
+              maxlength="96"
+              autocomplete="off"
+              data-lpignore="true"
+              data-form-type="other"
+              placeholder="يُرسل للخادم للتحقق... لا يُخزَّن في المتصفح"
+              class="w-full pr-4 pl-11 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 transition-all shadow-inner text-xs sm:text-sm tracking-widest"
+            />
+            <button
+              type="button"
+              id="toggle-admin-secret-btn"
+              class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-400 p-1.5 cursor-pointer transition-colors"
+              title="إظهار / إخفاء مفتاح التحكم"
+            >
+              <i data-lucide="eye" id="admin-secret-eye-icon" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
 
         <button
           id="submit-btn"
@@ -234,9 +262,29 @@
         </button>
       </form>
 
-      <div class="pt-2 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+      <!-- Operational Notice: the portal must be served by the application origin -->
+      <div id="origin-notice" class="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-3 text-right">
+        <p class="flex items-start gap-2 text-[11px] font-bold text-amber-300 leading-relaxed">
+          <i data-lucide="alert-triangle" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i>
+          <span>
+            هام للمشغّل: افتح البوابة دائماً من رابط المنظومة الرسمي
+            <a
+              href="https://pen-rx.vercel.app/portal"
+              target="_blank"
+              rel="noopener noreferrer"
+              dir="ltr"
+              class="font-mono text-cyan-300 underline break-all"
+            >https://pen-rx.vercel.app/portal</a>
+            ولا تستخدم نسخة الملف المحفوظة على الجهاز
+            <span class="font-mono" dir="ltr">(file://)</span>
+            لأن جلسة الدخول يصدرها الخادم على نفس الرابط ولا يقرأها المتصفح إلا من هناك.
+          </span>
+        </p>
+      </div>
+
+      <div class="pt-1 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
         <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
-        <span>مشفر بـ PBKDF2-SHA512 + 2FA PIN + مفتاح تحكم سحابي • تحصين سيبراني متعدد الطبقات</span>
+        <span>التحقق من البيانات يتم على الخادم + رمز PIN إضافي + جلسة آمنة (HttpOnly Cookie) • لا أسرار في هذه الصفحة</span>
       </div>
     </div>
   </div>
@@ -306,7 +354,7 @@
         <div class="hidden sm:flex items-center gap-2 shrink-0">
           <div class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 text-[11px] font-bold text-emerald-300">
             <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>سحابة Supabase (Master Role 👑)</span>
+            <span>خادم PenRX+ • جلسة إدارية آمنة</span>
           </div>
 
           <button
@@ -466,57 +514,98 @@
 
   <!-- APPLICATION LOGIC JAVASCRIPT -->
   <script>
-    // This portal holds ZERO database credentials. All operations go through the
-    // authenticated cloud API, and the admin control key (PENRX_ADMIN_SECRET)
-    // is entered by the administrator at login — never embedded in this file.
-    const CLOUD_API_BASE = "https://pen-rx.vercel.app";
-    let API_BASE = CLOUD_API_BASE;
+    // =====================================================================
+    // PenRX+ Admin Portal — THIN CLIENT.
+    // This file holds NO database keys, NO credentials and NO hashes.
+    // All reads and mutations go through the PenRX+ API on the origin that
+    // serves this page, authenticated by the httpOnly admin session cookie.
+    // =====================================================================
 
-    // Detect environment: use local server if running, otherwise use cloud API
-    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-      API_BASE = window.location.origin;
-    } else if (window.location.protocol === "file:") {
+    const OPERATIONAL_PORTAL_URL = "https://pen-rx.vercel.app/portal";
+
+    // Requests are always relative to the serving origin: the admin session cookie
+    // is HttpOnly + SameSite=Strict and is only sent back to that same origin.
+    const IS_HTTP_ORIGIN = /^https?:$/.test(window.location.protocol);
+    const API_BASE = IS_HTTP_ORIGIN ? window.location.origin : "";
+
+    // CSRF marker header; the server echoes the exact name from GET /api/admin/session.
+    let csrfHeader = "x-penrx-admin";
+
+    class ApiError extends Error {
+      constructor(message, status) {
+        super(message);
+        this.name = "ApiError";
+        this.status = Number(status) || 0;
+      }
+    }
+
+    /** Server Arabic messages win; otherwise fall back to a status-specific notice. */
+    function apiErrorMessage(status, payload) {
+      if (payload && typeof payload.error === "string" && payload.error.trim()) return payload.error.trim();
+      if (status === 401) return "انتهت صلاحية الجلسة أو لم يكتمل تسجيل الدخول.";
+      if (status === 403) return "هذا الإجراء غير مسموح لهذه الجلسة.";
+      if (status === 404) return "لم يتم العثور على الاشتراك المطلوب.";
+      if (status === 429) return "محاولات كثيرة جداً: يرجى الانتظار قليلاً ثم إعادة المحاولة.";
+      if (status === 0) return `يجب فتح البوابة من الرابط الرسمي ${OPERATIONAL_PORTAL_URL} للوصول إلى الخادم.`;
+      return `تعذّر تنفيذ الطلب (رمز ${status}).`;
+    }
+
+    /**
+     * The only network helper the portal uses: same-origin credentials, the CSRF
+     * marker on every mutation, JSON parsing, typed errors and forced re-login on 401.
+     */
+    async function apiFetch(path, options = {}) {
+      if (!IS_HTTP_ORIGIN) {
+        throw new ApiError(
+          `هذه نسخة ملف محلي (${window.location.protocol}) والخدمة تُستخدم من ${OPERATIONAL_PORTAL_URL}`,
+          0
+        );
+      }
+
+      const method = (options.method || "GET").toUpperCase();
+      const headers = { Accept: "application/json", ...(options.headers || {}) };
+      if (["POST", "PATCH", "PUT", "DELETE"].includes(method)) headers[csrfHeader] = "1";
+      if (options.body !== undefined && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), options.timeoutMs || 9000);
+
+      let response;
       try {
-        fetch("http://localhost:3000/api/version/check", { signal: AbortSignal.timeout(600) })
-          .then((r) => { if (r.ok) API_BASE = "http://localhost:3000"; })
-          .catch(() => {});
-      } catch {}
-    }
+        response = await fetch(`${API_BASE}${path}`, {
+          method,
+          headers,
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+      } catch (err) {
+        clearTimeout(timer);
+        throw new ApiError(
+          err && err.name === "AbortError" ? "انتهت مهلة الاتصال بخادم PenRX+." : "تعذر الاتصال بخادم PenRX+.",
+          0
+        );
+      }
+      clearTimeout(timer);
 
-    // Authoritative Supabase configuration for zero-latency direct fallback
-    const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1/Subscription";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1OTA1NDMsImV4cCI6MjEwNTE2NjU0M30.um74vP21e9C7lXeInvY4AsUCWsjyzlwSogLXP7b_Fkc";
-    const SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFzcGFpZ3Bsd3l2cHFibXN6cGdjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTU5MDU0MywiZXhwIjoyMTA1MTY2NTQzfQ.gJ9ArhmjkAf2tQmqZbvA88hJmDaz6EYgf2RdJfl6RCE";
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
 
-    function getAdminApiSecret() {
-      return (
-        sessionStorage.getItem("penrx_admin_api_secret") ||
-        localStorage.getItem("penrx_admin_api_secret") ||
-        ""
-      );
-    }
+      if (!response.ok || (payload && payload.success === false)) {
+        const message = apiErrorMessage(response.status, payload);
+        // A 401 on the login call itself means wrong credentials, not an expired session.
+        if (response.status === 401 && !options.noRelogin) forceRelogin(message);
+        const error = new ApiError(message, response.status);
+        error.retryAfterSeconds = Number(payload && payload.retryAfterSeconds) || 0;
+        throw error;
+      }
 
-    function getAdminApiHeaders() {
-      return {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + getAdminApiSecret()
-      };
-    }
-
-    function getSupabaseHeaders() {
-      return {
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
-        "Content-Type": "application/json"
-      };
-    }
-
-    function getSupabaseAdminHeaders() {
-      return {
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
-        "Content-Type": "application/json"
-      };
+      return payload;
     }
 
     let allSubscriptions = [];
@@ -653,6 +742,11 @@
 
       const cfg = configs[type] || configs.INFO;
 
+      // Toast text is always escaped: subscriber-supplied names never become markup.
+      const safeTitle = esc(title || "");
+      const safeMessage = esc(message || "");
+      const safeDetails = details ? esc(details) : "";
+
       card.className = `pointer-events-auto w-full max-w-full glass-card rounded-2xl p-3.5 sm:p-5 border-2 ${cfg.borderColor} shadow-2xl transition-all duration-300 transform -translate-y-4 opacity-0 flex flex-col gap-2.5 relative overflow-hidden backdrop-blur-2xl bg-slate-900/95 box-border`;
       card.innerHTML = `
         <div class="flex items-start gap-3 sm:gap-3.5">
@@ -662,18 +756,18 @@
           <div class="flex-1 min-w-0 text-right">
             <div class="flex items-center justify-between gap-2">
               <h4 class="text-xs sm:text-sm font-black ${cfg.titleColor} flex items-center gap-1.5 break-words">
-                <span>${title}</span>
+                <span>${safeTitle}</span>
               </h4>
               <button type="button" class="close-toast-btn text-slate-400 hover:text-slate-200 p-1 cursor-pointer transition-colors shrink-0" title="إغلاق">
                 <i data-lucide="x" class="w-3.5 h-3.5"></i>
               </button>
             </div>
             <p class="text-[11px] sm:text-xs text-slate-200 font-bold mt-1 leading-relaxed break-words">
-              ${message}
+              ${safeMessage}
             </p>
-            ${details ? `
+            ${safeDetails ? `
               <div class="mt-2 inline-flex flex-wrap items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/90 border ${cfg.badgeColor} text-[10px] sm:text-[11px] font-mono font-bold break-words max-w-full">
-                ${details}
+                ${safeDetails}
               </div>
             ` : ''}
           </div>
@@ -739,14 +833,11 @@
     const adminSecretInput = document.getElementById("admin-secret-input");
     const toggleAdminSecretBtn = document.getElementById("toggle-admin-secret-btn");
     const adminSecretEyeIcon = document.getElementById("admin-secret-eye-icon");
-    const rememberAdminSecretBtn = document.getElementById("remember-admin-secret");
     const authScreen = document.getElementById("auth-screen");
     const dashboardScreen = document.getElementById("dashboard-screen");
+    const originNotice = document.getElementById("origin-notice");
 
-    // Cryptographic Hashes (Zero Plaintext Secrets in Code)
-    const DB_ADMIN_EMAIL = "emontal.33@gmail.com";
-    const DB_PASSWORD_HASH = "d864f9ef7a371d39f5ae82167cd1add8baf1422e5b70b6e2b16a5efc92cac61b0f36f00773f3fa6e01755d0382d3df27aa84b5316e87e5b7ce02cac9677a5a7e";
-    const DB_PIN_HASH = "27f5b7cf182db504b283d40658652060351254638676f7c64d929981ee879638";
+    // Nothing is compared locally any more: the server owns every credential check.
 
     // Toggle Password Visibility
     if (togglePasswordBtn && passwordInput) {
@@ -784,57 +875,19 @@
       });
     }
 
-    // Constant-time string comparison (timing attack defense)
-    function safeEqual(a, b) {
-      if (typeof a !== "string" || typeof b !== "string") return false;
-      if (a.length !== b.length) return false;
-      let diff = 0;
-      for (let i = 0; i < a.length; i++) {
-        diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-      }
-      return diff === 0;
+    // Output escaping for the dynamically rendered subscriber cards.
+    const ESCAPE_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    function esc(value) {
+      return String(value === null || value === undefined ? "" : value).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
     }
-
-    // Cryptographic PBKDF2-SHA512 Hasher
-    async function hashPasswordPBKDF2(plainPassword) {
-      try {
-        const enc = new TextEncoder();
-        const salt = enc.encode("rosheta_secure_salt_2026_v1");
-        const keyMaterial = await crypto.subtle.importKey(
-          "raw",
-          enc.encode(plainPassword),
-          { name: "PBKDF2" },
-          false,
-          ["deriveBits"]
-        );
-        const derivedBits = await crypto.subtle.deriveBits(
-          {
-            name: "PBKDF2",
-            salt: salt,
-            iterations: 10000,
-            hash: "SHA-512"
-          },
-          keyMaterial,
-          512 // 64 bytes = 512 bits
-        );
-        const hashArray = Array.from(new Uint8Array(derivedBits));
-        return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-      } catch (err) {
-        console.warn("WebCrypto fallback:", err);
-        return "";
-      }
-    }
-
-    // Cryptographic SHA-256 Hasher for Master PIN
-    async function hashSha256(plainText) {
-      try {
-        const enc = new TextEncoder();
-        const hashBuf = await crypto.subtle.digest("SHA-256", enc.encode(plainText));
-        const hashArray = Array.from(new Uint8Array(hashBuf));
-        return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-      } catch (err) {
-        return "";
-      }
+    /** For values embedded inside an onclick="fn('...')" JavaScript string literal. */
+    function escAttrScript(value) {
+      return esc(
+        String(value === null || value === undefined ? "" : value)
+          .replace(/\\/g, "\\\\")
+          .replace(/'/g, "\\'")
+          .replace(/[\r\n]+/g, " ")
+      );
     }
 
     // Anti-Tampering Shield: Prevent Right-Click Context Menu
@@ -859,67 +912,85 @@
       }
     });
 
-    // Session Duration: 48 Hours
-    const SESSION_EXPIRATION_MS = 48 * 60 * 60 * 1000; // 48 Hours
+    // Session lifetime is decided by the server (the TTL it returns at login);
+    // this local timer only mirrors it so the UI falls back to the login screen.
+    const DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60;
 
     let sessionTimeoutId = null;
     function scheduleSessionTimeout(remainingMs) {
       if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
       if (remainingMs > 0) {
         sessionTimeoutId = setTimeout(() => {
-          logoutAdmin("🔒 انتهت فترة صلاحية الجلسة (48 ساعة). يرجى تسجيل الدخول مجدداً.");
+          showAuthScreen("🔒 انتهت فترة صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.");
         }, remainingMs);
       }
     }
 
-    // Credentials persistence: Save only Username/Email & Password (NEVER save PIN)
+    // Identity persistence: only the operator email is remembered.
+    // No password, PIN, control key, token or hash is ever written to browser storage.
     function loadSavedCredentials() {
       try {
-        const saved = localStorage.getItem("penrx_admin_saved_creds");
-        if (saved) {
-          const creds = JSON.parse(saved);
-          if (creds.email && emailInput) {
-            emailInput.value = creds.email;
-          }
-          if (creds.password && passwordInput) {
-            passwordInput.value = creds.password;
-          }
-          // Automatically focus PIN input so doctor only has to enter PIN
-          if (pinInput && creds.email && creds.password) {
-            setTimeout(() => pinInput.focus(), 150);
-          }
-        }
-        if (adminSecretInput && !adminSecretInput.value) {
-          adminSecretInput.value = localStorage.getItem("penrx_admin_api_secret") || "";
-        }
+        const savedEmail = localStorage.getItem("penrx_admin_email");
+        if (savedEmail && emailInput) emailInput.value = savedEmail;
+        const focusTarget = savedEmail ? passwordInput : emailInput;
+        if (focusTarget) setTimeout(() => focusTarget.focus(), 150);
       } catch {}
     }
 
-    function saveCredentials(email, password) {
+    function saveCredentials(email) {
       try {
-        // Save Username & Password only - PIN code is strictly excluded
-        localStorage.setItem("penrx_admin_saved_creds", JSON.stringify({ email, password }));
+        localStorage.setItem("penrx_admin_email", String(email || ""));
       } catch {}
     }
 
-    function logoutAdmin(msg) {
-      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
-      localStorage.removeItem("penrx_admin_auth_token");
-      sessionStorage.removeItem("penrx_admin_auth_token");
-      // Always drop the session-scoped control key; the "remembered" copy (if any) stays
-      sessionStorage.removeItem("penrx_admin_api_secret");
+    /** Single place that drops every trace of an authenticated dashboard. */
+    function showAuthScreen(msg) {
       isAuthed = false;
+      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
+      sessionTimeoutId = null;
+      csrfHeader = "x-penrx-admin";
+      allSubscriptions = [];
+      lastDataFingerprint = "";
+      openDetailsSubIds.clear();
+      if (pinInput) pinInput.value = "";
+      if (adminSecretInput) adminSecretInput.value = "";
+      if (passwordInput) passwordInput.value = "";
       dashboardScreen.classList.add("hidden");
       authScreen.classList.remove("hidden");
+      submitBtn.disabled = false;
+      btnText.innerText = "دخول آمن إلى لوحة التحكم";
       loadSavedCredentials();
       if (msg) {
         showToast(msg, false);
-      } else {
-        location.reload();
       }
     }
 
-    // Brute-force lockout manager with Tamper Protection
+    /** Called by apiFetch on any 401: the httpOnly session is gone, so re-login is forced. */
+    function forceRelogin(message) {
+      showAuthScreen(message || "انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.");
+    }
+
+    function enterDashboard(ttlSeconds) {
+      isAuthed = true;
+      loginError.classList.add("hidden");
+      authScreen.classList.add("hidden");
+      dashboardScreen.classList.remove("hidden");
+      scheduleSessionTimeout((Number(ttlSeconds) || DEFAULT_SESSION_TTL_SECONDS) * 1000);
+      fetchSubscriptions(true);
+    }
+
+    async function logoutAdmin(msg) {
+      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
+      sessionTimeoutId = null;
+      try {
+        await apiFetch("/api/admin/session", { method: "DELETE", timeoutMs: 6000 });
+      } catch (err) {
+        if (err && err.status !== 401) console.warn("[Portal] logout notice:", err);
+      }
+      showAuthScreen(msg || "");
+    }
+
+    // Brute-force lockout manager (local UX mirror of the server-side rate limit)
     function checkLockout() {
       const lockoutUntil = parseInt(localStorage.getItem("penrx_lockout_until") || "0", 10);
       const now = Date.now();
@@ -940,7 +1011,7 @@
       }
     }
 
-    function recordFailedAttempt() {
+    function recordFailedAttempt(serverMessage) {
       let attempts = parseInt(localStorage.getItem("penrx_failed_attempts") || "0", 10) + 1;
       localStorage.setItem("penrx_failed_attempts", attempts.toString());
       if (attempts >= 5) {
@@ -950,43 +1021,40 @@
         checkLockout();
       } else {
         const remaining = 5 - attempts;
-        loginError.innerHTML = `❌ بيانات الدخول أو رمز الأمان PIN غير صحيحة.<br><span class="text-amber-300 text-[10px]">متبقي ${remaining} محاولات قبل القفل الأمني المؤقت.</span>`;
+        loginError.innerHTML = `${esc(serverMessage || "❌ بيانات الدخول أو رمز الأمان PIN غير صحيحة.")}<br><span class="text-amber-300 text-[10px]">متبقي ${remaining} محاولات قبل القفل الأمني المؤقت.</span>`;
         loginError.classList.remove("hidden");
       }
     }
 
-    function checkAuth() {
+    /**
+     * Session persistence across reloads is verified server-side: the cookie is
+     * HttpOnly so this page can only ask the API whether the session is valid.
+     */
+    async function checkAuth() {
       if (checkLockout()) return;
 
-      const storedToken = localStorage.getItem("penrx_admin_auth_token") || sessionStorage.getItem("penrx_admin_auth_token");
-      if (storedToken) {
-        try {
-          const parsed = JSON.parse(atob(storedToken));
-          const remaining = parsed && parsed.exp ? parsed.exp - Date.now() : 0;
-          if (parsed && parsed.email && remaining > 0) {
-            // The admin control key must also be present — without it the
-            // dashboard cannot operate against the cloud API
-            if (!getAdminApiSecret()) {
-              localStorage.removeItem("penrx_admin_auth_token");
-              sessionStorage.removeItem("penrx_admin_auth_token");
-              loginError.innerHTML = "🔐 الجلسة محفوظة لكن رمز الأمان PIN مطلوب. يرجى إدخاله لتسجيل الدخول.";
-              loginError.classList.remove("hidden");
-              loadSavedCredentials();
-              return;
-            }
-            isAuthed = true;
-            authScreen.classList.add("hidden");
-            dashboardScreen.classList.remove("hidden");
-            scheduleSessionTimeout(remaining);
-            fetchSubscriptions();
-            return;
-          }
-        } catch {}
-        localStorage.removeItem("penrx_admin_auth_token");
-        sessionStorage.removeItem("penrx_admin_auth_token");
+      if (!IS_HTTP_ORIGIN) {
+        if (originNotice) originNotice.classList.add("ring-2", "ring-rose-500/60");
+        loginError.innerHTML = `⚠️ هذا الملف مفتوح كنسخة محلية على الجهاز (<span dir="ltr">${esc(window.location.protocol)}</span>) ولا يمكنه الوصول إلى الخادم.<br>افتح البوابة من الرابط الرسمي: <a href="${OPERATIONAL_PORTAL_URL}" target="_blank" rel="noopener noreferrer" class="text-cyan-300 underline font-mono" dir="ltr">${esc(OPERATIONAL_PORTAL_URL)}</a>`;
+        loginError.classList.remove("hidden");
+        loadSavedCredentials();
+        return;
       }
 
-      // Populate saved credentials (email & password only)
+      try {
+        const session = await apiFetch("/api/admin/session", { timeoutMs: 8000 });
+        if (session && session.csrfHeader) csrfHeader = session.csrfHeader;
+        if (session && session.authenticated) {
+          enterDashboard();
+          return;
+        }
+      } catch (err) {
+        if (err && err.status !== 0) {
+          loginError.innerHTML = esc(err.message || "تعذر التحقق من الجلسة.");
+          loginError.classList.remove("hidden");
+        }
+      }
+
       loadSavedCredentials();
     }
 
@@ -994,64 +1062,64 @@
       e.preventDefault();
       if (checkLockout()) return;
 
+      if (!IS_HTTP_ORIGIN) {
+        if (originNotice) originNotice.classList.add("ring-2", "ring-rose-500/60");
+        loginError.innerHTML = `⚠️ يجب فتح البوابة من الرابط الرسمي <a href="${OPERATIONAL_PORTAL_URL}" target="_blank" rel="noopener noreferrer" class="text-cyan-300 underline font-mono" dir="ltr">${esc(OPERATIONAL_PORTAL_URL)}</a>`;
+        loginError.classList.remove("hidden");
+        return;
+      }
+
       const enteredEmail = emailInput.value.trim().toLowerCase();
       const enteredPassword = passwordInput.value;
       const enteredPin = pinInput ? pinInput.value.trim() : "";
+      const enteredControlKey = adminSecretInput ? adminSecretInput.value.trim() : "";
 
       submitBtn.disabled = true;
-      btnText.innerText = "جاري التحقق التشفيري المزدوج...";
+      btnText.innerText = "جاري التحقق على الخادم...";
+
+      // Credentials (and the optional control key) are handed to the server;
+      // nothing is hashed or compared in the browser.
+      const loginPayload = { email: enteredEmail, password: enteredPassword, pin: enteredPin };
+      if (enteredControlKey) loginPayload.adminKey = enteredControlKey;
 
       try {
-        const [computedPassHash, computedPinHash] = await Promise.all([
-          hashPasswordPBKDF2(enteredPassword),
-          hashSha256(enteredPin)
-        ]);
+        const session = await apiFetch("/api/admin/session", {
+          method: "POST",
+          body: loginPayload,
+          timeoutMs: 15000,
+          noRelogin: true
+        });
 
-        const isEmailValid = safeEqual(enteredEmail, DB_ADMIN_EMAIL.toLowerCase());
-        const isPasswordValid = safeEqual(computedPassHash, DB_PASSWORD_HASH);
-        const isPinValid = safeEqual(computedPinHash, DB_PIN_HASH);
+        localStorage.removeItem("penrx_failed_attempts");
+        localStorage.removeItem("penrx_lockout_until");
 
-        if (isEmailValid && isPasswordValid && isPinValid) {
-          btnText.innerText = "جاري فتح لوحة التحكم السحابية...";
+        // Remember the identity only; the secrets stay out of browser storage.
+        saveCredentials(enteredEmail);
+        if (pinInput) pinInput.value = "";
+        if (adminSecretInput) adminSecretInput.value = "";
+        if (passwordInput) passwordInput.value = "";
 
-          // Reset failed attempts
-          localStorage.removeItem("penrx_failed_attempts");
-          localStorage.removeItem("penrx_lockout_until");
-
-          // Save username and password only into browser storage (PIN is strictly excluded)
-          saveCredentials(enteredEmail, enteredPassword);
-
-          // Persist the authorization secret for this session in memory
-          sessionStorage.setItem("penrx_admin_api_secret", computedPinHash);
-          // Clear PIN input from DOM memory
-          if (pinInput) pinInput.value = "";
-
-          // Create secure session token with 48-hour expiration
-          const sessionPayload = {
-            email: enteredEmail,
-            role: "MASTER_ADMIN",
-            issuedAt: Date.now(),
-            exp: Date.now() + SESSION_EXPIRATION_MS,
-          };
-          const encodedToken = btoa(JSON.stringify(sessionPayload));
-          localStorage.setItem("penrx_admin_auth_token", encodedToken);
-          sessionStorage.setItem("penrx_admin_auth_token", encodedToken);
-
-          isAuthed = true;
-          loginError.classList.add("hidden");
-          authScreen.classList.add("hidden");
-          dashboardScreen.classList.remove("hidden");
-          scheduleSessionTimeout(SESSION_EXPIRATION_MS);
-          showToast("مرحباً بك د. أيمن | تم تسجيل الدخول بنجاح (الجلسة صالحة لمدة 48 ساعة) 👑");
-          fetchSubscriptions();
+        // The session id lives in the httpOnly cookie issued by the server.
+        csrfHeader = session && session.csrfHeader ? session.csrfHeader : csrfHeader;
+        enterDashboard(session && session.ttlSeconds);
+        showToast("مرحباً بك د. أيمن | تم تسجيل الدخول بنجاح عبر الخادم 👑");
+      } catch (err) {
+        await new Promise((r) => setTimeout(r, 300));
+        const status = err && err.status ? err.status : 0;
+        if (status === 429) {
+          const waitSeconds = (err.retryAfterSeconds || 900);
+          localStorage.setItem("penrx_lockout_until", String(Date.now() + waitSeconds * 1000));
+          localStorage.setItem("penrx_failed_attempts", "0");
+          checkLockout();
+        } else if (status === 401 || status === 400 || status === 403) {
+          recordFailedAttempt(err.message);
         } else {
-          // Micro delay on failed attempt to defeat rapid automated brute force
-          await new Promise((r) => setTimeout(r, 600));
-          recordFailedAttempt();
+          loginError.innerHTML = esc(err.message || "تعذر الاتصال بخادم PenRX+.");
+          loginError.classList.remove("hidden");
         }
       } finally {
-        submitBtn.disabled = false;
-        btnText.innerText = "دخول آمن إلى لوحة التحكم";
+        // checkLockout() restores the button state (locked = disabled + lock text).
+        checkLockout();
       }
     });
 
@@ -1075,82 +1143,26 @@
       }
     }, true);
 
-    // Fetch Subscriptions — Cloud API with Direct Supabase REST Fallback
+    // Fetch Subscriptions — server API only. There is no direct-database fallback:
+    // if the API fails the UI keeps its last consistent state and reports the error.
+    let serverCounts = null;
+    let lastSyncErrorNoticeAt = 0;
+
     async function fetchSubscriptions(forceRender = false) {
+      if (!isAuthed) return;
       const container = document.getElementById("subscribers-container");
       try {
-        let freshData = null;
+        const data = await apiFetch("/api/admin/subscriptions", { timeoutMs: 9000 });
+        const freshData = data && Array.isArray(data.subscriptions) ? data.subscriptions : null;
+        if (!freshData) throw new ApiError("استجابة غير متوقعة من الخادم.", 0);
 
-        // 1. Try Authenticated Server API first
-        try {
-          const ctrl = new AbortController();
-          const timeout = setTimeout(() => ctrl.abort(), 6000);
-          const apiRes = await fetch(`${API_BASE}/api/subscriptions`, {
-            headers: getAdminApiHeaders(),
-            cache: "no-store",
-            signal: ctrl.signal
-          });
-          clearTimeout(timeout);
-          if (apiRes.ok) {
-            const apiJson = await apiRes.json();
-            if (apiJson && Array.isArray(apiJson.subscriptions) && apiJson.subscriptions.length > 0) {
-              freshData = apiJson.subscriptions;
-            }
-          }
-        } catch (fetchErr) {
-          console.warn("[Portal] Cloud API fetch notice (falling back to Supabase REST):", fetchErr);
-        }
-
-        // 2. Direct Supabase Cloud REST Fallback (Safe Anon Key)
-        if (!freshData || !Array.isArray(freshData) || freshData.length === 0) {
-          try {
-            const ctrl2 = new AbortController();
-            const timeout2 = setTimeout(() => ctrl2.abort(), 8000);
-            const supaRes = await fetch(`${SUPABASE_REST_URL}?select=*&order=createdAt.desc`, {
-              headers: getSupabaseHeaders(),
-              cache: "no-store",
-              signal: ctrl2.signal
-            });
-            clearTimeout(timeout2);
-            if (supaRes.ok) {
-              const supaRecords = await supaRes.json();
-              if (Array.isArray(supaRecords)) {
-                freshData = supaRecords;
-              }
-            }
-          } catch (supaErr) {
-            console.warn("[Portal] Direct Supabase REST fetch error:", supaErr);
-          }
-        }
-
-        if (!freshData || !Array.isArray(freshData)) {
-          // Always update the container — don't leave the spinner stuck
-          if (container) {
-            container.innerHTML = `
-              <div class="glass-card p-10 rounded-3xl text-center space-y-4 border border-rose-500/20">
-                <div class="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto">
-                  <i data-lucide="wifi-off" class="w-7 h-7 text-rose-400"></i>
-                </div>
-                <div>
-                  <h3 class="text-sm font-black text-rose-300">تعذر الاتصال بقاعدة البيانات السحابية</h3>
-                  <p class="text-xs text-slate-400 mt-1">تحقق من اتصالك بالإنترنت ثم اضغط إعادة المحاولة</p>
-                </div>
-                <button type="button" onclick="fetchSubscriptions(true)" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-black text-white transition-all cursor-pointer inline-flex items-center gap-2 shadow-lg shadow-emerald-950/50 mx-auto">
-                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                  <span>إعادة المحاولة</span>
-                </button>
-              </div>
-            `;
-            lucide.createIcons();
-          }
-          return;
-        }
+        serverCounts = data && data.counts ? data.counts : null;
 
         const newFingerprint = JSON.stringify(freshData);
 
         // If data hasn't changed and render not forced, skip touching the DOM
         if (!forceRender && newFingerprint === lastDataFingerprint) {
-          return;
+          return true;
         }
 
         allSubscriptions = freshData;
@@ -1160,21 +1172,44 @@
         const activeEl = document.activeElement;
         const isEditingInCards = activeEl && activeEl.closest && activeEl.closest("#subscribers-container");
         if (isEditingInCards && !forceRender) {
-          return;
+          return true;
         }
 
         renderDashboard();
+        return true;
       } catch (err) {
-        console.error("[Portal] Unexpected fetch error:", err);
-        // Always clear the loading spinner on any error
-        if (container && allSubscriptions.length === 0) {
+        if (err && err.status === 401) return false; // forced back to the login screen already
+
+        console.warn("[Portal] Subscriptions sync notice:", err);
+        lastSyncErrorNoticeAt = lastSyncErrorNoticeAt || 0;
+
+        // Existing cards stay exactly as they were; notify only once per 30s window.
+        if (allSubscriptions.length > 0) {
+          if (Date.now() - lastSyncErrorNoticeAt > 30000) {
+            lastSyncErrorNoticeAt = Date.now();
+            showActionNotification({
+              type: "ERROR",
+              title: "انقطع التحديث التلقائي",
+              message: (err && err.message) || "تعذر جلب بيانات المشتركين من الخادم.",
+              details: "البيانات المعروضة هي آخر نسخة متزامنة • إعادة المحاولة تلقائياً كل 5 ثوانٍ"
+            });
+          }
+          return false;
+        }
+
+        if (container) {
           container.innerHTML = `
             <div class="glass-card p-10 rounded-3xl text-center space-y-4 border border-rose-500/20">
-              <i data-lucide="alert-triangle" class="w-10 h-10 mx-auto text-amber-400"></i>
-              <p class="text-xs font-bold text-slate-300">حدث خطأ غير متوقع. يرجى إعادة تحميل الصفحة.</p>
-              <button type="button" onclick="location.reload()" class="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-xs font-black text-white transition-all cursor-pointer inline-flex items-center gap-2 mx-auto">
-                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
-                <span>إعادة تحميل الصفحة</span>
+              <div class="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto">
+                <i data-lucide="wifi-off" class="w-7 h-7 text-rose-400"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-black text-rose-300">تعذر الاتصال بخادم PenRX+</h3>
+                <p class="text-xs text-slate-400 mt-1">${esc((err && err.message) || "تحقق من اتصالك بالإنترنت ومن أن الصفحة تُخدَم من الرابط الرسمي ثم اضغط إعادة المحاولة")}</p>
+              </div>
+              <button type="button" onclick="fetchSubscriptions(true)" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-black text-white transition-all cursor-pointer inline-flex items-center gap-2 shadow-lg shadow-emerald-950/50 mx-auto">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>إعادة المحاولة</span>
               </button>
             </div>
           `;
@@ -1183,14 +1218,14 @@
       }
     }
 
-    // Refresh every 5 seconds for live sync (only updates if Supabase data actually changed)
+    // Refresh every 5 seconds (the server is the single source of truth)
     setInterval(() => {
       if (isAuthed) fetchSubscriptions(false);
     }, 5000);
 
-    document.getElementById("refresh-btn").addEventListener("click", () => {
-      fetchSubscriptions(true);
-      showToast("تم تحديث البيانات من السحابة بنجاح 🔄");
+    document.getElementById("refresh-btn").addEventListener("click", async () => {
+      const ok = await fetchSubscriptions(true);
+      if (ok) showToast("تم تحديث البيانات من الخادم بنجاح 🔄");
     });
 
     // Search & Filter listeners
@@ -1228,90 +1263,44 @@
       });
     });
 
-    // Helper: Execute admin action via Server API (Local or Cloud) with direct Supabase Admin fallback
+    // Helper: Execute one admin action through the API.
+    // Authorized by the httpOnly session cookie + the CSRF marker header; there is
+    // no second path to the database, so a failed call is simply reported.
     async function executeAdminAction(id, action, params = {}) {
+      const cleanMachine = (value) => String(value || "").trim().toUpperCase();
+      const body = { action };
+
+      if (params.durationDays !== undefined && params.durationDays !== null && params.durationDays !== "") {
+        body.durationDays = Number(params.durationDays);
+      }
+      if (params.daysDelta !== undefined && params.daysDelta !== null && params.daysDelta !== "") {
+        body.daysDelta = Number(params.daysDelta);
+      }
+      if (params.machineId !== undefined) body.machineId = cleanMachine(params.machineId);
+      if (params.oldMachineId !== undefined) body.oldMachineId = cleanMachine(params.oldMachineId);
+      if (params.newMachineId !== undefined) body.newMachineId = cleanMachine(params.newMachineId);
+
       try {
-        const res = await fetch(`${API_BASE}/api/system/verify`, {
+        const data = await apiFetch(`/api/admin/subscriptions/${encodeURIComponent(id)}`, {
           method: "PATCH",
-          headers: getAdminApiHeaders(),
-          body: JSON.stringify({ id, action, ...params })
+          body,
+          timeoutMs: 12000
         });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success) {
-            return { success: true, data };
-          }
+
+        // The server returns the authoritative copy of the subscription.
+        const updated = data && data.subscription;
+        if (updated && updated.id) {
+          const index = allSubscriptions.findIndex((s) => s.id === updated.id);
+          if (index >= 0) allSubscriptions[index] = updated;
         }
+
+        return { success: true, data };
       } catch (err) {
-        console.warn("[AdminAction] Primary API notice:", err);
-      }
-
-      // If local dev server wasn't running, attempt CLOUD_API_BASE
-      if (API_BASE !== CLOUD_API_BASE) {
-        try {
-          const res2 = await fetch(`${CLOUD_API_BASE}/api/system/verify`, {
-            method: "PATCH",
-            headers: getAdminApiHeaders(),
-            body: JSON.stringify({ id, action, ...params })
-          });
-          if (res2.ok) {
-            const data2 = await res2.json();
-            if (data2 && data2.success) return { success: true, data: data2 };
-          }
-        } catch (err2) {
-          console.warn("[AdminAction] Cloud API notice:", err2);
+        if (err && err.status === 401) {
+          return { success: false, error: "انتهت صلاحية الجلسة: يرجى تسجيل الدخول مجدداً." };
         }
+        return { success: false, error: (err && err.message) || "تعذر تنفيذ الإجراء عبر خادم PenRX+." };
       }
-
-      // Authoritative Direct Supabase Admin Fallback (guarantees instant DB update via service_role)
-      try {
-        const adminHeaders = {
-          ...getSupabaseAdminHeaders(),
-          "Prefer": "return=representation"
-        };
-        const current = allSubscriptions.find((s) => s.id === id);
-        const now = new Date();
-        let patchBody = { updatedAt: now.toISOString() };
-
-        if (action === "ACTIVATE") {
-          const days = Number(params.durationDays) || (current ? current.durationDays : 30) || 30;
-          const expires = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-          patchBody.status = "ACTIVE";
-          patchBody.durationDays = days;
-          patchBody.activatedAt = now.toISOString();
-          patchBody.expiresAt = expires.toISOString();
-        } else if (action === "SUSPEND") {
-          patchBody.status = "SUSPENDED";
-        } else if (action === "ADJUST_DAYS") {
-          const delta = Number(params.daysDelta) || 0;
-          let currentExpiry = current && current.expiresAt ? new Date(current.expiresAt).getTime() : now.getTime();
-          if (isNaN(currentExpiry) || currentExpiry < now.getTime()) currentExpiry = now.getTime();
-          const newExpiry = new Date(currentExpiry + delta * 24 * 60 * 60 * 1000);
-          const newDuration = Math.max(1, Math.ceil((newExpiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-          patchBody.status = "ACTIVE";
-          patchBody.expiresAt = newExpiry.toISOString();
-          patchBody.durationDays = newDuration;
-        }
-
-        const directRes = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          headers: adminHeaders,
-          body: JSON.stringify(patchBody)
-        });
-        if (directRes.ok) {
-          const updated = await directRes.json().catch(() => []);
-          if (Array.isArray(updated) && updated.length > 0) {
-            return { success: true, data: { subscription: updated[0] } };
-          }
-        }
-      } catch (supaDirectErr) {
-        console.warn("[AdminAction] Direct Supabase fallback error:", supaDirectErr);
-      }
-
-      return {
-        success: false,
-        error: "تعذر الاتصال بالخادم وقاعدة البيانات السحابية."
-      };
     }
 
     // Actions on Subscriptions
@@ -1393,8 +1382,8 @@
           <div class="space-y-3">
             <p class="font-bold text-slate-200">هل ترغب بالفعل في إيقاف اشتراك الطبيب مؤقتاً؟</p>
             <div class="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-xs">
-              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${docName}</span></div>
-              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${subCode}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${esc(docName)}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${esc(subCode)}</span></div>
             </div>
             <p class="text-amber-300 text-[11px] font-bold">💡 تنبيه: سيتم حجب الخدمة مؤقتاً ويمكنك إعادة التنشيط في أي وقت بضغطة زر واحدة.</p>
           </div>
@@ -1438,91 +1427,46 @@
           <div class="space-y-3">
             <p class="font-bold text-slate-200">هل أنت متأكد من رغبتك في حذف هذا المشترك نهائياً؟</p>
             <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-xs">
-              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${docName}</span></div>
-              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${subCode}</span></div>
-              <div class="flex justify-between items-center"><span class="text-slate-400">الباقة:</span> <span class="text-emerald-400 font-bold">${planName}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${esc(docName)}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${esc(subCode)}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">الباقة:</span> <span class="text-emerald-400 font-bold">${esc(planName)}</span></div>
             </div>
             <p class="text-rose-400 text-[11px] font-bold">⚠️ تحذير شديد: هذا الإجراء نهائي ولا يمكن التراجع عنه مطلقاً وسيتم إيقاف التطبيق لدى الطبيب فوراً.</p>
           </div>
         `,
         onConfirm: async () => {
-          let apiDeleted = false;
-          let supaDeleted = false;
-          let errorMsg = "";
-
-          // 1. Server delete via API (triggers cascade deletion of prescriptions, backups, and subscription)
           try {
-            let res = await fetch(`${API_BASE}/api/system/verify?id=${encodeURIComponent(id)}`, {
+            // Server-side cascade: subscription + the doctor's cloud prescriptions and backups.
+            const result = await apiFetch(`/api/admin/subscriptions/${encodeURIComponent(id)}`, {
               method: "DELETE",
-              headers: getAdminApiHeaders()
+              timeoutMs: 12000
             });
-            if (!res.ok && typeof CLOUD_API_BASE !== "undefined" && API_BASE !== CLOUD_API_BASE) {
-              res = await fetch(`${CLOUD_API_BASE}/api/system/verify?id=${encodeURIComponent(id)}`, {
-                method: "DELETE",
-                headers: getAdminApiHeaders()
-              });
+            if (!result || result.success !== true) {
+              throw new ApiError((result && result.error) || "تعذر حذف الاشتراك.", 0);
             }
-            if (res.ok) {
-              const data = await res.json();
-              if (data && data.success) apiDeleted = true;
-            }
-          } catch (err) {
-            console.warn("API delete notice:", err);
-          }
 
-          // 2. Direct Supabase Cascade Delete using service_role credentials
-          try {
-            const adminHeaders = {
-              ...getSupabaseAdminHeaders(),
-              Prefer: "return=representation"
-            };
-            const supaRes = await fetch(`${SUPABASE_REST_URL}?id=eq.${encodeURIComponent(id)}`, {
-              method: "DELETE",
-              headers: adminHeaders
-            });
-            if (supaRes.ok) {
-              const rows = await supaRes.json().catch(() => []);
-              if (Array.isArray(rows) && rows.length > 0) {
-                supaDeleted = true;
-              }
-            }
-            if (subCode && subCode !== "SUB") {
-              const supaBase = SUPABASE_REST_URL.replace(/\/Subscription$/, "");
-              await fetch(`${supaBase}/CloudPrescription?subscriberId=eq.${encodeURIComponent(subCode)}`, {
-                method: "DELETE",
-                headers: adminHeaders
-              }).catch(() => {});
-              await fetch(`${supaBase}/CloudBackup?subscriberId=eq.${encodeURIComponent(subCode)}`, {
-                method: "DELETE",
-                headers: adminHeaders
-              }).catch(() => {});
-              await fetch(`${supaBase}/Subscription?subscriberId=eq.${encodeURIComponent(subCode)}`, {
-                method: "DELETE",
-                headers: adminHeaders
-              }).catch(() => {});
-            }
-          } catch (supaErr) {
-            console.warn("Direct Supabase cascade delete notice:", supaErr);
-          }
-
-          if (apiDeleted || supaDeleted) {
             // Remove immediately from memory to prevent stale UI
             allSubscriptions = allSubscriptions.filter((s) => s.id !== id);
+            lastDataFingerprint = "";
+            openDetailsSubIds.delete(id);
             renderDashboard();
 
             showActionNotification({
               type: "DELETE",
               title: "تم حذف الاشتراك نهائياً 🗑️",
-              message: `تمت إزالة سجلات وترخيص د. ${docName} من المنظومة وقاعدة البيانات بنجاح.`,
+              message: result.message || `تمت إزالة تراخيص وسجلات د. ${docName} من المنظومة وقاعدة البيانات بنجاح.`,
               details: `كود المشترك المحذوف: ${subCode}`
             });
             fetchSubscriptions(true);
-          } else {
+          } catch (err) {
+            if (err && err.status === 401) return; // login screen is already showing
             showActionNotification({
               type: "ERROR",
               title: "فشل الحذف",
-              message: "تعذر حذف الاشتراك من قاعدة البيانات السحابية. يرجى التحقق من الاتصال بالإنترنت."
+              message: (err && err.message) || "تعذر حذف الاشتراك من خادم PenRX+. يرجى التحقق من الاتصال.",
+              details: "لم تُحذف أي بيانات • أعد المحاولة بعد قليل"
             });
+            fetchSubscriptions(true);
           }
         }
       });
@@ -1598,9 +1542,9 @@
           <div class="space-y-3.5">
             <p class="font-bold text-slate-200">أدخل معرّف الجهاز (Machine ID) الجديد الذي ترغب في اعتماده:</p>
             <div class="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-xs">
-              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${docName}</span></div>
-              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${subCode}</span></div>
-              <div class="flex justify-between items-center"><span class="text-slate-400">المعرّف الحالي (${isPrimary ? 'الأساسي' : 'الفرعي'}):</span> <span class="font-mono text-amber-300 font-bold text-[11px]" dir="ltr">${oldMachineId || 'غير محدد'}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${esc(docName)}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${esc(subCode)}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">المعرّف الحالي (${isPrimary ? 'الأساسي' : 'الفرعي'}):</span> <span class="font-mono text-amber-300 font-bold text-[11px]" dir="ltr">${esc(oldMachineId || 'غير محدد')}</span></div>
             </div>
             <div class="space-y-1 text-right">
               <label class="text-[11px] font-bold text-slate-300">معرّف الجهاز الجديد (Machine ID):</label>
@@ -1721,11 +1665,11 @@
           <div class="space-y-3">
             <p class="font-bold text-slate-200">هل أنت متأكد من حذف هذا المعرّف وفصل الجهاز من الحساب؟</p>
             <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-xs">
-              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${docName}</span></div>
-              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${subCode}</span></div>
-              <div class="flex justify-between items-center"><span class="text-slate-400">الجهاز المراد حذفه:</span> <span class="font-mono text-rose-300 font-bold text-[11px]" dir="ltr">${deviceToRemove}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">الطبيب:</span> <span class="font-bold text-slate-100">${esc(docName)}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">كود المشترك:</span> <span class="font-mono text-purple-300 font-bold" dir="ltr">${esc(subCode)}</span></div>
+              <div class="flex justify-between items-center"><span class="text-slate-400">الجهاز المراد حذفه:</span> <span class="font-mono text-rose-300 font-bold text-[11px]" dir="ltr">${esc(deviceToRemove)}</span></div>
               ${isPrimary ? `
-                <div class="flex justify-between items-center pt-1.5 border-t border-slate-800"><span class="text-amber-400 font-bold">الحالة:</span> <span class="text-amber-300 font-bold">جهاز أساسي ${remainingDevices.length > 0 ? `(سيتم ترقية ${remainingDevices[0]} كبديل تلقائياً)` : '(لا توجد أجهزة متبقية)'}</span></div>
+                <div class="flex justify-between items-center pt-1.5 border-t border-slate-800"><span class="text-amber-400 font-bold">الحالة:</span> <span class="text-amber-300 font-bold">جهاز أساسي ${remainingDevices.length > 0 ? `(سيتم ترقية ${esc(remainingDevices[0])} كبديل تلقائياً)` : '(لا توجد أجهزة متبقية)'}</span></div>
               ` : ''}
             </div>
             <p class="text-rose-400 text-[11px] font-bold">⚠️ لن يتمكن هذا الجهاز من تشغيل البرنامج بعد حذفه إلا بعد إعادة ربطه أو تعديل المعرف.</p>
@@ -1761,10 +1705,12 @@
 
     // Render Dashboard & Cards
     function renderDashboard() {
-      // 1. Calculate metrics
+      // 1. Calculate metrics (the server queue count wins when available)
       const total = allSubscriptions.length;
       const active = allSubscriptions.filter((s) => s.status === "ACTIVE").length;
-      const pending = allSubscriptions.filter((s) => s.status === "PENDING").length;
+      const localPending = allSubscriptions.filter((s) => s.status === "PENDING").length;
+      const pending =
+        serverCounts && Number.isFinite(Number(serverCounts.pending)) ? Number(serverCounts.pending) : localPending;
       const trial = allSubscriptions.filter((s) => s.isTrial || s.planId === "trial" || s.price === 0).length;
       const activeRevenue = allSubscriptions
         .filter((s) => s.status === "ACTIVE")
@@ -1913,9 +1859,23 @@
         }
 
         // WhatsApp greeting link (prioritize registered clinic phone, fallback to sender phone)
-        const waTargetPhone = clinicPhoneDisplay || sub.senderPhone;
+        const waTargetPhone = String(clinicPhoneDisplay || sub.senderPhone || "").replace(/[^\d]/g, "");
         const waMsg = encodeURIComponent(`مرحباً دكتور ${hasDocName ? sub.doctorName : ""}، بخصوص اشتراكك في منصة PenRX+ الطبية (كود المشترك: ${subscriberId})...`);
         const waLink = waTargetPhone ? `https://wa.me/2${waTargetPhone.replace(/^0+/, '')}?text=${waMsg}` : '#';
+
+        // Escaped copies for the card markup (values arrive from subscriber-submitted data)
+        const sId = escAttrScript(sub.id);
+        const sCode = escAttrScript(subscriberId);
+        const sPrimary = escAttrScript(primaryMachine);
+        const sClinicPhone = escAttrScript(clinicPhoneDisplay);
+        const sClinicPhoneText = esc(clinicPhoneDisplay);
+        const sDoctor = esc(doctorDisplay);
+        const sClinic = esc(clinicDisplay);
+        const sPlan = esc(sub.planName || "");
+        const sPrice = Number(sub.price) || 0;
+        const sMethod = esc(sub.paymentMethod || "");
+        const sSenderPhone = esc(String(sub.senderPhone || "").replace(/[^\d+]/g, "") || "-");
+        const sTxRef = esc(sub.transactionRef || "-");
 
         return `
           <div class="glass-card rounded-2xl p-4 sm:p-5 border ${sub.status === 'PENDING' ? 'border-amber-500/40 shadow-lg shadow-amber-950/20 bg-slate-900/90' : 'border-slate-800 bg-slate-900/60'} space-y-3.5 transition-all hover:border-slate-700">
@@ -1927,21 +1887,21 @@
                 </div>
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-1.5">
-                    <h3 class="text-sm font-black text-slate-100 truncate">${doctorDisplay}</h3>
+                    <h3 class="text-sm font-black text-slate-100 truncate">${sDoctor}</h3>
                     ${profileBadge}
                     ${sub.isTrial ? '<span class="px-1.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[9px] font-black">تجريبي</span>' : ''}
                   </div>
                   <div class="flex flex-wrap items-center gap-2 mt-0.5">
-                    <p class="text-[11px] text-slate-400 font-bold truncate">${clinicDisplay}</p>
+                    <p class="text-[11px] text-slate-400 font-bold truncate">${sClinic}</p>
                     ${clinicPhoneDisplay ? `
                       <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold" dir="ltr" title="هاتف العيادة المسجل من الطبيب">
                         <i data-lucide="phone" class="w-2.5 h-2.5 text-emerald-400"></i>
-                        <span>${clinicPhoneDisplay}</span>
+                        <span>${sClinicPhoneText}</span>
                       </span>
-                      <a href="https://wa.me/2${clinicPhoneDisplay.replace(/^0+/, '')}?text=${encodeURIComponent('مرحباً دكتور ' + (hasDocName ? sub.doctorName : '') + '، بخصوص اشتراكك في PenRX+')}" target="_blank" class="p-0.5 text-emerald-400 hover:text-emerald-300 transition-colors" title="محادثة واتساب مباشرة على هاتف العيادة">
+                      <a href="https://wa.me/2${waTargetPhone.replace(/^0+/, '')}?text=${encodeURIComponent('مرحباً دكتور ' + (hasDocName ? sub.doctorName : '') + '، بخصوص اشتراكك في PenRX+')}" target="_blank" class="p-0.5 text-emerald-400 hover:text-emerald-300 transition-colors" title="محادثة واتساب مباشرة على هاتف العيادة">
                         <i data-lucide="message-circle" class="w-3 h-3"></i>
                       </a>
-                      <button onclick="copyText('${clinicPhoneDisplay}', 'هاتف العيادة')" class="text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer" title="نسخ هاتف العيادة">
+                      <button onclick="copyText('${sClinicPhone}', 'هاتف العيادة')" class="text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer" title="نسخ هاتف العيادة">
                         <i data-lucide="copy" class="w-2.5 h-2.5"></i>
                       </button>
                     ` : ''}
@@ -1952,7 +1912,7 @@
               <!-- Far Left: Plan Price & Subscription Status (أقصى اليسار) -->
               <div class="flex items-center gap-2 shrink-0 mr-auto">
                 <span class="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-700/80 text-emerald-300 text-xs font-black font-mono">
-                  ${sub.planName} (${sub.price} ج.م)
+                  ${sPlan} (${sPrice} ج.م)
                 </span>
                 ${statusBadge}
               </div>
@@ -1962,19 +1922,19 @@
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80">
               <div class="flex items-center gap-1 font-mono">
                 <span class="text-slate-500 text-[10px] font-bold">المشترك:</span>
-                <span class="font-bold text-purple-300 text-[11px]" dir="ltr">${subscriberId}</span>
-                <button onclick="copyText('${subscriberId}', 'كود المشترك')" class="text-slate-500 hover:text-purple-300 p-0.5 cursor-pointer" title="نسخ"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                <span class="font-bold text-purple-300 text-[11px]" dir="ltr">${esc(subscriberId)}</span>
+                <button onclick="copyText('${sCode}', 'كود المشترك')" class="text-slate-500 hover:text-purple-300 p-0.5 cursor-pointer" title="نسخ"><i data-lucide="copy" class="w-3 h-3"></i></button>
               </div>
 
               <div class="flex items-center gap-1 font-mono">
                 <span class="text-slate-500 text-[10px] font-bold">الجهاز:</span>
-                <span class="font-bold text-emerald-400 text-[11px] max-w-[140px] truncate" dir="ltr" title="${primaryMachine || 'لا يوجد جهاز'}">${primaryMachine || 'لا يوجد جهاز'}</span>
+                <span class="font-bold text-emerald-400 text-[11px] max-w-[140px] truncate" dir="ltr" title="${esc(primaryMachine || 'لا يوجد جهاز')}">${esc(primaryMachine || 'لا يوجد جهاز')}</span>
                 ${primaryMachine ? `
-                  <button onclick="copyText('${primaryMachine}', 'كود الجهاز')" class="text-slate-500 hover:text-emerald-300 p-0.5 cursor-pointer" title="نسخ المعرف"><i data-lucide="copy" class="w-3 h-3"></i></button>
-                  <button onclick="editDevice('${sub.id}', '${primaryMachine}')" class="text-slate-500 hover:text-cyan-300 p-0.5 cursor-pointer" title="تعديل أو استبدال الجهاز الأساسي"><i data-lucide="edit-3" class="w-3 h-3"></i></button>
-                  <button onclick="removeDevice('${sub.id}', '${primaryMachine}')" class="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer" title="حذف الجهاز الأساسي"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+                  <button onclick="copyText('${sPrimary}', 'كود الجهاز')" class="text-slate-500 hover:text-emerald-300 p-0.5 cursor-pointer" title="نسخ المعرف"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                  <button onclick="editDevice('${sId}', '${sPrimary}')" class="text-slate-500 hover:text-cyan-300 p-0.5 cursor-pointer" title="تعديل أو استبدال الجهاز الأساسي"><i data-lucide="edit-3" class="w-3 h-3"></i></button>
+                  <button onclick="removeDevice('${sId}', '${sPrimary}')" class="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer" title="حذف الجهاز الأساسي"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
                 ` : `
-                  <button onclick="editDevice('${sub.id}', '')" class="text-cyan-400 hover:text-cyan-300 text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center gap-1 cursor-pointer" title="تعيين جهاز أساسي">
+                  <button onclick="editDevice('${sId}', '')" class="text-cyan-400 hover:text-cyan-300 text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center gap-1 cursor-pointer" title="تعيين جهاز أساسي">
                     <i data-lucide="plus" class="w-2.5 h-2.5"></i>
                     <span>تعيين جهاز</span>
                   </button>
@@ -1983,25 +1943,25 @@
 
               <div class="flex items-center gap-1">
                 <span class="text-slate-500 text-[10px] font-bold">الدفع:</span>
-                <span class="font-bold text-slate-300 text-[11px] capitalize">${sub.paymentMethod}</span>
+                <span class="font-bold text-slate-300 text-[11px] capitalize">${sMethod}</span>
               </div>
 
               <div class="flex items-center gap-1 font-mono">
                 <span class="text-slate-500 text-[10px] font-bold">المحول (الدفع):</span>
-                <span class="font-bold text-emerald-300 text-[11px]" dir="ltr">${sub.senderPhone || '-'}</span>
+                <span class="font-bold text-emerald-300 text-[11px]" dir="ltr">${sSenderPhone}</span>
               </div>
 
               ${clinicPhoneDisplay ? `
                 <div class="flex items-center gap-1 font-mono">
                   <span class="text-slate-500 text-[10px] font-bold">هاتف العيادة:</span>
-                  <span class="font-bold text-teal-300 text-[11px]" dir="ltr">${clinicPhoneDisplay}</span>
-                  <button onclick="copyText('${clinicPhoneDisplay}', 'هاتف العيادة')" class="text-slate-500 hover:text-teal-300 p-0.5 cursor-pointer" title="نسخ"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                  <span class="font-bold text-teal-300 text-[11px]" dir="ltr">${sClinicPhoneText}</span>
+                  <button onclick="copyText('${sClinicPhone}', 'هاتف العيادة')" class="text-slate-500 hover:text-teal-300 p-0.5 cursor-pointer" title="نسخ"><i data-lucide="copy" class="w-3 h-3"></i></button>
                 </div>
               ` : ''}
 
               <div class="flex items-center gap-1 font-mono">
                 <span class="text-slate-500 text-[10px] font-bold">العملية:</span>
-                <span class="font-bold text-cyan-300 text-[11px]" dir="ltr">${sub.transactionRef || '-'}</span>
+                <span class="font-bold text-cyan-300 text-[11px]" dir="ltr">${sTxRef}</span>
               </div>
 
               ${sub.status === 'ACTIVE' && sub.expiresAt ? (() => {
@@ -2038,7 +1998,7 @@
                 ${sub.status === 'PENDING' ? `
                   <!-- Pending State: Activate & Delete -->
                   <button
-                    onclick="activateSub('${sub.id}', ${requestedDays})"
+                    onclick="activateSub('${sId}', ${requestedDays})"
                     class="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:brightness-110 text-white text-xs font-black shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
                   >
                     <i data-lucide="check-circle" class="w-4 h-4"></i>
@@ -2046,7 +2006,7 @@
                   </button>
 
                   <button
-                    onclick="deleteSub('${sub.id}')"
+                    onclick="deleteSub('${sId}')"
                     class="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                     title="حذف هذا الاشتراك نهائياً"
                   >
@@ -2067,7 +2027,7 @@
                       placeholder="±يوم"
                     />
                     <button
-                      onclick="adjustSub('${sub.id}')"
+                      onclick="adjustSub('${sId}')"
                       class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer shrink-0"
                       title="تطبيق تعديل الأيام"
                     >
@@ -2095,7 +2055,7 @@
                   })()}
 
                   <button
-                    onclick="suspendSub('${sub.id}')"
+                    onclick="suspendSub('${sId}')"
                     class="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                     title="إيقاف الاشتراك مؤقتاً"
                   >
@@ -2104,7 +2064,7 @@
                   </button>
 
                   <button
-                    onclick="deleteSub('${sub.id}')"
+                    onclick="deleteSub('${sId}')"
                     class="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                     title="حذف هذا الاشتراك نهائياً"
                   >
@@ -2114,7 +2074,7 @@
                 ` : `
                   <!-- Suspended State: Reactivate + Adjust Days + Delete -->
                   <button
-                    onclick="activateSub('${sub.id}', ${requestedDays})"
+                    onclick="activateSub('${sId}', ${requestedDays})"
                     class="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                     title="إعادة تنشيط الاشتراك"
                   >
@@ -2134,7 +2094,7 @@
                       placeholder="±يوم"
                     />
                     <button
-                      onclick="adjustSub('${sub.id}')"
+                      onclick="adjustSub('${sId}')"
                       class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer shrink-0"
                     >
                       <span>تطبيق</span>
@@ -2142,7 +2102,7 @@
                   </div>
 
                   <button
-                    onclick="deleteSub('${sub.id}')"
+                    onclick="deleteSub('${sId}')"
                     class="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                     title="حذف هذا الاشتراك نهائياً"
                   >
@@ -2180,43 +2140,45 @@
                       <div class="text-[11px] text-slate-500 italic p-2.5 bg-slate-950/50 rounded-xl border border-slate-900 text-center">
                         لا توجد أجهزة مرتبطة بهذا الحساب حالياً. يمكنك ربط جهاز جديد بالأسفل.
                       </div>
-                    ` : devices.map((dev) => `
+                    ` : devices.map((dev) => {
+                      const sDev = escAttrScript(dev);
+                      return `
                       <div class="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800/90 text-[11px] font-mono hover:border-slate-700 transition-colors">
                         <div class="flex items-center gap-2 min-w-0">
                           <i data-lucide="${dev === primaryMachine ? 'laptop' : 'smartphone'}" class="w-3.5 h-3.5 ${dev === primaryMachine ? 'text-emerald-400' : 'text-cyan-400'} shrink-0"></i>
-                          <span dir="ltr" class="font-bold select-all truncate ${dev === primaryMachine ? 'text-emerald-300' : 'text-slate-200'}">${dev}</span>
+                          <span dir="ltr" class="font-bold select-all truncate ${dev === primaryMachine ? 'text-emerald-300' : 'text-slate-200'}">${esc(dev)}</span>
                           ${dev === primaryMachine ? `
                             <span class="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-black shrink-0">أساسي ⭐</span>
                           ` : `
-                            <button onclick="setAsPrimaryDevice('${sub.id}', '${dev}')" class="px-1.5 py-0.5 rounded-md bg-slate-900 hover:bg-emerald-600/30 text-slate-400 hover:text-emerald-300 border border-slate-800 text-[9px] font-bold transition-all shrink-0 cursor-pointer" title="تعيين هذا الجهاز كجهاز أساسي">
+                            <button onclick="setAsPrimaryDevice('${sId}', '${sDev}')" class="px-1.5 py-0.5 rounded-md bg-slate-900 hover:bg-emerald-600/30 text-slate-400 hover:text-emerald-300 border border-slate-800 text-[9px] font-bold transition-all shrink-0 cursor-pointer" title="تعيين هذا الجهاز كجهاز أساسي">
                               ★ تعيين كأساسي
                             </button>
                           `}
                         </div>
                         <div class="flex items-center gap-1 shrink-0">
-                          <button onclick="copyText('${dev}', 'كود الجهاز')" class="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer" title="نسخ المعرف">
+                          <button onclick="copyText('${sDev}', 'كود الجهاز')" class="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer" title="نسخ المعرف">
                             <i data-lucide="copy" class="w-3 h-3"></i>
                           </button>
-                          <button onclick="editDevice('${sub.id}', '${dev}')" class="p-1 rounded-lg text-cyan-400 hover:text-cyan-200 hover:bg-cyan-500/20 transition-colors cursor-pointer" title="تعديل أو استبدال هذا المعرف">
+                          <button onclick="editDevice('${sId}', '${sDev}')" class="p-1 rounded-lg text-cyan-400 hover:text-cyan-200 hover:bg-cyan-500/20 transition-colors cursor-pointer" title="تعديل أو استبدال هذا المعرف">
                             <i data-lucide="edit-3" class="w-3 h-3"></i>
                           </button>
-                          <button onclick="removeDevice('${sub.id}', '${dev}')" class="p-1 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 transition-colors cursor-pointer" title="حذف هذا الجهاز">
+                          <button onclick="removeDevice('${sId}', '${sDev}')" class="p-1 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 transition-colors cursor-pointer" title="حذف هذا الجهاز">
                             <i data-lucide="trash-2" class="w-3 h-3"></i>
                           </button>
                         </div>
                       </div>
-                    `).join('')}
+                    `; }).join('')}
                   </div>
                   <div class="flex items-center gap-2 pt-1">
                     <input
                       id="add-device-${sub.id}"
                       type="text"
                       placeholder="كود جهاز جديد لربطه..."
-                      onkeydown="if(event.key==='Enter') addDevice('${sub.id}')"
+                      onkeydown="if(event.key==='Enter') addDevice('${sId}')"
                       class="flex-1 max-w-xs px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-cyan-500"
                     />
                     <button
-                      onclick="addDevice('${sub.id}')"
+                      onclick="addDevice('${sId}')"
                       class="px-3.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-cyan-950/30"
                     >
                       <i data-lucide="plus" class="w-3.5 h-3.5"></i>

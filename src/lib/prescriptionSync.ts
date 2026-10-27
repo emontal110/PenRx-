@@ -12,6 +12,7 @@
 import { SavedPrescription } from "@/store/usePrescriptionStore";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { getApiUrl } from "@/lib/cloudProxy";
+import { deviceAuthHeaders } from "@/lib/deviceAuthClient";
 
 export const RETENTION_DAYS = 365; // 1 full year retention
 export const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -52,6 +53,10 @@ export interface SyncQueueItem {
   data?: LeanCloudPrescription;
   retryCount: number;
   enqueuedAt: number;
+  /** Exponential backoff: the item is skipped until this timestamp. */
+  nextRetryAt?: number;
+  /** Kept but not retried until the doctor's license is verified again. */
+  needsLicense?: boolean;
 }
 
 const QUEUE_STORAGE_KEY = "penrx_cloud_sync_queue";
@@ -214,8 +219,19 @@ export function enqueueSyncAction(
   processSyncQueue();
 }
 
+/** Maximum backoff between attempts; items are retried for 30 days before giving up. */
+const MAX_RETRY_MS = 6 * 60 * 60 * 1000;
+
+function backoffFor(retryCount: number): number {
+  return Math.min(MAX_RETRY_MS, 5000 * Math.pow(2, Math.min(retryCount, 7)));
+}
+
 /**
- * Sequential Background Queue Processor
+ * Sequential background queue processor.
+ *
+ * A prescription that failed to upload is never discarded: it stays in the queue
+ * with exponential backoff and retries for 30 days, because "the cloud said no"
+ * is exactly the case where the doctor's record must not be dropped.
  */
 export async function processSyncQueue(): Promise<void> {
   if (typeof window === "undefined") return;
@@ -226,25 +242,24 @@ export async function processSyncQueue(): Promise<void> {
     return;
   }
 
-  const queue = getQueue();
-  if (queue.length === 0) {
-    notifySyncStatus("synced");
+  const now = Date.now();
+  const due = getQueue().filter((q) => !q.nextRetryAt || q.nextRetryAt <= now);
+  if (due.length === 0) {
+    notifySyncStatus("pending");
     return;
   }
 
   isProcessingQueue = true;
   notifySyncStatus("syncing");
 
+  const item = due[0];
+
   try {
-    const item = queue[0];
-    const machineId = useSubscriptionStore.getState().machineId;
     const res = await fetch(getApiUrl("/api/prescriptions/sync"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: deviceAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         action: item.action,
-        subscriberId: item.subscriberId,
-        machineId,
         prescriptionId: item.prescriptionId,
         data: item.data,
       }),
@@ -253,25 +268,46 @@ export async function processSyncQueue(): Promise<void> {
     if (res.ok) {
       const updatedQueue = getQueue().filter((q) => q.id !== item.id);
       saveQueue(updatedQueue);
-
       isProcessingQueue = false;
       if (updatedQueue.length > 0) {
         processSyncQueue();
       } else {
         notifySyncStatus("synced");
       }
-    } else {
-      item.retryCount = (item.retryCount || 0) + 1;
-      if (item.retryCount >= 5) {
-        console.warn("[SyncQueue] Discarding item after 5 failed retries:", item.prescriptionId);
-        saveQueue(queue.slice(1));
-      } else {
-        saveQueue(queue);
-      }
-      isProcessingQueue = false;
-      notifySyncStatus("idle");
+      return;
     }
+
+    const fresh = getQueue();
+    const target = fresh.find((q) => q.id === item.id);
+    if (target) {
+      target.retryCount = (target.retryCount || 0) + 1;
+      target.nextRetryAt = Date.now() + backoffFor(target.retryCount);
+
+      // 401/403 means the device token expired, the subscription lapsed, or this
+      // device was removed: re-verify the license, which mints a fresh token.
+      if (res.status === 401 || res.status === 403) {
+        target.needsLicense = true;
+        useSubscriptionStore.getState().syncWithServer(true).catch(() => {});
+      }
+
+      // Abandoned only after a month of failed attempts, and the UI is told so.
+      if (Date.now() - target.enqueuedAt > 30 * 24 * 60 * 60 * 1000) {
+        saveQueue(fresh.filter((q) => q.id !== item.id));
+        notifySyncStatus("error");
+      } else {
+        saveQueue(fresh);
+        notifySyncStatus(res.status === 502 || res.status === 503 ? "offline" : "pending");
+      }
+    }
+    isProcessingQueue = false;
   } catch {
+    const fresh = getQueue();
+    const target = fresh.find((q) => q.id === item.id);
+    if (target) {
+      target.retryCount = (target.retryCount || 0) + 1;
+      target.nextRetryAt = Date.now() + backoffFor(target.retryCount);
+      saveQueue(fresh);
+    }
     isProcessingQueue = false;
     notifySyncStatus("offline");
   }
@@ -289,7 +325,7 @@ export async function pullCloudPrescriptions(
     const machineId = useSubscriptionStore.getState().machineId;
     const res = await fetch(
       getApiUrl(`/api/prescriptions/sync?subscriberId=${encodeURIComponent(subscriberId)}&machineId=${encodeURIComponent(machineId || "")}`),
-      { cache: "no-store" }
+      { cache: "no-store", headers: deviceAuthHeaders() }
     );
 
     if (!res.ok) return null;
@@ -399,7 +435,7 @@ export function runSmartCacheCleanup(
 
 // ===== SYNC STATUS EVENT EMITTER =====
 
-export type SyncStatus = "synced" | "syncing" | "offline" | "idle";
+export type SyncStatus = "synced" | "syncing" | "offline" | "idle" | "pending" | "error";
 
 function notifySyncStatus(status: SyncStatus): void {
   if (typeof window === "undefined") return;
@@ -413,4 +449,10 @@ if (typeof window !== "undefined" && !_onlineListenerAttached) {
     console.log("[SyncQueue] Network connection restored. Processing sync queue...");
     processSyncQueue();
   });
+
+  // Backoff timers must be pumped even without network events, otherwise a queued
+  // prescription would wait for the next save before reaching the cloud.
+  window.setInterval(() => {
+    if (document.visibilityState === "visible" && getQueue().length > 0) processSyncQueue();
+  }, 60_000);
 }

@@ -1,18 +1,25 @@
-import { NextResponse } from "next/server";
 import {
-  getSubscriptionByMachine,
-  getSubscriptionBySubscriberId,
-  machineOwnsSubscription,
-  DEFAULT_SUPABASE_SERVICE_ROLE_KEY,
-} from "@/lib/subscriptionManager";
+  apiError,
+  apiJson,
+  cleanSubscriberId,
+  preflight,
+  readJsonBody,
+} from "@/lib/apiHttp";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
+import { readDeviceToken } from "@/lib/deviceAuth";
+import { supabaseRest } from "@/lib/supabaseRest";
+import { getSubscriptionBySubscriberId, machineOwnsSubscription } from "@/lib/subscriptionService";
 
 export const dynamic = "force-dynamic";
 
-const SUPABASE_REST_URL = "https://qspaigplwyvpqbmszpgc.supabase.co/rest/v1";
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_ROLE_KEY;
+const TABLE = "CloudBackup";
+
+/**
+ * Vercel rejects request bodies above ~4.5MB, so anything larger must be refused
+ * here with a message the doctor can act on instead of failing at the edge.
+ */
+const MAX_PAYLOAD_B64 = 4 * 1024 * 1024;
 
 export interface CloudBackupRecord {
   id: string;
@@ -25,246 +32,182 @@ export interface CloudBackupRecord {
   createdAt: string;
 }
 
-// In-Memory Multi-Tenant Cache partitioned strictly by Subscriber ID
-const serverCloudBackupCache = new Map<string, CloudBackupRecord[]>();
-
-async function resolveAuthorizedSubscription(
-  subscriberId?: string,
-  machineId?: string
-): Promise<boolean> {
-  if (!subscriberId && !machineId) return false;
-  try {
-    const sub = subscriberId
-      ? await getSubscriptionBySubscriberId(subscriberId)
-      : await getSubscriptionByMachine(machineId!);
-    if (!sub) return false;
-    if (!(sub.status === "ACTIVE" || sub.isTrial)) return false;
-    if (machineId && !machineOwnsSubscription(sub, machineId.trim())) return false;
-    return true;
-  } catch {
-    return false;
-  }
+export async function OPTIONS(request: Request) {
+  return preflight(request);
 }
 
-/**
- * GET /api/backup/cloud?subscriberId=...&machineId=...
- */
-export async function GET(request: Request) {
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/backup/cloud");
+async function authorizeTenant(
+  request: Request
+): Promise<{ ok: true; subscriberId: string; machineId: string } | { ok: false; message: string; status: number }> {
+  const token = readDeviceToken(request);
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      message: "انتهت صلاحية رمز الجهاز. سيتم إعادة التحقق من الاشتراك تلقائياً.",
+    };
   }
+
+  const subscriberId = cleanSubscriberId(token.subscriberId);
+  if (!subscriberId) return { ok: false, status: 400, message: "معرّف مشترك غير صالح." };
+
+  const sub = await getSubscriptionBySubscriberId(subscriberId).catch(() => null);
+  if (!sub) return { ok: false, status: 403, message: "حساب المشترك غير مسجل." };
+  if (sub.status !== "ACTIVE") {
+    return { ok: false, status: 403, message: "الاشتراك موقوف أو منتهي. يرجى التجديد للوصول للنسخ السحابية." };
+  }
+  if (!machineOwnsSubscription(sub, token.machineId)) {
+    return { ok: false, status: 403, message: "هذا الجهاز غير مرتبط بحساب المشترك المطلوب." };
+  }
+
+  return { ok: true, subscriberId, machineId: token.machineId };
+}
+
+/** Single canonical backup slot per subscriber so free-tier storage never grows. */
+function backupRowId(subscriberId: string): string {
+  return `cbk_${subscriberId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+}
+
+function toRecord(row: any): CloudBackupRecord {
+  return {
+    id: row.id,
+    subscriberId: row.subscriberId,
+    machineId: row.machineId || undefined,
+    fileName: row.fileName,
+    fileSizeKb: Number(row.fileSizeKb) || 0,
+    payloadBase64: row.payloadBase64,
+    metadata: row.metadataJson || row.metadata || {},
+    createdAt: row.createdAt,
+  };
+}
+
+/** GET /api/backup/cloud — always read the encrypted blob from PostgreSQL. */
+export async function GET(request: Request) {
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/backup/cloud");
 
   if (!checkRateLimit(request, { maxRequests: 15, windowMs: 60_000, prefix: "cloud-backup-get" })) {
-    return rateLimitExceededResponse(60);
+    return rateLimitExceededResponse(request, 60);
   }
 
+  const auth = await authorizeTenant(request);
+  if (!auth.ok) return apiError(request, auth.message, auth.status);
+
+  let rows: any[] | null;
   try {
-    const { searchParams } = new URL(request.url);
-    const subscriberId = searchParams.get("subscriberId")?.trim();
-    const machineId = searchParams.get("machineId")?.trim();
-    const targetKey = subscriberId || machineId;
+    rows = await supabaseRest<any[]>(TABLE, {
+      query:
+        `subscriberId=eq.${encodeURIComponent(auth.subscriberId)}` +
+        `&order=createdAt.desc&limit=20`,
+    });
+  } catch (err: any) {
+    console.error("[CloudBackup GET]", err?.message || err);
+    return apiError(request, "تعذر الوصول للنسخ الاحتياطية السحابية حالياً.", 502);
+  }
 
-    if (!targetKey) {
-      return NextResponse.json(
-        { error: "subscriberId or machineId is required" },
-        { status: 400 }
-      );
-    }
-
-    const isAuthorized = await resolveAuthorizedSubscription(subscriberId, machineId);
-    if (!isAuthorized) {
-      return NextResponse.json(
-        { error: "غير مصرح: لا يوجد اشتراك نشط مرتبط بهذا الجهاز" },
-        { status: 403 }
-      );
-    }
-
-    const list = serverCloudBackupCache.get(targetKey) || [];
-    if (list.length > 0) {
-      return NextResponse.json({
-        success: true,
-        backup: list[0],
-        totalBackups: list.length,
-        allBackups: list.map((b) => ({
-          id: b.id,
-          fileName: b.fileName,
-          fileSizeKb: b.fileSizeKb,
-          metadata: b.metadata,
-          createdAt: b.createdAt,
-        })),
-      });
-    }
-
-    if (SUPABASE_KEY) {
-      try {
-        const resp = await fetch(
-          `${SUPABASE_REST_URL}/CloudBackup?subscriberId=eq.${encodeURIComponent(targetKey)}&order=createdAt.desc&limit=1`,
-          {
-            headers: {
-              apikey: SUPABASE_KEY,
-              Authorization: `Bearer ${SUPABASE_KEY}`,
-            },
-            cache: "no-store",
-          }
-        );
-        if (resp.ok) {
-          const records = await resp.json();
-          if (Array.isArray(records) && records.length > 0) {
-            serverCloudBackupCache.set(targetKey, records);
-            return NextResponse.json({
-              success: true,
-              backup: records[0],
-              totalBackups: records.length,
-              allBackups: records.map((b: any) => ({
-                id: b.id,
-                fileName: b.fileName,
-                fileSizeKb: b.fileSizeKb,
-                metadata: b.metadataJson || b.metadata,
-                createdAt: b.createdAt,
-              })),
-            });
-          }
-        }
-      } catch {}
-    }
-
-    return NextResponse.json({
+  const records = (Array.isArray(rows) ? rows : []).map(toRecord);
+  if (records.length === 0) {
+    return apiJson(request, {
       success: true,
       backup: null,
       message: "لا توجد نسخ احتياطية محفوظة سحابياً لهذا المشترك بعد",
     });
-  } catch (err: any) {
-    console.error("[CloudBackup GET Error]:", err);
-    return NextResponse.json({ error: err.message || "Server Error" }, { status: 500 });
   }
+
+  return apiJson(request, {
+    success: true,
+    backup: records[0],
+    totalBackups: records.length,
+    allBackups: records.map((b) => ({
+      id: b.id,
+      fileName: b.fileName,
+      fileSizeKb: b.fileSizeKb,
+      metadata: b.metadata,
+      createdAt: b.createdAt,
+    })),
+  });
 }
 
 /**
- * POST /api/backup/cloud
- * Uploads an encrypted and compressed backup payload for this subscriber.
- * Uses single-slot upsert per subscriberId and purges older snapshots so Supabase Free Tier (500MB)
- * never accumulates duplicate daily blobs across thousands of doctors!
+ * POST /api/backup/cloud — stores the encrypted payload in the subscriber's single
+ * slot. The write is awaited: acknowledging an unsaved backup is silent data loss.
  */
 export async function POST(request: Request) {
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/backup/cloud");
-  }
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/backup/cloud");
 
   if (!checkRateLimit(request, { maxRequests: 10, windowMs: 60 * 60_000, prefix: "cloud-backup-post" })) {
-    return rateLimitExceededResponse(3600);
+    return rateLimitExceededResponse(request, 3600);
   }
+
+  const auth = await authorizeTenant(request);
+  if (!auth.ok) return apiError(request, auth.message, auth.status);
+
+  const body = await readJsonBody<{
+    fileName?: string;
+    fileSizeKb?: number;
+    payloadBase64?: string;
+    metadata?: any;
+  }>(request, MAX_PAYLOAD_B64 + 64 * 1024);
+  if (!body.ok) {
+    return apiError(
+      request,
+      body.error === "payload_too_large"
+        ? `حجم النسخة الاحتياطية أكبر من الحد المسموح (${Math.round(MAX_PAYLOAD_B64 / 1024 / 1024)} ميجابايت). احذف صور الروشتات القديمة ثم أعد المحاولة.`
+        : "محتوى الطلب غير صالح.",
+      body.error === "payload_too_large" ? 413 : 400
+    );
+  }
+
+  const { fileName, fileSizeKb, payloadBase64, metadata } = body.data;
+  if (!payloadBase64 || typeof payloadBase64 !== "string") {
+    return apiError(request, "بيانات النسخة الاحتياطية مفقودة.", 400);
+  }
+  if (payloadBase64.length > MAX_PAYLOAD_B64) {
+    return apiError(request, "حجم النسخة الاحتياطية أكبر من الحد المسموح به.", 413);
+  }
+
+  const id = backupRowId(auth.subscriberId);
+  const createdAt = new Date().toISOString();
+  const row = {
+    id,
+    subscriberId: auth.subscriberId,
+    machineId: auth.machineId,
+    fileName:
+      String(fileName || "").slice(0, 120) ||
+      `PenRX_Backup_${createdAt.slice(0, 10)}.penrx`,
+    fileSizeKb: Math.max(0, Number(fileSizeKb) || 0),
+    payloadBase64,
+    metadataJson: metadata && typeof metadata === "object" ? metadata : {},
+    createdAt,
+  };
 
   try {
-    const body = await request.json();
-    const {
-      subscriberId,
-      machineId,
-      fileName,
-      fileSizeKb,
-      payloadBase64,
-      metadata,
-    } = body;
-
-    const targetKey = (subscriberId || machineId)?.trim();
-    if (!targetKey) {
-      return NextResponse.json(
-        { error: "subscriberId or machineId is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!payloadBase64) {
-      return NextResponse.json(
-        { error: "payloadBase64 is required" },
-        { status: 400 }
-      );
-    }
-
-    const isAuthorized = await resolveAuthorizedSubscription(
-      subscriberId?.trim(),
-      machineId?.trim()
-    );
-    if (!isAuthorized) {
-      return NextResponse.json(
-        { error: "غير مصرح: لا يوجد اشتراك نشط مرتبط بهذا الجهاز" },
-        { status: 403 }
-      );
-    }
-
-    if (payloadBase64.length > 25 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "حجم النسخة الاحتياطية أكبر من الحد المسموح به (25 ميجابايت)" },
-        { status: 413 }
-      );
-    }
-
-    // Canonical single-slot ID per subscriber: overwrites previous backup in-place!
-    const backupId = `cbk_${targetKey.replace(/[^a-zA-Z0-9_-]/g, "")}`;
-    const newRecord: CloudBackupRecord = {
-      id: backupId,
-      subscriberId: targetKey,
-      machineId: machineId?.trim(),
-      fileName: fileName || `PenRX_Backup_${new Date().toISOString().slice(0, 10)}.penrx`,
-      fileSizeKb: Number(fileSizeKb) || 0,
-      payloadBase64,
-      metadata: metadata || {},
-      createdAt: new Date().toISOString(),
-    };
-
-    // Keep only the single latest snapshot in memory per subscriber
-    serverCloudBackupCache.set(targetKey, [newRecord]);
-
-    // Upsert canonical row in Supabase CloudBackup AND delete any legacy historical rows for this subscriber
-    if (SUPABASE_KEY) {
-      try {
-        fetch(`${SUPABASE_REST_URL}/CloudBackup?on_conflict=id`, {
-          method: "POST",
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-            "Content-Type": "application/json",
-            Prefer: "resolution=merge-duplicates,return=minimal",
-          },
-          body: JSON.stringify({
-            id: backupId,
-            subscriberId: targetKey,
-            fileName: newRecord.fileName,
-            fileSizeKb: newRecord.fileSizeKb,
-            payloadBase64: newRecord.payloadBase64,
-            metadataJson: newRecord.metadata,
-            createdAt: newRecord.createdAt,
-          }),
-        })
-          .then(() => {
-            // Clean up any legacy timestamped cbk_* rows for this subscriber to free space
-            return fetch(
-              `${SUPABASE_REST_URL}/CloudBackup?subscriberId=eq.${encodeURIComponent(targetKey)}&id=neq.${encodeURIComponent(backupId)}`,
-              {
-                method: "DELETE",
-                headers: {
-                  apikey: SUPABASE_KEY,
-                  Authorization: `Bearer ${SUPABASE_KEY}`,
-                },
-              }
-            );
-          })
-          .catch(() => {});
-      } catch {}
-    }
-
-    return NextResponse.json({
-      success: true,
-      id: backupId,
-      message: "تم حفظ النسخة الاحتياطية سحابياً بنجاح وتأمينها",
-      backup: {
-        id: newRecord.id,
-        fileName: newRecord.fileName,
-        fileSizeKb: newRecord.fileSizeKb,
-        createdAt: newRecord.createdAt,
-      },
+    await supabaseRest(TABLE, {
+      method: "POST",
+      query: "on_conflict=id",
+      body: row,
+      prefer: "resolution=merge-duplicates,return=minimal",
     });
+    // Free space held by pre-canonical timestamped rows for this subscriber.
+    await supabaseRest(TABLE, {
+      method: "DELETE",
+      query:
+        `subscriberId=eq.${encodeURIComponent(auth.subscriberId)}` +
+        `&id=neq.${encodeURIComponent(id)}`,
+    }).catch(() => null);
   } catch (err: any) {
-    console.error("[CloudBackup POST Error]:", err);
-    return NextResponse.json({ error: err.message || "Server Error" }, { status: 500 });
+    console.error("[CloudBackup POST]", err?.message || err);
+    return apiError(request, "تعذر حفظ النسخة الاحتياطية سحابياً. ستعاد المحاولة لاحقاً.", 502);
   }
+
+  return apiJson(request, {
+    success: true,
+    id,
+    message: "تم حفظ النسخة الاحتياطية سحابياً بنجاح وتأمينها",
+    backup: {
+      id: row.id,
+      fileName: row.fileName,
+      fileSizeKb: row.fileSizeKb,
+      createdAt: row.createdAt,
+    },
+  });
 }

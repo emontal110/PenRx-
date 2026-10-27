@@ -1,344 +1,79 @@
-import { NextResponse } from "next/server";
 import {
-  getSubscriptionById,
-  getSubscriptionByMachine,
-  getSubscriptionBySubscriberId,
-  pickBestSubscription,
-  activateSubscription,
-  suspendSubscription,
-  deleteSubscription,
-  adjustSubscriptionDays,
-  addAllowedDevice,
-  removeAllowedDevice,
-  setPrimaryDevice,
-  editAllowedDevice,
-  generateSignedToken,
-  verifySignedToken,
-  validateAdminAuthorization,
-  forceHydrateCache,
-  SubscriptionRecord,
-} from "@/lib/subscriptionManager";
+  apiError,
+  apiJson,
+  cleanMachineId,
+  cleanOrderId,
+  cleanSubscriberId,
+  preflight,
+} from "@/lib/apiHttp";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
+import { resolveDeviceSubscription } from "@/lib/subscriptionService";
 
 export const dynamic = "force-dynamic";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-admin-key, x-master-secret, apikey, Pragma, Cache-Control",
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: CORS_HEADERS,
-  });
+export async function OPTIONS(request: Request) {
+  return preflight(request);
 }
 
-function jsonResponse(data: any, init?: { status?: number }) {
-  return NextResponse.json(
-    { ...data, serverTime: Date.now() },
-    {
-      status: init?.status || 200,
-      headers: {
-        ...CORS_HEADERS,
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
-      },
-    }
-  );
-}
-
-function safeSignedToken(
-  machineId: string,
-  expiresAt: string,
-  subscriberId: string
-): string | undefined {
-  try {
-    return generateSignedToken(machineId, expiresAt, subscriberId);
-  } catch {
-    return undefined;
-  }
-}
-
-// ===== GET: Verify subscription status for a machine =====
+/**
+ * License verification for the installed app on a specific device.
+ *
+ * The answer always comes from PostgreSQL, so a portal activation is visible on
+ * the very next poll. A successful ACTIVE check returns a short-lived signed
+ * device token which the app must present to the medical-data endpoints; a token
+ * supplied by the client is never accepted as proof of a license.
+ */
 export async function GET(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward to the cloud API transparently
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/system/verify");
-  }
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/system/verify");
 
-  // Rate Limit: 120 verify requests per minute per IP (prevents rate limiting mobile polling)
   if (!checkRateLimit(request, { maxRequests: 120, windowMs: 60_000, prefix: "verify-get" })) {
-    return rateLimitExceededResponse(60);
+    return rateLimitExceededResponse(request, 15);
   }
 
   const { searchParams } = new URL(request.url);
+  const machineId = cleanMachineId(searchParams.get("machineId"));
+  const altMachineId = cleanMachineId(searchParams.get("altMachineId"));
+  const subscriberId = cleanSubscriberId(searchParams.get("subscriberId"));
+  const orderId = cleanOrderId(searchParams.get("id"));
 
-  const machineId = searchParams.get("machineId");
-  const altMachineId = searchParams.get("altMachineId");
-  const subscriberId = searchParams.get("subscriberId");
-  const subIdParam = searchParams.get("id");
+  if (!machineId && !subscriberId && !orderId) {
+    return apiError(request, "machineId أو subscriberId أو id مطلوب.", 400);
+  }
+  if (!machineId) return apiJson(request, { success: true, status: "none" });
 
-  if (!machineId && !subscriberId && !subIdParam) {
-    return jsonResponse({ error: "machineId, subscriberId, or id is required" }, { status: 400 });
+  const sub = await resolveDeviceSubscription({
+    machineId,
+    altMachineId: altMachineId || undefined,
+    subscriberId: subscriberId || undefined,
+    orderId: orderId || undefined,
+  });
+
+  if (!sub) {
+    return apiJson(request, { success: false, status: "none", machineId });
   }
 
-  const now = new Date();
-
-  try {
-    // Force refresh cache so portal activations are visible immediately
-    await forceHydrateCache();
-
-    const cleanMachineId = (machineId || "").trim();
-    const cleanAltMachineId = (altMachineId || "").trim();
-    const cleanSubId = (subscriberId || "").trim();
-    const cleanOrderId = (subIdParam || "").trim();
-
-    const candidates: SubscriptionRecord[] = [];
-    const [byOrder, byMachine, byAltMachine, bySubId] = await Promise.all([
-      cleanOrderId ? getSubscriptionById(cleanOrderId) : Promise.resolve(null),
-      cleanMachineId ? getSubscriptionByMachine(cleanMachineId) : Promise.resolve(null),
-      cleanAltMachineId && cleanAltMachineId !== cleanMachineId
-        ? getSubscriptionByMachine(cleanAltMachineId)
-        : Promise.resolve(null),
-      cleanSubId && cleanSubId !== "SUB-0000"
-        ? getSubscriptionBySubscriberId(cleanSubId)
-        : Promise.resolve(null),
-    ]);
-
-    if (byOrder) candidates.push(byOrder);
-    if (byMachine) candidates.push(byMachine);
-    if (byAltMachine) candidates.push(byAltMachine);
-    if (bySubId) candidates.push(bySubId);
-
-    const sub = pickBestSubscription(candidates);
-
-    if (!sub) {
-      return jsonResponse({ success: false, status: "none", machineId });
-    }
-
-    let status = sub.status;
-    const expiry = sub.expiresAt ? new Date(sub.expiresAt) : null;
-
-    // Auto-expire if past expiry date
-    if (status === "ACTIVE" && expiry && expiry <= now) {
-      status = "EXPIRED";
-    }
-
-    if (status === "ACTIVE" && (!expiry || expiry > now)) {
-      const daysRemaining = expiry
-        ? Math.max(0, Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-        : sub.durationDays || 30;
-      const effectiveMachine = cleanMachineId || sub.machineId;
-      const token = safeSignedToken(
-        effectiveMachine,
-        sub.expiresAt || new Date(now.getTime() + daysRemaining * 86400000).toISOString(),
-        sub.subscriberId
-      );
-      return jsonResponse({
-        success: true,
-        status: "active",
-        subscription: sub,
-        daysRemaining,
-        expiresAt: sub.expiresAt,
-        token,
-      });
-    }
-
-    return jsonResponse({
+  if (sub.status !== "ACTIVE") {
+    return apiJson(request, {
       success: true,
-      status: status.toLowerCase(),
+      status: sub.status.toLowerCase(),
       subscription: sub,
-      expiresAt: sub.expiresAt,
-    });
-  } catch (err: any) {
-    console.error("[SystemVerify GET] Database query failed:", err.message);
-
-    // Fallback: If DB is unreachable, check client-provided offlineToken
-    const offlineToken = searchParams.get("offlineToken") || searchParams.get("token");
-    if (offlineToken && machineId) {
-      const parsed = verifySignedToken(offlineToken);
-      if (
-        parsed &&
-        parsed.status === "active" &&
-        parsed.machineId.trim().toUpperCase() === machineId.trim().toUpperCase()
-      ) {
-        const expiry = new Date(parsed.expiresAt);
-        if (expiry > now) {
-          const daysRemaining = Math.max(
-            0,
-            Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-          );
-          return jsonResponse({
-            success: true,
-            status: "active",
-            daysRemaining,
-            expiresAt: parsed.expiresAt,
-            token: offlineToken,
-            offlineFallback: true,
-          });
-        }
-      }
-    }
-
-    return jsonResponse({
-      success: false,
-      status: "error",
-      message: "فشل الاتصال بقاعدة البيانات",
+      expiresAt: sub.expiresAt || null,
     });
   }
-}
 
-// ===== PATCH: Admin actions (activate, suspend, adjust days, device management) =====
-export async function PATCH(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward admin action to the cloud API
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/system/verify");
-  }
+  const now = Date.now();
+  const expiryTime = sub.expiresAt ? new Date(sub.expiresAt).getTime() : 0;
+  const daysRemaining = expiryTime
+    ? Math.max(0, Math.ceil((expiryTime - now) / 86_400_000))
+    : sub.durationDays;
 
-  // Rate Limit: 60 admin operations per minute
-  if (!checkRateLimit(request, { maxRequests: 60, windowMs: 60_000, prefix: "verify-patch" })) {
-    return rateLimitExceededResponse(60);
-  }
-
-  // CRITICAL SECURITY CHECK: Master Administrative Authorization Required
-  if (!validateAdminAuthorization(request)) {
-    return jsonResponse(
-      { error: "Unauthorized: Master Administrative Secret is required to perform this action" },
-      { status: 401 }
-    );
-  }
-
-  try {
-    const body = await request.json();
-    const { id, action, durationDays, daysDelta, machineId, oldMachineId, newMachineId } = body;
-
-    if (!id || !action) {
-      return jsonResponse({ error: "id and action are required" }, { status: 400 });
-    }
-
-    switch (action) {
-      case "ACTIVATE": {
-        const days = Number(durationDays) || 30;
-        const updated = await activateSubscription(id, days);
-        if (!updated) {
-          return jsonResponse({ error: "Subscription not found" }, { status: 404 });
-        }
-        // Generate signed token upon activation bound to subscriber
-        const token = safeSignedToken(updated.machineId, updated.expiresAt!, updated.subscriberId);
-        return jsonResponse({ success: true, subscription: { ...updated, signatureToken: token } });
-      }
-
-      case "SUSPEND": {
-        const updated = await suspendSubscription(id);
-        if (!updated) {
-          return jsonResponse({ error: "Subscription not found" }, { status: 404 });
-        }
-        return jsonResponse({ success: true, subscription: updated });
-      }
-
-      case "ADJUST_DAYS": {
-        const delta = Number(daysDelta);
-        if (isNaN(delta)) {
-          return jsonResponse({ error: "daysDelta must be a number" }, { status: 400 });
-        }
-        const updated = await adjustSubscriptionDays(id, delta);
-        if (!updated) {
-          return jsonResponse({ error: "Subscription not found" }, { status: 404 });
-        }
-        const token = safeSignedToken(updated.machineId, updated.expiresAt!, updated.subscriberId);
-        return jsonResponse({ success: true, subscription: { ...updated, signatureToken: token } });
-      }
-
-      case "ADD_DEVICE": {
-        if (!machineId) {
-          return jsonResponse({ error: "machineId is required for ADD_DEVICE" }, { status: 400 });
-        }
-        const updated = await addAllowedDevice(id, machineId);
-        if (!updated) {
-          return jsonResponse({ error: "Subscription not found" }, { status: 404 });
-        }
-        return jsonResponse({ success: true, subscription: updated });
-      }
-
-      case "REMOVE_DEVICE": {
-        if (!machineId) {
-          return jsonResponse({ error: "machineId is required for REMOVE_DEVICE" }, { status: 400 });
-        }
-        const updated = await removeAllowedDevice(id, machineId);
-        if (!updated) {
-          return jsonResponse({ error: "Subscription not found" }, { status: 404 });
-        }
-        return jsonResponse({ success: true, subscription: updated });
-      }
-
-      case "SET_PRIMARY_DEVICE": {
-        if (!machineId) {
-          return jsonResponse({ error: "machineId is required for SET_PRIMARY_DEVICE" }, { status: 400 });
-        }
-        const updated = await setPrimaryDevice(id, machineId);
-        if (!updated) {
-          return jsonResponse({ error: "Subscription not found" }, { status: 404 });
-        }
-        return jsonResponse({ success: true, subscription: updated });
-      }
-
-      case "EDIT_DEVICE": {
-        const targetOld = oldMachineId || machineId;
-        if (!targetOld || !newMachineId) {
-          return jsonResponse({ error: "oldMachineId and newMachineId are required for EDIT_DEVICE" }, { status: 400 });
-        }
-        const updated = await editAllowedDevice(id, targetOld, newMachineId);
-        if (!updated) {
-          return jsonResponse({ error: "Subscription not found" }, { status: 404 });
-        }
-        return jsonResponse({ success: true, subscription: updated });
-      }
-
-      default:
-        return jsonResponse({ error: `Unknown action: ${action}` }, { status: 400 });
-    }
-  } catch (err: any) {
-    console.error("[SystemVerify PATCH] Error:", err.message);
-    return jsonResponse({ error: err.message || "Internal server error" }, { status: 500 });
-  }
-}
-
-// ===== DELETE: Remove subscription =====
-export async function DELETE(request: Request) {
-  // Packaged desktop runtime holds no cloud credentials — forward admin action to the cloud API
-  if (!hasCloudCredentials()) {
-    return proxyToCloud(request, "/api/system/verify");
-  }
-
-  // Rate Limit: 10 deletes per minute per IP
-  if (!checkRateLimit(request, { maxRequests: 10, windowMs: 60_000, prefix: "verify-delete" })) {
-    return rateLimitExceededResponse(60);
-  }
-
-  // CRITICAL SECURITY CHECK: Master Administrative Authorization Required
-  if (!validateAdminAuthorization(request)) {
-    return jsonResponse(
-      { error: "Unauthorized: Master Administrative Secret is required to perform this action" },
-      { status: 401 }
-    );
-  }
-
-  try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-
-    if (!id) {
-      return jsonResponse({ error: "id is required" }, { status: 400 });
-    }
-
-    await deleteSubscription(id);
-    return jsonResponse({ success: true });
-  } catch (err: any) {
-    console.error("[SystemVerify DELETE] Error:", err.message);
-    return jsonResponse({ error: err.message || "Internal server error" }, { status: 500 });
-  }
+  return apiJson(request, {
+    success: true,
+    status: "active",
+    subscription: sub,
+    daysRemaining,
+    expiresAt: sub.expiresAt,
+    token: sub.signatureToken,
+  });
 }
