@@ -133,6 +133,8 @@ export async function getSubscriptionById(id: string): Promise<SubscriptionRecor
   return rows[0] || null;
 }
 
+
+
 /**
  * Every subscription belonging to a physical device. allowedMachineIds is a
  * Postgres array, so containment is matched in SQL via the `cs.` operator.

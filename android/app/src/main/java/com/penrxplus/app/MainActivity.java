@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.ColorDrawable;
 import android.graphics.Typeface;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
@@ -251,6 +252,12 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    private void loadOfflineShell(WebView webView) {
+        try {
+            webView.loadUrl("file:///android_asset/public/index.html");
+        } catch (Exception ignored) {}
+    }
+
     private boolean isPackageInstalled(String packageName) {
         try {
             PackageManager pm = getPackageManager();
@@ -267,6 +274,7 @@ public class MainActivity extends BridgeActivity {
             Window window = getWindow();
             if (window != null) {
                 int brandDark = Color.parseColor("#0b1329");
+                window.setBackgroundDrawable(new ColorDrawable(brandDark));
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     window.setStatusBarColor(brandDark);
                     window.setNavigationBarColor(brandDark);
@@ -427,8 +435,18 @@ public class MainActivity extends BridgeActivity {
                 }, 250);
 
                 if (!isNetworkAvailable()) {
-                    webView.loadUrl("file:///android_asset/public/index.html");
+                    loadOfflineShell(webView);
                 }
+
+                webView.setWebViewClient(new android.webkit.WebViewClient() {
+                    @Override
+                    public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                        super.onReceivedError(view, errorCode, description, failingUrl);
+                        if (view.getUrl() == null || view.getUrl().startsWith("https://pen-rx.vercel.app")) {
+                            loadOfflineShell(view);
+                        }
+                    }
+                });
             }
         } catch (Exception ignored) {}
     }
