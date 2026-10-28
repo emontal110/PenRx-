@@ -24,7 +24,7 @@ export interface SubscriptionRecord {
   planId: string;
   planName: string;
   price: number;
-  paymentMethod: "vodafone" | "instapay";
+  paymentMethod: "vodafone" | "instapay" | "stripe";
   senderPhone: string;
   transactionRef: string;
   status: SubscriptionStatus;
@@ -131,6 +131,19 @@ export async function getSubscriptionById(id: string): Promise<SubscriptionRecor
   if (!clean) return null;
   const rows = await queryRows(`id=eq.${encodeURIComponent(clean)}&limit=1`);
   return rows[0] || null;
+}
+
+export async function attachStripeCheckoutSession(
+  subscriptionId: string,
+  sessionId: string
+): Promise<SubscriptionRecord | null> {
+  const cleanSubscriptionId = String(subscriptionId || "").trim();
+  const cleanSessionId = String(sessionId || "").trim();
+  if (!cleanSubscriptionId || !/^cs_[A-Za-z0-9_]+$/.test(cleanSessionId)) return null;
+  return patchSubscription(cleanSubscriptionId, {
+    paymentMethod: "stripe",
+    transactionRef: cleanSessionId,
+  } as Partial<SubscriptionRecord>);
 }
 
 /**
