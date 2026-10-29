@@ -1808,7 +1808,7 @@ export default function SubscriptionsPage() {
               </div>
               <div className="flex items-start gap-2">
                 <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
-                <span>اختر <strong>"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</strong>.</span>
+                <span>اختر <strong>&quot;إضافة إلى الشاشة الرئيسية&quot; (Add to Home Screen)</strong>.</span>
               </div>
             </div>
 

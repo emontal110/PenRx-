@@ -24,10 +24,29 @@ import {
 import { useClinicStore } from "@/store/useClinicStore";
 import { showGlobalToast } from "./GlobalToast";
 
+const BIOMETRIC_UNLOCKED_SESSION_KEY = "penrx_biometric_unlocked_session";
+
+function isBiometricUnlockedForSession(): boolean {
+  try {
+    return sessionStorage.getItem(BIOMETRIC_UNLOCKED_SESSION_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markBiometricUnlockedForSession(): void {
+  try {
+    sessionStorage.setItem(BIOMETRIC_UNLOCKED_SESSION_KEY, "true");
+  } catch (err) {
+    console.warn("[MobileBiometricLock] Could not persist unlock state for this session:", err);
+  }
+}
+
 export function MobileBiometricLock() {
   const [isLocked, setIsLocked] = useState(() => {
     if (typeof window === "undefined") return false;
     if (!isNativeAndroidApk()) return false;
+    if (isBiometricUnlockedForSession()) return false;
     const stored = localStorage.getItem("penrx_biometric_enabled");
     // Strictly lock ONLY when explicitly enabled by doctor ("true")
     // Never lock on first install (stored === null) or when disabled ("false")
@@ -56,6 +75,12 @@ export function MobileBiometricLock() {
 
     // If biometric lock is NOT explicitly turned on, keep app open
     if (stored !== "true") {
+      setIsLocked(false);
+      return;
+    }
+
+    // A successful unlock stays valid for this app session, including WebView reloads.
+    if (isBiometricUnlockedForSession()) {
       setIsLocked(false);
       return;
     }
@@ -113,6 +138,7 @@ export function MobileBiometricLock() {
       );
 
       if (res.success) {
+        markBiometricUnlockedForSession();
         setIsLocked(false);
         setErrorMsg(null);
         setFailCount(0);
@@ -164,6 +190,7 @@ export function MobileBiometricLock() {
       );
 
     if (isMatch) {
+      markBiometricUnlockedForSession();
       setIsLocked(false);
       setShowPinModal(false);
       setErrorMsg(null);

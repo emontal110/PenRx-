@@ -9,11 +9,11 @@ node_modules/
 vendor/
 
 # 2. Next.js & Web Application Outputs
-.next/
-out/
-build/
-dist/
-dist-ssr/
+/.next/
+/out/
+/build/
+/dist/
+/dist-ssr/
 
 # 3. Desktop Electron & Native Build Artifacts
 dist-electron/
@@ -43,12 +43,11 @@ github-recovery-codes*.txt
 
 # 5. Environment Variables, Secret Keys & Text Files
 .env
-.env*.local
-.env.development
-.env.test
-.env.production
+.env.*
 !.env.example
-*.txt
+
+# Local credential files
+.netrc
 
 # 6. Local Scratch & Temporary Test Scripts
 scratch/
@@ -99,3 +98,5 @@ public/downloads/*.zip
 *.cert
 *.crt
 *.key
+*.p12
+*.pfx

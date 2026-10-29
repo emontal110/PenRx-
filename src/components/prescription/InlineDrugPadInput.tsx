@@ -715,7 +715,7 @@ export function InlineDrugPadInput({
               ) : (
                 <div className="p-4 text-center space-y-2">
                   <p className="text-xs text-slate-600">
-                    لم يتم العثور على أدوية مطابقة لـ <span className="font-bold text-slate-900">"{query}"</span> محلياً
+                    لم يتم العثور على أدوية مطابقة لـ <span className="font-bold text-slate-900">&quot;{query}&quot;</span> محلياً
                   </p>
                   <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
                     <button
