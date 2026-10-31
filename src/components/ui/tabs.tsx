@@ -66,3 +66,4 @@ export function Tabs({
     </div>
   );
 }
+

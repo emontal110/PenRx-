@@ -131,3 +131,4 @@ export function PlanCard({ plan, isSelected, onSelect, disabled }: PlanCardProps
     </Card>
   );
 }
+

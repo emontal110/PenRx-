@@ -33,6 +33,7 @@ import { AiInteractionModal, InteractionAlert } from "@/components/prescription/
 import { PrintValidationModal } from "@/components/prescription/PrintValidationModal";
 import { WhatsAppShareModal } from "@/components/prescription/WhatsAppShareModal";
 import { NewPrescriptionPromptModal } from "@/components/prescription/NewPrescriptionPromptModal";
+import { PatientInfoForm } from "@/components/prescription/PatientInfoForm";
 import { showGlobalToast } from "@/components/common/GlobalToast";
 import { formatEgyptPhoneNumber, calculateBmiInfo } from "@/lib/utils";
 import {
