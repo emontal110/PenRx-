@@ -533,10 +533,10 @@ export default function DashboardPage() {
 
           <div className="pt-3 border-t border-slate-800/80">
             <Link
-              href="/history"
+              href="/patients"
               className="text-xs sm:text-sm font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 transition-colors group"
             >
-              <span>عرض الكل</span>
+              <span>سجل المرضى الموحد</span>
               <span className="text-base group-hover:-translate-x-0.5 transition-transform">‹</span>
             </Link>
           </div>

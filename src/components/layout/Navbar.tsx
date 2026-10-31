@@ -14,6 +14,7 @@ import {
   Plus,
   Sparkles,
   RotateCw,
+  Users,
 } from "lucide-react";
 import { useSubscriptionStore, getSubscriptionDetails } from "@/store/useSubscriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
@@ -89,10 +90,11 @@ export function Navbar() {
     }
   }, [mounted, subDetails.isActive, subDetails.daysRemaining]);
 
-  // Desktop navigation items (الصفحة الرئيسية بجانب زر روشتة)
+  // Desktop navigation items (الصفحة الرئيسية، روشتة، سجل المرضى، الأرشيف، الإعدادات)
   const DESKTOP_LINKS = [
     { href: "/", label: "الصفحة الرئيسية", icon: Home },
     { href: "/prescriptions/new", label: "روشتة", icon: Plus, highlight: true },
+    { href: "/patients", label: "سجل المرضى", icon: Users },
     { href: "/history", label: "سجل الروشتات", icon: Clock },
     { href: "/settings", label: "الإعدادات", icon: Settings },
   ];
@@ -100,8 +102,9 @@ export function Navbar() {
   // Mobile bottom dock items for thumb ergonomics
   const MOBILE_DOCK = [
     { href: "/", label: "الرئيسية", icon: Home },
-    { href: "/history", label: "السجل", icon: Clock },
+    { href: "/patients", label: "المرضى", icon: Users },
     { href: "/prescriptions/new", label: "روشتة", icon: Plus, isAction: true },
+    { href: "/history", label: "السجل", icon: Clock },
     { href: "/settings", label: "الإعدادات", icon: Settings },
   ];
 

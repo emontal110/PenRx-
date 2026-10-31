@@ -88,12 +88,8 @@ const nextConfig = {
         destination: "/download.html",
       },
       {
-        source: "/portal",
-        destination: "/portal.html",
-      },
-      {
         source: "/admin/portal",
-        destination: "/portal.html",
+        destination: "/portal",
       },
     ];
   },
