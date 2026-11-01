@@ -381,10 +381,6 @@ export default function AdminPortalPage() {
       </div>
     );
   }
-        </Card>
-      </div>
-    );
-  }
 
   // Dashboard / Management Screen
   return (
