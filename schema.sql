@@ -376,48 +376,41 @@ END $$;
 --
 -- Exception: `Drug` catalog is publicly readable by client devices (SELECT only).
 
--- 7.1 Enable strict Row Level Security on all tables
-ALTER TABLE IF EXISTS "Subscription" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "CloudPrescription" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "CloudBackup" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "AdminAuditLog" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "Clinic" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "Branch" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "User" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "Patient" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "Prescription" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "PrescriptionItem" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "PrescriptionTemplate" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "LicenseKey" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "SystemConfig" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "SyncQueue" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "Drug" ENABLE ROW LEVEL SECURITY;
+-- 7.1 Enable strict Row Level Security & Revoke Client Privileges safely
+DO $$
+DECLARE
+    tbl text;
+    tables text[] := ARRAY[
+        'Subscription', 'CloudPrescription', 'CloudBackup', 'AdminAuditLog',
+        'Clinic', 'Branch', 'User', 'Patient', 'Prescription', 'PrescriptionItem'
+    ];
+BEGIN
+    FOREACH tbl IN ARRAY tables LOOP
+        IF EXISTS (
+            SELECT 1 FROM pg_tables 
+            WHERE schemaname = 'public' AND tablename = tbl
+        ) THEN
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tbl);
+            EXECUTE format('REVOKE ALL ON TABLE public.%I FROM anon, authenticated', tbl);
+        END IF;
+    END LOOP;
 
--- 7.2 Explicitly Revoke direct access from anon and authenticated roles
-REVOKE ALL ON TABLE "Subscription" FROM anon, authenticated;
-REVOKE ALL ON TABLE "CloudPrescription" FROM anon, authenticated;
-REVOKE ALL ON TABLE "CloudBackup" FROM anon, authenticated;
-REVOKE ALL ON TABLE "AdminAuditLog" FROM anon, authenticated;
-REVOKE ALL ON TABLE "Clinic" FROM anon, authenticated;
-REVOKE ALL ON TABLE "Branch" FROM anon, authenticated;
-REVOKE ALL ON TABLE "User" FROM anon, authenticated;
-REVOKE ALL ON TABLE "Patient" FROM anon, authenticated;
-REVOKE ALL ON TABLE "Prescription" FROM anon, authenticated;
-REVOKE ALL ON TABLE "PrescriptionItem" FROM anon, authenticated;
-REVOKE ALL ON TABLE "PrescriptionTemplate" FROM anon, authenticated;
-REVOKE ALL ON TABLE "LicenseKey" FROM anon, authenticated;
-REVOKE ALL ON TABLE "SystemConfig" FROM anon, authenticated;
-REVOKE ALL ON TABLE "SyncQueue" FROM anon, authenticated;
+    -- Drug catalog: Public SELECT only for devices, no modifications allowed
+    IF EXISTS (
+        SELECT 1 FROM pg_tables 
+        WHERE schemaname = 'public' AND tablename = 'Drug'
+    ) THEN
+        EXECUTE 'ALTER TABLE public."Drug" ENABLE ROW LEVEL SECURITY';
+        EXECUTE 'REVOKE ALL ON TABLE public."Drug" FROM anon, authenticated';
+        EXECUTE 'GRANT SELECT ON TABLE public."Drug" TO anon, authenticated';
+    END IF;
+END $$;
 
--- Drug catalog: SELECT only for clients, no modifications allowed
-REVOKE ALL ON TABLE "Drug" FROM anon, authenticated;
-GRANT SELECT ON TABLE "Drug" TO anon, authenticated;
-
--- 7.3 Grant full administrative access to service_role (Server-Side Next.js API)
+-- 7.2 Grant full administrative access to service_role (Server-Side Next.js API)
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 
--- 7.4 Ensure future tables in public schema are protected by default
+-- 7.3 Ensure future tables in public schema are protected by default
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
 
