@@ -1,6 +1,6 @@
 {
   "name": "penrx-plus",
-  "version": "1.65.0",
+  "version": "1.66.0",
   "private": true,
   "author": "PenRX+ Medical Systems",
   "description": "PenRX+ - The Ultimate Next-Gen Medical Prescription & Clinic Management Suite",
@@ -86,7 +86,8 @@
       ],
       "icon": "public/icon.ico",
       "artifactName": "PenRX+-Setup.${ext}",
-      "legalTrademarks": "PenRX+ Medical Systems"
+      "legalTrademarks": "PenRX+ Medical Systems",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "differentialPackage": true,
