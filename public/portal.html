@@ -115,10 +115,11 @@
   </div>
 
   <!-- AUTHENTICATION SCREEN -->
-  <div id="auth-screen" class="min-h-screen flex items-center justify-center p-4">
-    <div class="w-full max-w-md glass-card border-2 border-emerald-500/30 rounded-3xl p-7 sm:p-9 space-y-6 shadow-2xl text-center relative overflow-hidden">
+  <div id="auth-screen" class="min-h-screen flex items-center justify-center p-4 sm:p-6">
+    <div class="w-full max-w-md glass-card border border-emerald-500/30 rounded-3xl p-6 sm:p-9 space-y-6 shadow-2xl text-center relative overflow-hidden backdrop-blur-2xl bg-slate-900/90">
       <!-- Ambient Card Glow -->
-      <div class="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+      <div class="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
       <!-- Program Official Logo -->
       <div class="relative w-20 h-20 rounded-3xl p-1 mx-auto shadow-2xl shadow-emerald-950/80 border-2 border-emerald-500/40 bg-slate-950 flex items-center justify-center overflow-hidden mb-1">
@@ -130,47 +131,61 @@
         />
       </div>
 
-      <!-- Header & Badges with Relaxed Spacing (No Overlap) -->
+      <!-- Header & Badges with Relaxed Spacing -->
       <div class="space-y-2.5 pt-1">
         <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>بوابة الأمان والتحكم • MASTER ADMIN</span>
+          <span>بوابة الإدارة المركزية • MASTER ADMIN</span>
           <span class="portal-pkg-version font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40 text-[9px]">v1.65</span>
         </div>
 
-        <h1 class="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight leading-snug">
-          بورتال الإدارة والتحكم السري
+        <h1 id="auth-title" class="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight leading-snug">
+          بورتال الإدارة والتحكم
         </h1>
 
-        <p class="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
-          منصة سحابية مستقلة كلياً لمالك المنظومة فقط لإدارة المشتركين وتفعيل تراخيص الأجهزة.
+        <p id="auth-subtitle" class="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
+          منصة سحابية لإدارة وتفعيل اشتراكات الأطباء وتراخيص الأجهزة الطبية.
         </p>
       </div>
 
+      <!-- Notification / Error Box -->
+      <p id="login-error" class="text-rose-400 text-xs font-bold hidden text-center p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 leading-relaxed"></p>
+      <p id="recover-success" class="text-emerald-400 text-xs font-bold hidden text-center p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 leading-relaxed"></p>
+
+      <!-- Main Login Form -->
       <form id="login-form" class="space-y-4 text-xs">
-        <!-- Username / Email Input -->
+        <!-- Email Input -->
         <div class="space-y-1.5 text-right">
           <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
             <i data-lucide="mail" class="w-3.5 h-3.5 text-emerald-400"></i>
-            <span>البريد الإلكتروني / اسم المستخدم:</span>
+            <span>البريد الإلكتروني للإدارة:</span>
           </label>
           <input
             id="email-input"
-            name="username"
-            type="text"
+            name="email"
+            type="email"
             required
-            autocomplete="username"
-            placeholder="أدخل اسم المستخدم أو البريد الإلكتروني..."
+            autocomplete="email"
+            placeholder="admin@penrx.com"
             class="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-inner text-xs sm:text-sm"
           />
         </div>
 
-        <!-- Password Input with Eye Toggle -->
+        <!-- Password Input with Eye Toggle & Forgot Link -->
         <div class="space-y-1.5 text-right">
-          <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
-            <i data-lucide="lock" class="w-3.5 h-3.5 text-emerald-400"></i>
-            <span>كلمة المرور المشفرة (Admin Password):</span>
-          </label>
+          <div class="flex items-center justify-between">
+            <label class="font-bold text-slate-300 flex items-center gap-1.5 text-xs">
+              <i data-lucide="lock" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span>كلمة المرور:</span>
+            </label>
+            <button
+              type="button"
+              id="show-recover-btn"
+              class="text-[11px] text-emerald-400/80 hover:text-emerald-300 hover:underline transition-colors cursor-pointer"
+            >
+              نسيت كلمة المرور؟
+            </button>
+          </div>
           <div class="relative">
             <input
               id="password-input"
@@ -178,7 +193,7 @@
               type="password"
               required
               autocomplete="current-password"
-              placeholder="أدخل كلمة المرور..."
+              placeholder="••••••••••••"
               class="w-full pr-4 pl-11 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-inner text-xs sm:text-sm"
             />
             <button
@@ -188,66 +203,6 @@
               title="إظهار / إخفاء كلمة المرور"
             >
               <i data-lucide="eye" id="password-eye-icon" class="w-4 h-4"></i>
-            </button>
-          </div>
-        </div>
-
-        <!-- Master PIN Input with Eye Toggle (Triple-Factor Defense) -->
-        <div class="space-y-1.5 text-right">
-          <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
-            <i data-lucide="key-round" class="w-3.5 h-3.5 text-teal-400"></i>
-            <span>رمز الأمان السري الإضافي (Master Security PIN):</span>
-          </label>
-          <div class="relative">
-            <input
-              id="pin-input"
-              name="security_pin"
-              type="password"
-              required
-              maxlength="10"
-              autocomplete="off"
-              data-lpignore="true"
-              data-form-type="other"
-              placeholder="أدخل رمز PIN السري..."
-              class="w-full pr-4 pl-11 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 transition-all shadow-inner text-xs sm:text-sm tracking-widest"
-            />
-            <button
-              type="button"
-              id="toggle-pin-btn"
-              class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-400 p-1.5 cursor-pointer transition-colors"
-              title="إظهار / إخفاء رمز PIN"
-            >
-              <i data-lucide="eye" id="pin-eye-icon" class="w-4 h-4"></i>
-            </button>
-          </div>
-          <p id="login-error" class="text-rose-400 text-[11px] font-bold hidden text-center pt-1.5 leading-relaxed"></p>
-        </div>
-
-        <!-- Admin Control Key (optional): forwarded to the server, never compared or stored in the browser -->
-        <div class="space-y-1.5 text-right">
-          <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
-            <i data-lucide="terminal" class="w-3.5 h-3.5 text-cyan-400"></i>
-            <span>مفتاح التحكم الإداري (اختياري):</span>
-          </label>
-          <div class="relative">
-            <input
-              id="admin-secret-input"
-              name="admin_control_key"
-              type="password"
-              maxlength="96"
-              autocomplete="off"
-              data-lpignore="true"
-              data-form-type="other"
-              placeholder="يُرسل للخادم للتحقق... لا يُخزَّن في المتصفح"
-              class="w-full pr-4 pl-11 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 transition-all shadow-inner text-xs sm:text-sm tracking-widest"
-            />
-            <button
-              type="button"
-              id="toggle-admin-secret-btn"
-              class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-400 p-1.5 cursor-pointer transition-colors"
-              title="إظهار / إخفاء مفتاح التحكم"
-            >
-              <i data-lucide="eye" id="admin-secret-eye-icon" class="w-4 h-4"></i>
             </button>
           </div>
         </div>
@@ -262,29 +217,45 @@
         </button>
       </form>
 
-      <!-- Operational Notice: the portal must be served by the application origin -->
-      <div id="origin-notice" class="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-3 text-right">
-        <p class="flex items-start gap-2 text-[11px] font-bold text-amber-300 leading-relaxed">
-          <i data-lucide="alert-triangle" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i>
-          <span>
-            هام للمشغّل: افتح البوابة دائماً من رابط المنظومة الرسمي
-            <a
-              href="https://pen-rx.vercel.app/portal"
-              target="_blank"
-              rel="noopener noreferrer"
-              dir="ltr"
-              class="font-mono text-cyan-300 underline break-all"
-            >https://pen-rx.vercel.app/portal</a>
-            ولا تستخدم نسخة الملف المحفوظة على الجهاز
-            <span class="font-mono" dir="ltr">(file://)</span>
-            لأن جلسة الدخول يصدرها الخادم على نفس الرابط ولا يقرأها المتصفح إلا من هناك.
-          </span>
-        </p>
-      </div>
+      <!-- Password Recovery Form (Hidden by default) -->
+      <form id="recover-form" class="space-y-4 text-xs hidden">
+        <div class="space-y-1.5 text-right">
+          <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
+            <i data-lucide="mail" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>البريد الإلكتروني المسجل:</span>
+          </label>
+          <input
+            id="recover-email-input"
+            type="email"
+            required
+            placeholder="admin@penrx.com"
+            class="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-700/80 font-mono font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-inner text-xs sm:text-sm"
+          />
+        </div>
 
-      <div class="pt-1 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+        <button
+          id="recover-submit-btn"
+          type="submit"
+          class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-950/50 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+        >
+          <i data-lucide="key-round" class="w-4 h-4 stroke-[2.5]"></i>
+          <span id="recover-btn-text">إرسال رابط استعادة كلمة المرور</span>
+        </button>
+
+        <div class="text-center pt-2">
+          <button
+            type="button"
+            id="back-to-login-btn"
+            class="text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
+          >
+            ← العودة لتسجيل الدخول
+          </button>
+        </div>
+      </form>
+
+      <div class="pt-2 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
         <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
-        <span>التحقق من البيانات يتم على الخادم + رمز PIN إضافي + جلسة آمنة (HttpOnly Cookie) • لا أسرار في هذه الصفحة</span>
+        <span>مصادقة سحابية مشفرة • جلسة آمنة HttpOnly Cookie • وصول إداري معتمد</span>
       </div>
     </div>
   </div>
@@ -523,10 +494,9 @@
 
     const OPERATIONAL_PORTAL_URL = "https://pen-rx.vercel.app/portal";
 
-    // Requests are always relative to the serving origin: the admin session cookie
-    // is HttpOnly + SameSite=Strict and is only sent back to that same origin.
+    // Requests use current origin when on HTTP/HTTPS or fall back to the live cloud URL
     const IS_HTTP_ORIGIN = /^https?:$/.test(window.location.protocol);
-    const API_BASE = IS_HTTP_ORIGIN ? window.location.origin : "";
+    const API_BASE = IS_HTTP_ORIGIN ? window.location.origin : "https://pen-rx.vercel.app";
 
     // CSRF marker header; the server echoes the exact name from GET /api/admin/session.
     let csrfHeader = "x-penrx-admin";
@@ -542,25 +512,18 @@
     /** Server Arabic messages win; otherwise fall back to a status-specific notice. */
     function apiErrorMessage(status, payload) {
       if (payload && typeof payload.error === "string" && payload.error.trim()) return payload.error.trim();
-      if (status === 401) return "انتهت صلاحية الجلسة أو لم يكتمل تسجيل الدخول.";
+      if (status === 401) return "بيانات الدخول غير صحيحة أو انتهت الجلسة.";
       if (status === 403) return "هذا الإجراء غير مسموح لهذه الجلسة.";
-      if (status === 404) return "لم يتم العثور على الاشتراك المطلوب.";
+      if (status === 404) return "لم يتم العثور على العنصر المطلوب.";
       if (status === 429) return "محاولات كثيرة جداً: يرجى الانتظار قليلاً ثم إعادة المحاولة.";
-      if (status === 0) return `يجب فتح البوابة من الرابط الرسمي ${OPERATIONAL_PORTAL_URL} للوصول إلى الخادم.`;
       return `تعذّر تنفيذ الطلب (رمز ${status}).`;
     }
 
     /**
-     * The only network helper the portal uses: same-origin credentials, the CSRF
-     * marker on every mutation, JSON parsing, typed errors and forced re-login on 401.
+     * The network helper: same-origin credentials, CSRF marker on mutations,
+     * JSON parsing, typed errors and session handling.
      */
     async function apiFetch(path, options = {}) {
-      if (!IS_HTTP_ORIGIN) {
-        throw new ApiError(
-          `هذه نسخة ملف محلي (${window.location.protocol}) والخدمة تُستخدم من ${OPERATIONAL_PORTAL_URL}`,
-          0
-        );
-      }
 
       const method = (options.method || "GET").toUpperCase();
       const headers = { Accept: "application/json", ...(options.headers || {}) };
@@ -822,22 +785,24 @@
     const loginForm = document.getElementById("login-form");
     const emailInput = document.getElementById("email-input");
     const passwordInput = document.getElementById("password-input");
-    const pinInput = document.getElementById("pin-input");
     const loginError = document.getElementById("login-error");
+    const recoverSuccess = document.getElementById("recover-success");
     const submitBtn = document.getElementById("submit-btn");
     const btnText = document.getElementById("btn-text");
     const togglePasswordBtn = document.getElementById("toggle-password-btn");
     const passwordEyeIcon = document.getElementById("password-eye-icon");
-    const togglePinBtn = document.getElementById("toggle-pin-btn");
-    const pinEyeIcon = document.getElementById("pin-eye-icon");
-    const adminSecretInput = document.getElementById("admin-secret-input");
-    const toggleAdminSecretBtn = document.getElementById("toggle-admin-secret-btn");
-    const adminSecretEyeIcon = document.getElementById("admin-secret-eye-icon");
     const authScreen = document.getElementById("auth-screen");
     const dashboardScreen = document.getElementById("dashboard-screen");
-    const originNotice = document.getElementById("origin-notice");
 
-    // Nothing is compared locally any more: the server owns every credential check.
+    // Recover Form Elements
+    const recoverForm = document.getElementById("recover-form");
+    const recoverEmailInput = document.getElementById("recover-email-input");
+    const recoverSubmitBtn = document.getElementById("recover-submit-btn");
+    const recoverBtnText = document.getElementById("recover-btn-text");
+    const showRecoverBtn = document.getElementById("show-recover-btn");
+    const backToLoginBtn = document.getElementById("back-to-login-btn");
+    const authTitle = document.getElementById("auth-title");
+    const authSubtitle = document.getElementById("auth-subtitle");
 
     // Toggle Password Visibility
     if (togglePasswordBtn && passwordInput) {
@@ -851,26 +816,65 @@
       });
     }
 
-    // Toggle PIN Visibility
-    if (togglePinBtn && pinInput) {
-      togglePinBtn.addEventListener("click", () => {
-        const isPassword = pinInput.getAttribute("type") === "password";
-        pinInput.setAttribute("type", isPassword ? "text" : "password");
-        if (pinEyeIcon) {
-          pinEyeIcon.setAttribute("data-lucide", isPassword ? "eye-off" : "eye");
-          lucide.createIcons();
+    // Toggle Recovery View
+    if (showRecoverBtn && recoverForm && loginForm) {
+      showRecoverBtn.addEventListener("click", () => {
+        loginForm.classList.add("hidden");
+        recoverForm.classList.remove("hidden");
+        if (loginError) loginError.classList.add("hidden");
+        if (recoverSuccess) recoverSuccess.classList.add("hidden");
+        if (authTitle) authTitle.innerText = "استعادة كلمة المرور";
+        if (authSubtitle) authSubtitle.innerText = "أدخل بريدك الإلكتروني المسجل لإرسال رابط إعادة التعيين السحابي";
+        if (emailInput && recoverEmailInput && emailInput.value) {
+          recoverEmailInput.value = emailInput.value;
         }
+        if (recoverEmailInput) recoverEmailInput.focus();
       });
     }
 
-    // Toggle Admin Control Key Visibility
-    if (toggleAdminSecretBtn && adminSecretInput) {
-      toggleAdminSecretBtn.addEventListener("click", () => {
-        const isPassword = adminSecretInput.getAttribute("type") === "password";
-        adminSecretInput.setAttribute("type", isPassword ? "text" : "password");
-        if (adminSecretEyeIcon) {
-          adminSecretEyeIcon.setAttribute("data-lucide", isPassword ? "eye-off" : "eye");
-          lucide.createIcons();
+    if (backToLoginBtn && recoverForm && loginForm) {
+      backToLoginBtn.addEventListener("click", () => {
+        recoverForm.classList.add("hidden");
+        loginForm.classList.remove("hidden");
+        if (loginError) loginError.classList.add("hidden");
+        if (recoverSuccess) recoverSuccess.classList.add("hidden");
+        if (authTitle) authTitle.innerText = "بورتال الإدارة والتحكم";
+        if (authSubtitle) authSubtitle.innerText = "منصة سحابية لإدارة وتفعيل اشتراكات الأطباء وتراخيص الأجهزة الطبية.";
+        if (passwordInput) passwordInput.focus();
+      });
+    }
+
+    if (recoverForm) {
+      recoverForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const targetEmail = (recoverEmailInput ? recoverEmailInput.value : "").trim().toLowerCase();
+        if (!targetEmail) return;
+
+        if (recoverSubmitBtn) recoverSubmitBtn.disabled = true;
+        if (recoverBtnText) recoverBtnText.innerText = "جاري إرسال الرابط...";
+        if (loginError) loginError.classList.add("hidden");
+        if (recoverSuccess) recoverSuccess.classList.add("hidden");
+
+        try {
+          const res = await apiFetch("/api/admin/session", {
+            method: "POST",
+            body: { action: "recover", email: targetEmail },
+            timeoutMs: 15000,
+            noRelogin: true
+          });
+          if (recoverSuccess) {
+            recoverSuccess.innerText = (res && res.message) || "تم إرسال رابط استعادة كلمة المرور بنجاح إلى بريدك الإلكتروني.";
+            recoverSuccess.classList.remove("hidden");
+          }
+          showToast("تم إرسال الرابط بنجاح إلى بريدك", true);
+        } catch (err) {
+          if (loginError) {
+            loginError.innerText = (err && err.message) || "تعذر إرسال رابط الاستعادة، تأكد من صحة البريد.";
+            loginError.classList.remove("hidden");
+          }
+        } finally {
+          if (recoverSubmitBtn) recoverSubmitBtn.disabled = false;
+          if (recoverBtnText) recoverBtnText.innerText = "إرسال رابط استعادة كلمة المرور";
         }
       });
     }
@@ -952,8 +956,6 @@
       allSubscriptions = [];
       lastDataFingerprint = "";
       openDetailsSubIds.clear();
-      if (pinInput) pinInput.value = "";
-      if (adminSecretInput) adminSecretInput.value = "";
       if (passwordInput) passwordInput.value = "";
       dashboardScreen.classList.add("hidden");
       authScreen.classList.remove("hidden");
@@ -972,7 +974,8 @@
 
     function enterDashboard(ttlSeconds) {
       isAuthed = true;
-      loginError.classList.add("hidden");
+      if (loginError) loginError.classList.add("hidden");
+      if (recoverSuccess) recoverSuccess.classList.add("hidden");
       authScreen.classList.add("hidden");
       dashboardScreen.classList.remove("hidden");
       scheduleSessionTimeout((Number(ttlSeconds) || DEFAULT_SESSION_TTL_SECONDS) * 1000);
@@ -1021,7 +1024,7 @@
         checkLockout();
       } else {
         const remaining = 5 - attempts;
-        loginError.innerHTML = `${esc(serverMessage || "❌ بيانات الدخول أو رمز الأمان PIN غير صحيحة.")}<br><span class="text-amber-300 text-[10px]">متبقي ${remaining} محاولات قبل القفل الأمني المؤقت.</span>`;
+        loginError.innerHTML = `${esc(serverMessage || "❌ البريد الإلكتروني أو كلمة المرور غير صحيحة.")}<br><span class="text-amber-300 text-[10px]">متبقي ${remaining} محاولات قبل القفل الأمني المؤقت.</span>`;
         loginError.classList.remove("hidden");
       }
     }
@@ -1032,14 +1035,6 @@
      */
     async function checkAuth() {
       if (checkLockout()) return;
-
-      if (!IS_HTTP_ORIGIN) {
-        if (originNotice) originNotice.classList.add("ring-2", "ring-rose-500/60");
-        loginError.innerHTML = `⚠️ هذا الملف مفتوح كنسخة محلية على الجهاز (<span dir="ltr">${esc(window.location.protocol)}</span>) ولا يمكنه الوصول إلى الخادم.<br>افتح البوابة من الرابط الرسمي: <a href="${OPERATIONAL_PORTAL_URL}" target="_blank" rel="noopener noreferrer" class="text-cyan-300 underline font-mono" dir="ltr">${esc(OPERATIONAL_PORTAL_URL)}</a>`;
-        loginError.classList.remove("hidden");
-        loadSavedCredentials();
-        return;
-      }
 
       try {
         const session = await apiFetch("/api/admin/session", { timeoutMs: 8000 });
@@ -1062,25 +1057,15 @@
       e.preventDefault();
       if (checkLockout()) return;
 
-      if (!IS_HTTP_ORIGIN) {
-        if (originNotice) originNotice.classList.add("ring-2", "ring-rose-500/60");
-        loginError.innerHTML = `⚠️ يجب فتح البوابة من الرابط الرسمي <a href="${OPERATIONAL_PORTAL_URL}" target="_blank" rel="noopener noreferrer" class="text-cyan-300 underline font-mono" dir="ltr">${esc(OPERATIONAL_PORTAL_URL)}</a>`;
-        loginError.classList.remove("hidden");
-        return;
-      }
-
       const enteredEmail = emailInput.value.trim().toLowerCase();
       const enteredPassword = passwordInput.value;
-      const enteredPin = pinInput ? pinInput.value.trim() : "";
-      const enteredControlKey = adminSecretInput ? adminSecretInput.value.trim() : "";
 
       submitBtn.disabled = true;
       btnText.innerText = "جاري التحقق على الخادم...";
+      if (loginError) loginError.classList.add("hidden");
+      if (recoverSuccess) recoverSuccess.classList.add("hidden");
 
-      // Credentials (and the optional control key) are handed to the server;
-      // nothing is hashed or compared in the browser.
-      const loginPayload = { email: enteredEmail, password: enteredPassword, pin: enteredPin };
-      if (enteredControlKey) loginPayload.adminKey = enteredControlKey;
+      const loginPayload = { email: enteredEmail, password: enteredPassword };
 
       try {
         const session = await apiFetch("/api/admin/session", {
@@ -1095,9 +1080,15 @@
 
         // Remember the identity only; the secrets stay out of browser storage.
         saveCredentials(enteredEmail);
-        if (pinInput) pinInput.value = "";
-        if (adminSecretInput) adminSecretInput.value = "";
         if (passwordInput) passwordInput.value = "";
+        enterDashboard(session && session.ttlSeconds);
+        showToast("مرحباً بك في لوحة تحكم PenRX+", true);
+      } catch (err) {
+        submitBtn.disabled = false;
+        btnText.innerText = "دخول آمن إلى لوحة التحكم";
+        recordFailedAttempt(err.message || "بيانات الدخول غير صحيحة.");
+      }
+    });
 
         // The session id lives in the httpOnly cookie issued by the server.
         csrfHeader = session && session.csrfHeader ? session.csrfHeader : csrfHeader;

@@ -236,27 +236,32 @@ export default function AdminPortalPage() {
   // Login & Password Recovery Screen
   if (!isAuthenticated) {
     return (
-      <div className="min-h-[80vh] flex items-center justify-center p-4 font-sans" dir="rtl">
-        <Card className="w-full max-w-md p-6 sm:p-8 bg-slate-900/95 border-emerald-500/40 shadow-2xl relative overflow-hidden backdrop-blur-2xl">
-          <div className="text-center space-y-2 mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-md">
-              <ShieldAlert className="w-7 h-7" />
+      <div className="min-h-[85vh] flex items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden" dir="rtl">
+        {/* Glow Spheres */}
+        <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <Card className="w-full max-w-md p-6 sm:p-9 bg-slate-900/95 border-emerald-500/30 rounded-3xl shadow-2xl relative overflow-hidden backdrop-blur-2xl">
+          <div className="text-center space-y-3 mb-6">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500/20 via-teal-500/15 to-transparent text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/40">
+              <ShieldCheck className="w-8 h-8 stroke-[2.2]" />
             </div>
-            <Badge variant="brand" className="text-[10px] font-mono px-2.5 py-0.5">
-              MASTER ADMIN ACCESS
-            </Badge>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-100">
+            <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>MASTER ADMIN ACCESS • V1.65</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight">
               {isRecoverMode ? "استعادة كلمة المرور" : "بورتال الإدارة والتحكم"}
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
               {isRecoverMode
-                ? "أدخل بريدك الإلكتروني المسجل في Supabase لإرسال رابط إعادة التعيين"
+                ? "أدخل بريدك الإلكتروني المسجل في Supabase لإرسال رابط إعادة تعيين كلمة المرور"
                 : "تسجيل دخول آمن وسريع عبر Supabase Auth لإدارة اشتراكات وأجهزة الأطباء"}
             </p>
           </div>
 
           {recoverySuccessMsg && (
-            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-bold leading-relaxed text-center">
+            <div className="mb-5 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-400 text-xs font-bold leading-relaxed text-center">
               {recoverySuccessMsg}
             </div>
           )}
@@ -264,16 +269,18 @@ export default function AdminPortalPage() {
           {isRecoverMode ? (
             <form onSubmit={handleRecoverPassword} className="space-y-4 text-xs">
               <div>
-                <label className="font-bold text-slate-300 block mb-1">
-                  البريد الإلكتروني للإدارة
+                <label className="font-bold text-slate-300 flex items-center gap-1.5 mb-1.5 text-xs">
+                  <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>البريد الإلكتروني المسجل:</span>
                 </label>
                 <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@your-domain.com"
+                  placeholder="admin@penrx.com"
                   required
                   autoFocus
+                  className="rounded-2xl"
                 />
               </div>
 
@@ -281,8 +288,9 @@ export default function AdminPortalPage() {
                 type="submit"
                 variant="primary"
                 isLoading={isRecovering}
-                className="w-full text-sm font-black mt-2"
+                className="w-full text-sm font-black mt-2 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 shadow-lg shadow-emerald-950/50"
               >
+                <KeyRound className="w-4 h-4" />
                 <span>إرسال رابط استعادة كلمة المرور</span>
               </Button>
 
@@ -293,7 +301,7 @@ export default function AdminPortalPage() {
                     setIsRecoverMode(false);
                     setRecoverySuccessMsg("");
                   }}
-                  className="text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors"
+                  className="text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   ← العودة لتسجيل الدخول
                 </button>
@@ -302,29 +310,34 @@ export default function AdminPortalPage() {
           ) : (
             <form onSubmit={handleLogin} className="space-y-4 text-xs">
               <div>
-                <label className="font-bold text-slate-300 block mb-1">
-                  البريد الإلكتروني للإدارة
+                <label className="font-bold text-slate-300 flex items-center gap-1.5 mb-1.5 text-xs">
+                  <Mail className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>البريد الإلكتروني للإدارة:</span>
                 </label>
                 <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@your-domain.com"
+                  placeholder="admin@penrx.com"
                   required
                   autoFocus
+                  className="rounded-2xl"
                 />
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-300 block">كلمة المرور</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-bold text-slate-300 flex items-center gap-1.5 text-xs">
+                    <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>كلمة المرور:</span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
                       setIsRecoverMode(true);
                       setRecoverySuccessMsg("");
                     }}
-                    className="text-[11px] text-emerald-400/80 hover:text-emerald-400 hover:underline transition-all"
+                    className="text-[11px] text-emerald-400/80 hover:text-emerald-300 hover:underline transition-all cursor-pointer"
                   >
                     نسيت كلمة المرور؟
                   </button>
@@ -336,11 +349,12 @@ export default function AdminPortalPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
                     required
+                    className="rounded-2xl pr-3 pl-11"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-400 cursor-pointer p-1 transition-colors"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -351,13 +365,22 @@ export default function AdminPortalPage() {
                 type="submit"
                 variant="primary"
                 isLoading={isLoggingIn}
-                className="w-full text-sm font-black mt-2"
+                className="w-full text-sm font-black mt-2 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:brightness-110 shadow-lg shadow-emerald-950/50"
               >
-                <Lock className="w-4 h-4" />
-                <span>دخول لبورتال التحكم</span>
+                <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
+                <span>دخول آمن إلى لوحة التحكم</span>
               </Button>
             </form>
           )}
+
+          <div className="pt-5 mt-5 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>حماية مشفرة • جلسة HttpOnly آمنة • مصادقة Supabase</span>
+          </div>
+        </Card>
+      </div>
+    );
+  }
         </Card>
       </div>
     );
