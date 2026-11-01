@@ -204,11 +204,17 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
 
       - name: Build Native Windows Installer (.exe)
-        run: npx electron-builder --win --x64 --publish never
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -n "$WIN_CSC_LINK" ]; then
+            CSC_LINK="$WIN_CSC_LINK" CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD" npx electron-builder --win --x64 --publish never
+          else
+            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --win --x64 --publish never -c.win.signAndEditExecutable=false
+          fi
 
       - name: Upload Windows Executables & Differential Update Metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
