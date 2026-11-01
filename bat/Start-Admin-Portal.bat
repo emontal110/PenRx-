@@ -15,24 +15,34 @@ if exist "%~dp0package.json" (
 cd /d "%PROJECT_ROOT%"
 
 echo ===============================================================================
-echo     PenRX+ Cloud Admin Portal
+echo     PenRX+ Admin Portal Launcher
 echo ===============================================================================
 echo.
-echo [i] Opening Admin Portal in your default browser...
 echo [i] Project Directory: %CD%
 echo.
+echo   [1] Open Cloud Portal (https://pen-rx.vercel.app/portal)
+echo   [2] Open Local Portal (http://localhost:3000/portal)
+echo   [3] Open Standalone Offline Portal (public\portal.html)
+echo.
+set /p "PORTAL_CHOICE=>> Choose portal option [Default: 1]: "
 
-if exist "%CD%\public\portal.html" (
-    echo [i] Opening file: %CD%\public\portal.html
-    start "" "%CD%\public\portal.html"
-) else if exist "%CD%\portal.html" (
-    echo [i] Opening file: %CD%\portal.html
-    start "" "%CD%\portal.html"
-) else (
-    echo [i] Opening URL: http://localhost:3000/portal
+if "%PORTAL_CHOICE%"=="2" (
+    echo [i] Opening Local Portal: http://localhost:3000/portal ...
     start "" "http://localhost:3000/portal"
+) else if "%PORTAL_CHOICE%"=="3" (
+    if exist "%CD%\public\portal.html" (
+        echo [i] Opening Offline file: %CD%\public\portal.html ...
+        start "" "%CD%\public\portal.html"
+    ) else (
+        echo [!] Standalone file not found, opening local portal ...
+        start "" "http://localhost:3000/portal"
+    )
+) else (
+    echo [i] Opening Cloud Portal: https://pen-rx.vercel.app/portal ...
+    start "" "https://pen-rx.vercel.app/portal"
 )
 
-echo [OK] Portal launched.
+echo.
+echo [OK] Portal launched successfully.
 ping 127.0.0.1 -n 3 >nul
 exit
