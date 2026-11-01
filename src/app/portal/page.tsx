@@ -55,10 +55,11 @@ export default function AdminPortalPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [pin, setPin] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showPin, setShowPin] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isRecoverMode, setIsRecoverMode] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [recoverySuccessMsg, setRecoverySuccessMsg] = useState("");
 
   // Subscriptions management
   const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([]);
@@ -103,7 +104,7 @@ export default function AdminPortalPage() {
           "Content-Type": "application/json",
           "x-penrx-admin": "1",
         },
-        body: JSON.stringify({ email, password, pin }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -117,6 +118,37 @@ export default function AdminPortalPage() {
       showGlobalToast("تعذر الاتصال بخادم الإدارة", "error");
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleRecoverPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      showGlobalToast("يرجى كتابة البريد الإلكتروني أولاً", "error");
+      return;
+    }
+    setIsRecovering(true);
+    setRecoverySuccessMsg("");
+    try {
+      const res = await fetch("/api/admin/session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-penrx-admin": "1",
+        },
+        body: JSON.stringify({ action: "recover", email: email.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRecoverySuccessMsg(data.message || "تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.");
+        showGlobalToast("تم إرسال الرابط إلى بريدك بنجاح", "success");
+      } else {
+        showGlobalToast(data.error || "تعذر إرسال رابط الاستعادة", "error");
+      }
+    } catch {
+      showGlobalToast("تعذر الاتصال بخادم الإدارة", "error");
+    } finally {
+      setIsRecovering(false);
     }
   };
 
@@ -201,7 +233,7 @@ export default function AdminPortalPage() {
     );
   }
 
-  // Login Screen
+  // Login & Password Recovery Screen
   if (!isAuthenticated) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center p-4 font-sans" dir="rtl">
@@ -214,80 +246,118 @@ export default function AdminPortalPage() {
               MASTER ADMIN ACCESS
             </Badge>
             <h1 className="text-xl sm:text-2xl font-black text-slate-100">
-              بورتال الإدارة والتحكم
+              {isRecoverMode ? "استعادة كلمة المرور" : "بورتال الإدارة والتحكم"}
             </h1>
             <p className="text-xs text-slate-400">
-              تسجيل دخول آمن ثلاثي المشفر لإدارة اشتراكات وأجهزة الأطباء
+              {isRecoverMode
+                ? "أدخل بريدك الإلكتروني المسجل في Supabase لإرسال رابط إعادة التعيين"
+                : "تسجيل دخول آمن وسريع عبر Supabase Auth لإدارة اشتراكات وأجهزة الأطباء"}
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4 text-xs">
-            <div>
-              <label className="font-bold text-slate-300 block mb-1">
-                البريد الإلكتروني للإدارة
-              </label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@your-domain.com"
-                required
-                autoFocus
-              />
+          {recoverySuccessMsg && (
+            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-bold leading-relaxed text-center">
+              {recoverySuccessMsg}
             </div>
+          )}
 
-            <div>
-              <label className="font-bold text-slate-300 block mb-1">كلمة المرور المشفرة</label>
-              <div className="relative">
+          {isRecoverMode ? (
+            <form onSubmit={handleRecoverPassword} className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">
+                  البريد الإلكتروني للإدارة
+                </label>
                 <Input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@your-domain.com"
                   required
+                  autoFocus
                 />
+              </div>
+
+              <Button
+                type="submit"
+                variant="primary"
+                isLoading={isRecovering}
+                className="w-full text-sm font-black mt-2"
+              >
+                <span>إرسال رابط استعادة كلمة المرور</span>
+              </Button>
+
+              <div className="text-center pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  onClick={() => {
+                    setIsRecoverMode(false);
+                    setRecoverySuccessMsg("");
+                  }}
+                  className="text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  ← العودة لتسجيل الدخول
                 </button>
               </div>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-300 block mb-1">
-                رمز الأمان السري الإضافي (Master PIN)
-              </label>
-              <div className="relative">
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">
+                  البريد الإلكتروني للإدارة
+                </label>
                 <Input
-                  type={showPin ? "text" : "password"}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="••••••••"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@your-domain.com"
                   required
+                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
-                >
-                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
               </div>
-            </div>
 
-            <Button
-              type="submit"
-              variant="primary"
-              isLoading={isLoggingIn}
-              className="w-full text-sm font-black mt-2"
-            >
-              <Lock className="w-4 h-4" />
-              <span>دخول آمن لبورتال التحكم</span>
-            </Button>
-          </form>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-300 block">كلمة المرور</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRecoverMode(true);
+                      setRecoverySuccessMsg("");
+                    }}
+                    className="text-[11px] text-emerald-400/80 hover:text-emerald-400 hover:underline transition-all"
+                  >
+                    نسيت كلمة المرور؟
+                  </button>
+                </div>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                variant="primary"
+                isLoading={isLoggingIn}
+                className="w-full text-sm font-black mt-2"
+              >
+                <Lock className="w-4 h-4" />
+                <span>دخول لبورتال التحكم</span>
+              </Button>
+            </form>
+          )}
         </Card>
       </div>
     );

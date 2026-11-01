@@ -56,6 +56,93 @@ function constantTimeEqualText(a: string, b: string): boolean {
 }
 
 /**
+ * Verifies admin credentials via Supabase GoTrue Auth API.
+ * Allows easy login with Email and Password from any device, with dashboard management.
+ */
+export async function verifySupabaseAdminAuth(
+  email: string,
+  password: string
+): Promise<{ ok: boolean; reason?: string; user?: any }> {
+  try {
+    const projectUrl = (
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      process.env.SUPABASE_URL ||
+      ""
+    ).trim().replace(/\/+$/, "");
+
+    const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+    if (!projectUrl || !serviceKey) {
+      return { ok: false, reason: "إعدادات Supabase غير مهيأة على السيرفر." };
+    }
+
+    const authUrl = `${projectUrl}/auth/v1/token?grant_type=password`;
+    const res = await fetch(authUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: serviceKey,
+      },
+      body: JSON.stringify({ email: email.trim(), password }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.access_token) {
+      const errDetail =
+        data.error_description || data.msg || data.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+      return { ok: false, reason: errDetail };
+    }
+
+    // Optional admin email restriction: if configured in env, ensure it matches
+    const expectedEmail = (process.env.PENRX_ADMIN_EMAIL || "").trim();
+    if (expectedEmail && data.user?.email) {
+      if (data.user.email.toLowerCase() !== expectedEmail.toLowerCase()) {
+        return { ok: false, reason: "هذا الحساب غير مصرح له بالدخول كمسؤول للنظام." };
+      }
+    }
+
+    return { ok: true, user: data.user };
+  } catch (err: any) {
+    return { ok: false, reason: err?.message || "تعذر الاتصال بخدمة المصادقة." };
+  }
+}
+
+/**
+ * Sends a password reset email to the admin via Supabase Auth.
+ */
+export async function sendSupabasePasswordReset(email: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const projectUrl = (
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      process.env.SUPABASE_URL ||
+      ""
+    ).trim().replace(/\/+$/, "");
+
+    const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+    if (!projectUrl || !serviceKey) {
+      return { ok: false, message: "إعدادات Supabase غير مهيأة على السيرفر." };
+    }
+
+    const res = await fetch(`${projectUrl}/auth/v1/recover`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: serviceKey,
+      },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { ok: false, message: data.msg || data.message || "تعذر إرسال رابط الاستعادة." };
+    }
+
+    return { ok: true, message: "تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني بنجاح." };
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "خطأ أثناء الاتصال بخادم الاستعادة." };
+  }
+}
+
+/**
  * Verifies portal credentials against environment configuration only.
  * Returns null when the portal is not configured, so callers can fail closed.
  */
