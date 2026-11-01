@@ -90,7 +90,7 @@
       "signAndEditExecutable": false
     },
     "nsis": {
-      "differentialPackage": true,
+      "differentialPackage": false,
       "oneClick": true,
       "perMachine": false,
       "allowElevation": false,
@@ -100,8 +100,7 @@
       "shortcutName": "PenRX+",
       "artifactName": "PenRX+-Setup.${ext}",
       "installerIcon": "public/icon.ico",
-      "uninstallerIcon": "public/icon.ico",
-      "installerHeaderIcon": "public/icon.ico"
+      "uninstallerIcon": "public/icon.ico"
     }
   }
 }
