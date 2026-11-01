@@ -7,7 +7,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.graphics.ColorDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.Typeface;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
