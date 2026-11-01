@@ -48,3 +48,4 @@ describe("Patient Registry & Arabic Normalization", () => {
     assert.strictEqual(normalizePhoneDigits("+20 010-9408-5228"), "2001094085228");
   });
 });
+

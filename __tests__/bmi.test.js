@@ -47,3 +47,4 @@ describe("Clinical BMI Calculator", () => {
     assert.strictEqual(calculateBmiInfo("invalid", "data"), null);
   });
 });
+

@@ -44,3 +44,4 @@ describe("Paid Plans and Subscription Engine", () => {
     assert.strictEqual(resolvePlan(""), null);
   });
 });
+
