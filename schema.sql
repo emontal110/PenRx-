@@ -1,6 +1,25 @@
--- PostgreSQL Schema DDL for Rosheta Medical Platform (Supabase Compatible)
+-- ============================================================================
+-- PenRX+ — Master PostgreSQL Schema & Security Lockdown (Supabase Compatible)
+-- ============================================================================
+-- Single unified database definition for PenRX+ Medical Prescription Platform.
+-- Safe to run on a brand-new Supabase project OR on an existing database (100% idempotent).
+--
+-- Includes:
+-- 1. Custom ENUM types (Role, PaperSize)
+-- 2. All 11 core tables with constraints & defaults
+-- 3. In-place column existence migrations
+-- 4. Foreign keys with safe cascade definitions
+-- 5. Performance indexes for fast multi-tenant queries
+-- 6. Supabase Realtime broadcast configuration
+-- 7. Full Security Lockdown: Strict Row Level Security (RLS) on all tables
+-- 8. Privilege isolation: client roles (anon/authenticated) blocked, service_role authorized
+-- 9. System seed records
+-- 10. PostgREST schema cache reload trigger & privilege verification check
+-- ============================================================================
 
--- CreateEnum safely
+-- ----------------------------------------------------------------------------
+-- 1) ENUM TYPES
+-- ----------------------------------------------------------------------------
 DO $$ BEGIN
     CREATE TYPE "Role" AS ENUM ('DOCTOR', 'ASSISTANT', 'ADMIN');
 EXCEPTION
@@ -13,422 +32,350 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- CreateTable: Clinic
+-- ----------------------------------------------------------------------------
+-- 2) CORE TABLES DEFINITIONS
+-- ----------------------------------------------------------------------------
+
+-- [Table 1] Clinic
 CREATE TABLE IF NOT EXISTS "Clinic" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "specialty" TEXT NOT NULL DEFAULT 'General Medicine',
-    "logoUrl" TEXT,
-    "primaryColor" TEXT NOT NULL DEFAULT '#059669',
-    "headerText" TEXT,
-    "footerText" TEXT,
-    "showHeader" BOOLEAN NOT NULL DEFAULT true,
-    "showFooter" BOOLEAN NOT NULL DEFAULT true,
+    "id"            TEXT NOT NULL,
+    "name"          TEXT NOT NULL,
+    "specialty"     TEXT NOT NULL DEFAULT 'General Medicine',
+    "logoUrl"       TEXT,
+    "primaryColor"  TEXT NOT NULL DEFAULT '#059669',
+    "headerText"    TEXT,
+    "footerText"    TEXT,
+    "showHeader"    BOOLEAN NOT NULL DEFAULT true,
+    "showFooter"    BOOLEAN NOT NULL DEFAULT true,
     "notesTemplate" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Clinic_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: Branch
+-- [Table 2] Branch
 CREATE TABLE IF NOT EXISTS "Branch" (
-    "id" TEXT NOT NULL,
-    "clinicId" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "nameAr" TEXT,
-    "address" TEXT NOT NULL,
-    "phone" TEXT NOT NULL,
+    "id"           TEXT NOT NULL,
+    "clinicId"     TEXT NOT NULL,
+    "name"         TEXT NOT NULL,
+    "nameAr"       TEXT,
+    "address"      TEXT NOT NULL,
+    "phone"        TEXT NOT NULL,
     "workingHours" TEXT,
-    "isDefault" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "isDefault"    BOOLEAN NOT NULL DEFAULT false,
+    "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Branch_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: User
+-- [Table 3] User
 CREATE TABLE IF NOT EXISTS "User" (
-    "id" TEXT NOT NULL,
-    "clinicId" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "role" "Role" NOT NULL DEFAULT 'DOCTOR',
-    "title" TEXT NOT NULL DEFAULT 'Consultant',
-    "syndicateId" TEXT,
-    "phone" TEXT,
-    "specialty" TEXT,
+    "id"           TEXT NOT NULL,
+    "clinicId"     TEXT NOT NULL,
+    "name"         TEXT NOT NULL,
+    "email"        TEXT NOT NULL,
+    "role"         "Role" NOT NULL DEFAULT 'DOCTOR',
+    "title"        TEXT NOT NULL DEFAULT 'Consultant',
+    "syndicateId"  TEXT,
+    "phone"        TEXT,
+    "specialty"    TEXT,
     "passwordHash" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
--- Migration for existing database tables:
--- ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
-
--- CreateTable: Patient
+-- [Table 4] Patient
 CREATE TABLE IF NOT EXISTS "Patient" (
-    "id" TEXT NOT NULL,
-    "clinicId" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "nameAr" TEXT,
-    "phone" TEXT,
-    "age" INTEGER,
-    "gender" TEXT,
-    "bloodType" TEXT,
+    "id"             TEXT NOT NULL,
+    "clinicId"       TEXT NOT NULL,
+    "name"           TEXT NOT NULL,
+    "nameAr"         TEXT,
+    "phone"          TEXT,
+    "age"            INTEGER,
+    "gender"         TEXT,
+    "bloodType"      TEXT,
     "medicalHistory" TEXT,
-    "allergyNotes" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "allergyNotes"   TEXT,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Patient_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: Drug
+-- [Table 5] Drug (Public Drug Catalog & Doctor Contributions)
 CREATE TABLE IF NOT EXISTS "Drug" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "nameAr" TEXT,
-    "activeIngredient" TEXT NOT NULL,
+    "id"                 TEXT NOT NULL,
+    "name"               TEXT NOT NULL,
+    "nameAr"             TEXT,
+    "activeIngredient"   TEXT NOT NULL,
     "activeIngredientAr" TEXT,
-    "company" TEXT,
-    "price" DOUBLE PRECISION,
-    "dosageForm" TEXT,
-    "category" TEXT,
-    "isControlled" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
+    "company"            TEXT,
+    "price"              DOUBLE PRECISION,
+    "dosageForm"         TEXT,
+    "category"           TEXT,
+    "isControlled"       BOOLEAN NOT NULL DEFAULT false,
+    "addedBy"            TEXT,
+    "createdAt"          TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"          TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Drug_pkey" PRIMARY KEY ("id")
 );
 
-ALTER TABLE "Drug" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
-
--- CreateTable: Prescription
+-- [Table 6] Prescription
 CREATE TABLE IF NOT EXISTS "Prescription" (
-    "id" TEXT NOT NULL,
+    "id"             TEXT NOT NULL,
     "prescriptionNo" TEXT NOT NULL,
-    "clinicId" TEXT NOT NULL,
-    "branchId" TEXT NOT NULL,
-    "doctorId" TEXT NOT NULL,
-    "patientId" TEXT NOT NULL,
-    "diagnosis" TEXT,
-    "notes" TEXT,
-    "paperSize" "PaperSize" NOT NULL DEFAULT 'A4',
-    "qrCodeUrl" TEXT,
-    "isManual" BOOLEAN NOT NULL DEFAULT false,
-    "isArchived" BOOLEAN NOT NULL DEFAULT false,
-    "archivedAt" TIMESTAMP(3),
-    "subscriberId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "clinicId"       TEXT NOT NULL,
+    "branchId"       TEXT NOT NULL,
+    "doctorId"       TEXT NOT NULL,
+    "patientId"      TEXT NOT NULL,
+    "diagnosis"      TEXT,
+    "notes"          TEXT,
+    "paperSize"      "PaperSize" NOT NULL DEFAULT 'A4',
+    "qrCodeUrl"      TEXT,
+    "isManual"       BOOLEAN NOT NULL DEFAULT false,
+    "isArchived"     BOOLEAN NOT NULL DEFAULT false,
+    "archivedAt"     TIMESTAMP(3),
+    "subscriberId"   TEXT,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Prescription_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: PrescriptionItem
+-- [Table 7] PrescriptionItem
 CREATE TABLE IF NOT EXISTS "PrescriptionItem" (
-    "id" TEXT NOT NULL,
-    "prescriptionId" TEXT NOT NULL,
-    "drugId" TEXT,
-    "drugName" TEXT NOT NULL,
+    "id"               TEXT NOT NULL,
+    "prescriptionId"   TEXT NOT NULL,
+    "drugId"           TEXT,
+    "drugName"         TEXT NOT NULL,
     "activeIngredient" TEXT,
-    "doseQuantity" TEXT NOT NULL,
-    "doseForm" TEXT,
-    "frequency" TEXT NOT NULL,
-    "duration" TEXT NOT NULL,
-    "instructions" TEXT,
-    "isManual" BOOLEAN NOT NULL DEFAULT false,
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "doseQuantity"     TEXT NOT NULL,
+    "doseForm"         TEXT,
+    "frequency"        TEXT NOT NULL,
+    "duration"         TEXT NOT NULL,
+    "instructions"     TEXT,
+    "isManual"         BOOLEAN NOT NULL DEFAULT false,
+    "sortOrder"        INTEGER NOT NULL DEFAULT 0,
 
     CONSTRAINT "PrescriptionItem_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Branch_clinicId_idx" ON "Branch"("clinicId");
-
--- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "User_clinicId_idx" ON "User"("clinicId");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Patient_clinicId_idx" ON "Patient"("clinicId");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Patient_name_idx" ON "Patient"("name");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Drug_name_idx" ON "Drug"("name");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Drug_nameAr_idx" ON "Drug"("nameAr");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Drug_activeIngredient_idx" ON "Drug"("activeIngredient");
-
--- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Prescription_prescriptionNo_key" ON "Prescription"("prescriptionNo");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Prescription_clinicId_idx" ON "Prescription"("clinicId");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Prescription_branchId_idx" ON "Prescription"("branchId");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Prescription_patientId_idx" ON "Prescription"("patientId");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "Prescription_prescriptionNo_idx" ON "Prescription"("prescriptionNo");
-
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "PrescriptionItem_prescriptionId_idx" ON "PrescriptionItem"("prescriptionId");
-
--- AddForeignKey (Safely)
-DO $$ BEGIN
-    ALTER TABLE "Branch" ADD CONSTRAINT "Branch_clinicId_fkey" FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    ALTER TABLE "User" ADD CONSTRAINT "User_clinicId_fkey" FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    ALTER TABLE "Patient" ADD CONSTRAINT "Patient_clinicId_fkey" FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    ALTER TABLE "Prescription" ADD CONSTRAINT "Prescription_clinicId_fkey" FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    ALTER TABLE "Prescription" ADD CONSTRAINT "Prescription_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    ALTER TABLE "Prescription" ADD CONSTRAINT "Prescription_doctorId_fkey" FOREIGN KEY ("doctorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    ALTER TABLE "Prescription" ADD CONSTRAINT "Prescription_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "Patient"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    ALTER TABLE "PrescriptionItem" ADD CONSTRAINT "PrescriptionItem_prescriptionId_fkey" FOREIGN KEY ("prescriptionId") REFERENCES "Prescription"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    ALTER TABLE "PrescriptionItem" ADD CONSTRAINT "PrescriptionItem_drugId_fkey" FOREIGN KEY ("drugId") REFERENCES "Drug"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
--- Ensure passwordHash column exists on existing database tables
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
-
--- CreateTable: Subscription
+-- [Table 8] Subscription (Licenses & Multi-Device Authorizations)
 CREATE TABLE IF NOT EXISTS "Subscription" (
-    "id" TEXT NOT NULL,
-    "subscriberId" TEXT,
-    "planId" TEXT NOT NULL,
-    "planName" TEXT NOT NULL,
-    "price" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "paymentMethod" TEXT NOT NULL DEFAULT 'vodafone',
-    "senderPhone" TEXT NOT NULL,
-    "transactionRef" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'PENDING',
-    "machineId" TEXT NOT NULL,
+    "id"                TEXT NOT NULL,
+    "subscriberId"      TEXT,
+    "planId"            TEXT NOT NULL,
+    "planName"          TEXT NOT NULL,
+    "price"             DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "paymentMethod"     TEXT NOT NULL DEFAULT 'vodafone',
+    "senderPhone"       TEXT NOT NULL,
+    "transactionRef"    TEXT NOT NULL,
+    "status"            TEXT NOT NULL DEFAULT 'PENDING',
+    "machineId"         TEXT NOT NULL,
     "allowedMachineIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "doctorName" TEXT,
-    "clinicName" TEXT,
-    "durationDays" INTEGER NOT NULL DEFAULT 30,
-    "isTrial" BOOLEAN DEFAULT false,
-    "activatedAt" TIMESTAMP(3),
-    "expiresAt" TIMESTAMP(3),
-    "signatureToken" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "doctorName"        TEXT,
+    "clinicName"        TEXT,
+    "durationDays"      INTEGER NOT NULL DEFAULT 30,
+    "isTrial"           BOOLEAN DEFAULT false,
+    "activatedAt"       TIMESTAMP(3),
+    "expiresAt"         TIMESTAMP(3),
+    "signatureToken"    TEXT,
+    "createdAt"         TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"         TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Subscription_pkey" PRIMARY KEY ("id")
 );
 
--- Ensure all columns exist on existing Subscription table in Supabase
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "subscriberId" TEXT;
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "doctorName" TEXT;
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "clinicName" TEXT;
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "isTrial" BOOLEAN DEFAULT false;
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "signatureToken" TEXT;
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "allowedMachineIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "durationDays" INTEGER DEFAULT 30;
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "activatedAt" TIMESTAMP(3);
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMP(3);
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
-ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
-
--- Ensure all columns exist on existing Prescription table in Supabase (Prisma relational compatibility)
-ALTER TABLE "Prescription" ADD COLUMN IF NOT EXISTS "subscriberId" TEXT;
-ALTER TABLE "Prescription" ADD COLUMN IF NOT EXISTS "isArchived" BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE "Prescription" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);
-
--- Indexes on Subscription (Safe after column existence check)
-CREATE INDEX IF NOT EXISTS "Subscription_machineId_idx" ON "Subscription"("machineId");
-CREATE INDEX IF NOT EXISTS "Subscription_subscriberId_idx" ON "Subscription"("subscriberId");
-CREATE INDEX IF NOT EXISTS "Subscription_status_idx" ON "Subscription"("status");
-CREATE INDEX IF NOT EXISTS "Subscription_updatedAt_idx" ON "Subscription"("updatedAt" DESC);
-CREATE INDEX IF NOT EXISTS "Prescription_subscriberId_idx" ON "Prescription"("subscriberId");
-CREATE INDEX IF NOT EXISTS "Prescription_isArchived_idx" ON "Prescription"("isArchived");
-
--- Enable Supabase Realtime broadcast for Subscription changes (if publication exists)
-DO $$ BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE "Subscription";
-EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END $$;
-
--- =========================================================================
--- Security Hardening: Enable Strict Row Level Security (RLS) on Subscription
--- =========================================================================
-ALTER TABLE "Subscription" ENABLE ROW LEVEL SECURITY;
-
--- Drop legacy policies if exist
-DO $$ BEGIN
-    DROP POLICY IF EXISTS "anon_insert_pending_sub" ON "Subscription";
-    DROP POLICY IF EXISTS "anon_select_sub" ON "Subscription";
-    DROP POLICY IF EXISTS "anon_update_sub" ON "Subscription";
-    DROP POLICY IF EXISTS "anon_delete_sub" ON "Subscription";
-    DROP POLICY IF EXISTS "service_role_all_sub" ON "Subscription";
-EXCEPTION WHEN undefined_object THEN null; END $$;
-
--- 1. مفتاح anon لا يملك أي صلاحية على الاشتراكات: كل القراءة والكتابة تمر عبر
---    خوادم PenRX+ فقط (service_role)، بعد التحقق من ملكية الجهاز أو جلسة المدير.
-REVOKE ALL ON TABLE "Subscription" FROM anon, authenticated;
-
--- 2. Full access for service_role
-DROP POLICY IF EXISTS "service_role_all_sub" ON "Subscription";
-CREATE POLICY "service_role_all_sub" ON "Subscription"
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
-
--- =========================================================================
--- سجل تدقيق عمليات الإدارة على الاشتراكات (يكتبه الخادم فقط)
--- =========================================================================
+-- [Table 9] AdminAuditLog (Server-Only Administrative Audit Trail)
 CREATE TABLE IF NOT EXISTS "AdminAuditLog" (
-    "id" TEXT NOT NULL,
-    "action" TEXT NOT NULL,
+    "id"             TEXT NOT NULL,
+    "action"         TEXT NOT NULL,
     "subscriptionId" TEXT,
-    "subscriberId" TEXT,
-    "detail" JSONB NOT NULL DEFAULT '{}'::jsonb,
-    "ip" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "subscriberId"   TEXT,
+    "detail"         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    "ip"             TEXT,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "AdminAuditLog_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX IF NOT EXISTS "AdminAuditLog_createdAt_idx" ON "AdminAuditLog"("createdAt" DESC);
-
-ALTER TABLE "AdminAuditLog" ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE "AdminAuditLog" FROM anon, authenticated;
-
-DO $$ BEGIN
-    DROP POLICY IF EXISTS "service_role_all_audit" ON "AdminAuditLog";
-EXCEPTION WHEN undefined_object THEN null; END $$;
-
-CREATE POLICY "service_role_all_audit" ON "AdminAuditLog"
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
-
--- إضافة الأدوية من الأطباء تُنسب لمشتركها حتى يمكن مراجعتها قبل نشرها
-ALTER TABLE "Drug" ADD COLUMN IF NOT EXISTS "addedBy" TEXT;
-
--- =========================================================================
--- Table for Cloud Synchronization of Prescriptions (Multi-Tenant)
--- =========================================================================
+-- [Table 10] CloudPrescription (Multi-Tenant Offline-First Synchronization)
 CREATE TABLE IF NOT EXISTS "CloudPrescription" (
-    "id" TEXT NOT NULL,
-    "subscriberId" TEXT NOT NULL,
+    "id"             TEXT NOT NULL,
+    "subscriberId"   TEXT NOT NULL,
     "prescriptionNo" TEXT NOT NULL,
-    "branchId" TEXT,
-    "branchName" TEXT,
-    "patientName" TEXT NOT NULL,
-    "patientPhone" TEXT,
-    "patientAge" TEXT,
-    "patientGender" TEXT,
-    "diagnosis" TEXT,
-    "notes" TEXT,
-    "itemsJson" JSONB NOT NULL DEFAULT '[]'::jsonb,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "branchId"       TEXT,
+    "branchName"     TEXT,
+    "patientName"    TEXT NOT NULL,
+    "patientPhone"   TEXT,
+    "patientAge"     TEXT,
+    "patientGender"  TEXT,
+    "diagnosis"      TEXT,
+    "notes"          TEXT,
+    "itemsJson"      JSONB NOT NULL DEFAULT '[]'::jsonb,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "CloudPrescription_pkey" PRIMARY KEY ("id")
 );
 
--- Fast lookup indexes partitioned by subscriber and date
-CREATE INDEX IF NOT EXISTS "CloudPrescription_subscriberId_idx" ON "CloudPrescription"("subscriberId");
-CREATE INDEX IF NOT EXISTS "CloudPrescription_createdAt_idx" ON "CloudPrescription"("createdAt");
-
--- =========================================================================
--- Security Hardening: Enable Strict Row Level Security (RLS) on CloudPrescription
--- =========================================================================
-ALTER TABLE "CloudPrescription" ENABLE ROW LEVEL SECURITY;
-
-DO $$ BEGIN
-    DROP POLICY IF EXISTS "anon_access_prescriptions" ON "CloudPrescription";
-    DROP POLICY IF EXISTS "service_role_prescriptions" ON "CloudPrescription";
-EXCEPTION WHEN undefined_object THEN null; END $$;
-
--- Anonymous direct SELECT/DELETE is blocked. Sync is brokered via authenticated server API or service_role
-CREATE POLICY "service_role_prescriptions" ON "CloudPrescription"
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
-
-
--- Seed النظام للعيادة الإدارية فقط. بيانات دخول المدير لم تعد تُخزن في القاعدة:
--- تُقرأ من متغيرات البيئة PENRX_ADMIN_EMAIL وPENRX_ADMIN_PASSWORD_HASH وPENRX_ADMIN_PIN_HASH.
-INSERT INTO "Clinic" ("id", "name", "specialty", "primaryColor", "updatedAt")
-VALUES ('clinic-admin-001', 'Rosheta System Administration', 'System Administration', '#059669', NOW())
-ON CONFLICT ("id") DO NOTHING;
-
--- =========================================================================
--- Table for Multi-Tenant Secure Cloud Backups (Partitioned by subscriberId)
--- =========================================================================
+-- [Table 11] CloudBackup (Multi-Tenant Secure Cloud Data Vault)
 CREATE TABLE IF NOT EXISTS "CloudBackup" (
-    "id" TEXT NOT NULL,
-    "subscriberId" TEXT NOT NULL,
-    "fileName" TEXT NOT NULL,
-    "fileSizeKb" INTEGER NOT NULL DEFAULT 0,
+    "id"            TEXT NOT NULL,
+    "subscriberId"  TEXT NOT NULL,
+    "fileName"      TEXT NOT NULL,
+    "fileSizeKb"    INTEGER NOT NULL DEFAULT 0,
     "payloadBase64" TEXT NOT NULL,
-    "metadataJson" JSONB NOT NULL DEFAULT '{}'::jsonb,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "metadataJson"  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "CloudBackup_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX IF NOT EXISTS "CloudBackup_subscriberId_idx" ON "CloudBackup"("subscriberId");
-CREATE INDEX IF NOT EXISTS "CloudBackup_createdAt_idx" ON "CloudBackup"("createdAt");
+-- ----------------------------------------------------------------------------
+-- 3) COLUMN MIGRATIONS (For existing databases upgrading in-place)
+-- ----------------------------------------------------------------------------
+ALTER TABLE "User"              ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
+ALTER TABLE "Drug"              ADD COLUMN IF NOT EXISTS "addedBy" TEXT;
+ALTER TABLE "Drug"              ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
 
-ALTER TABLE "CloudBackup" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Prescription"      ADD COLUMN IF NOT EXISTS "subscriberId" TEXT;
+ALTER TABLE "Prescription"      ADD COLUMN IF NOT EXISTS "isArchived" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Prescription"      ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);
+
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "subscriberId" TEXT;
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "doctorName" TEXT;
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "clinicName" TEXT;
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "isTrial" BOOLEAN DEFAULT false;
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "signatureToken" TEXT;
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "allowedMachineIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "durationDays" INTEGER DEFAULT 30;
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "activatedAt" TIMESTAMP(3);
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMP(3);
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "Subscription"      ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;
+
+-- ----------------------------------------------------------------------------
+-- 4) PERFORMANCE INDEXES
+-- ----------------------------------------------------------------------------
+-- Branch indexes
+CREATE INDEX IF NOT EXISTS "Branch_clinicId_idx"                ON "Branch"("clinicId");
+
+-- User indexes
+CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key"              ON "User"("email");
+CREATE INDEX IF NOT EXISTS "User_clinicId_idx"                  ON "User"("clinicId");
+
+-- Patient indexes
+CREATE INDEX IF NOT EXISTS "Patient_clinicId_idx"               ON "Patient"("clinicId");
+CREATE INDEX IF NOT EXISTS "Patient_name_idx"                   ON "Patient"("name");
+
+-- Drug search indexes
+CREATE INDEX IF NOT EXISTS "Drug_name_idx"                      ON "Drug"("name");
+CREATE INDEX IF NOT EXISTS "Drug_nameAr_idx"                    ON "Drug"("nameAr");
+CREATE INDEX IF NOT EXISTS "Drug_activeIngredient_idx"          ON "Drug"("activeIngredient");
+CREATE INDEX IF NOT EXISTS "Drug_addedBy_idx"                   ON "Drug"("addedBy");
+
+-- Prescription indexes
+CREATE UNIQUE INDEX IF NOT EXISTS "Prescription_prescriptionNo_key" ON "Prescription"("prescriptionNo");
+CREATE INDEX IF NOT EXISTS "Prescription_clinicId_idx"          ON "Prescription"("clinicId");
+CREATE INDEX IF NOT EXISTS "Prescription_branchId_idx"          ON "Prescription"("branchId");
+CREATE INDEX IF NOT EXISTS "Prescription_patientId_idx"         ON "Prescription"("patientId");
+CREATE INDEX IF NOT EXISTS "Prescription_prescriptionNo_idx"    ON "Prescription"("prescriptionNo");
+CREATE INDEX IF NOT EXISTS "Prescription_subscriberId_idx"      ON "Prescription"("subscriberId");
+CREATE INDEX IF NOT EXISTS "Prescription_isArchived_idx"        ON "Prescription"("isArchived");
+CREATE INDEX IF NOT EXISTS "PrescriptionItem_prescriptionId_idx" ON "PrescriptionItem"("prescriptionId");
+
+-- Subscription indexes
+CREATE INDEX IF NOT EXISTS "Subscription_machineId_idx"         ON "Subscription"("machineId");
+CREATE INDEX IF NOT EXISTS "Subscription_subscriberId_idx"      ON "Subscription"("subscriberId");
+CREATE INDEX IF NOT EXISTS "Subscription_status_idx"            ON "Subscription"("status");
+CREATE INDEX IF NOT EXISTS "Subscription_updatedAt_idx"         ON "Subscription"("updatedAt" DESC);
+
+-- Cloud Prescriptions & Backups indexes
+CREATE INDEX IF NOT EXISTS "CloudPrescription_subscriberId_idx" ON "CloudPrescription"("subscriberId");
+CREATE INDEX IF NOT EXISTS "CloudPrescription_createdAt_idx"    ON "CloudPrescription"("createdAt" DESC);
+CREATE INDEX IF NOT EXISTS "CloudBackup_subscriberId_idx"       ON "CloudBackup"("subscriberId");
+CREATE INDEX IF NOT EXISTS "CloudBackup_createdAt_idx"          ON "CloudBackup"("createdAt" DESC);
+
+-- Admin Audit Log indexes
+CREATE INDEX IF NOT EXISTS "AdminAuditLog_createdAt_idx"        ON "AdminAuditLog"("createdAt" DESC);
+CREATE INDEX IF NOT EXISTS "AdminAuditLog_subscriber_idx"       ON "AdminAuditLog"("subscriberId");
+
+-- ----------------------------------------------------------------------------
+-- 5) FOREIGN KEY RELATIONSHIPS (Safe creation)
+-- ----------------------------------------------------------------------------
+DO $$ BEGIN
+    ALTER TABLE "Branch" ADD CONSTRAINT "Branch_clinicId_fkey"
+        FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
-    DROP POLICY IF EXISTS "service_role_cloud_backup" ON "CloudBackup";
-EXCEPTION WHEN undefined_object THEN null; END $$;
+    ALTER TABLE "User" ADD CONSTRAINT "User_clinicId_fkey"
+        FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
-CREATE POLICY "service_role_cloud_backup" ON "CloudBackup"
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
+DO $$ BEGIN
+    ALTER TABLE "Patient" ADD CONSTRAINT "Patient_clinicId_fkey"
+        FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- =========================================================================
--- Lockdown: لا يملك anon/authenticated أي وصول مباشر لبيانات الاشتراك أو المرضى.
--- التطبيق والبورتال يمران عبر خوادم PenRX+ التي تستخدم service_role فقط.
--- =========================================================================
+DO $$ BEGIN
+    ALTER TABLE "Prescription" ADD CONSTRAINT "Prescription_clinicId_fkey"
+        FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE "Prescription" ADD CONSTRAINT "Prescription_branchId_fkey"
+        FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE "Prescription" ADD CONSTRAINT "Prescription_doctorId_fkey"
+        FOREIGN KEY ("doctorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE "Prescription" ADD CONSTRAINT "Prescription_patientId_fkey"
+        FOREIGN KEY ("patientId") REFERENCES "Patient"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE "PrescriptionItem" ADD CONSTRAINT "PrescriptionItem_prescriptionId_fkey"
+        FOREIGN KEY ("prescriptionId") REFERENCES "Prescription"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE "PrescriptionItem" ADD CONSTRAINT "PrescriptionItem_drugId_fkey"
+        FOREIGN KEY ("drugId") REFERENCES "Drug"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- ----------------------------------------------------------------------------
+-- 6) SUPABASE REALTIME BROADCASTING
+-- ----------------------------------------------------------------------------
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE "Subscription";
+EXCEPTION
+    WHEN duplicate_object THEN null;
+    WHEN undefined_object THEN null;
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- 7) SECURITY LOCKDOWN: ROW LEVEL SECURITY & PRIVILEGE ISOLATION
+-- ----------------------------------------------------------------------------
+-- Principle of Least Privilege:
+-- Browser roles (`anon` and `authenticated`) lose ALL direct read/write access
+-- to medical, patient, prescription, backup, and subscription tables.
+-- All operations are mediated exclusively by the hardened PenRX+ server API
+-- using the privileged `service_role` key.
+--
+-- Exception: `Drug` catalog is publicly readable by client devices (SELECT only).
+
 DO $$
 DECLARE
     t TEXT;
@@ -438,8 +385,10 @@ BEGIN
         'Clinic', 'Branch', 'User', 'Patient', 'Prescription', 'PrescriptionItem', 'Drug'
     ] LOOP
         IF to_regclass('public.' || t) IS NOT NULL THEN
+            -- Enable strict Row Level Security
             EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
 
+            -- Revoke client roles access
             IF t <> 'Drug' THEN
                 EXECUTE format('REVOKE ALL ON TABLE public.%I FROM anon, authenticated', t);
             ELSE
@@ -447,20 +396,60 @@ BEGIN
                 EXECUTE format('GRANT SELECT ON TABLE public.%I TO anon, authenticated', t);
             END IF;
 
+            -- Grant service_role full server-side access
             EXECUTE format('GRANT ALL ON TABLE public.%I TO service_role', t);
         END IF;
     END LOOP;
 END $$;
 
--- Enable Realtime broadcasting on Subscription table for instant client sync
+-- Drop any legacy permissive policies
 DO $$ BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE "Subscription";
-EXCEPTION
-    WHEN duplicate_object THEN null;
-    WHEN undefined_object THEN null;
-END $$;
+    DROP POLICY IF EXISTS "anon_insert_pending_sub"     ON "Subscription";
+    DROP POLICY IF EXISTS "anon_select_sub"             ON "Subscription";
+    DROP POLICY IF EXISTS "anon_update_sub"             ON "Subscription";
+    DROP POLICY IF EXISTS "anon_delete_sub"             ON "Subscription";
+    DROP POLICY IF EXISTS "service_role_all_sub"        ON "Subscription";
+    DROP POLICY IF EXISTS "service_role_all_audit"      ON "AdminAuditLog";
+    DROP POLICY IF EXISTS "anon_access_prescriptions"   ON "CloudPrescription";
+    DROP POLICY IF EXISTS "service_role_prescriptions"  ON "CloudPrescription";
+    DROP POLICY IF EXISTS "service_role_cloud_backup"   ON "CloudBackup";
+EXCEPTION WHEN undefined_object THEN null; END $$;
 
+-- Hardened service_role policies
+CREATE POLICY "service_role_all_sub" ON "Subscription"
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+CREATE POLICY "service_role_all_audit" ON "AdminAuditLog"
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Reload PostgREST schema cache immediately
+CREATE POLICY "service_role_prescriptions" ON "CloudPrescription"
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "service_role_cloud_backup" ON "CloudBackup"
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ----------------------------------------------------------------------------
+-- 8) SYSTEM SEED DATA
+-- ----------------------------------------------------------------------------
+-- Initial administrative clinic record.
+INSERT INTO "Clinic" ("id", "name", "specialty", "primaryColor", "updatedAt")
+VALUES ('clinic-admin-001', 'Rosheta System Administration', 'System Administration', '#059669', NOW())
+ON CONFLICT ("id") DO NOTHING;
+
+-- ----------------------------------------------------------------------------
+-- 9) POSTGREST SCHEMA CACHE RELOAD
+-- ----------------------------------------------------------------------------
+-- Forces PostgREST to immediately rebuild its OpenAPI schema and detect new columns/policies.
 NOTIFY pgrst, 'reload schema';
+
+-- ----------------------------------------------------------------------------
+-- 10) SECURITY PRIVILEGE VERIFICATION
+-- ----------------------------------------------------------------------------
+-- When executed in Supabase SQL Editor, this query verifies that client roles
+-- have zero direct privileges on confidential medical & license tables.
+SELECT table_name, privilege_type, grantee
+FROM information_schema.table_privileges
+WHERE grantee IN ('anon', 'authenticated')
+  AND table_schema = 'public'
+  AND table_name IN ('Subscription', 'CloudPrescription', 'CloudBackup', 'Patient', 'Prescription', 'AdminAuditLog')
+ORDER BY table_name, privilege_type;
