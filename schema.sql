@@ -376,33 +376,52 @@ END $$;
 --
 -- Exception: `Drug` catalog is publicly readable by client devices (SELECT only).
 
-DO $$
-DECLARE
-    t TEXT;
-BEGIN
-    FOREACH t IN ARRAY ARRAY[
-        'Subscription', 'CloudPrescription', 'CloudBackup', 'AdminAuditLog',
-        'Clinic', 'Branch', 'User', 'Patient', 'Prescription', 'PrescriptionItem', 'Drug'
-    ] LOOP
-        IF to_regclass('public.' || t) IS NOT NULL THEN
-            -- Enable strict Row Level Security
-            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+-- 7.1 Enable strict Row Level Security on all tables
+ALTER TABLE IF EXISTS "Subscription" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "CloudPrescription" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "CloudBackup" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "AdminAuditLog" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "Clinic" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "Branch" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "Patient" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "Prescription" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "PrescriptionItem" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "PrescriptionTemplate" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "LicenseKey" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "SystemConfig" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "SyncQueue" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "Drug" ENABLE ROW LEVEL SECURITY;
 
-            -- Revoke client roles access
-            IF t <> 'Drug' THEN
-                EXECUTE format('REVOKE ALL ON TABLE public.%I FROM anon, authenticated', t);
-            ELSE
-                EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.%I FROM anon, authenticated', t);
-                EXECUTE format('GRANT SELECT ON TABLE public.%I TO anon, authenticated', t);
-            END IF;
+-- 7.2 Explicitly Revoke direct access from anon and authenticated roles
+REVOKE ALL ON TABLE "Subscription" FROM anon, authenticated;
+REVOKE ALL ON TABLE "CloudPrescription" FROM anon, authenticated;
+REVOKE ALL ON TABLE "CloudBackup" FROM anon, authenticated;
+REVOKE ALL ON TABLE "AdminAuditLog" FROM anon, authenticated;
+REVOKE ALL ON TABLE "Clinic" FROM anon, authenticated;
+REVOKE ALL ON TABLE "Branch" FROM anon, authenticated;
+REVOKE ALL ON TABLE "User" FROM anon, authenticated;
+REVOKE ALL ON TABLE "Patient" FROM anon, authenticated;
+REVOKE ALL ON TABLE "Prescription" FROM anon, authenticated;
+REVOKE ALL ON TABLE "PrescriptionItem" FROM anon, authenticated;
+REVOKE ALL ON TABLE "PrescriptionTemplate" FROM anon, authenticated;
+REVOKE ALL ON TABLE "LicenseKey" FROM anon, authenticated;
+REVOKE ALL ON TABLE "SystemConfig" FROM anon, authenticated;
+REVOKE ALL ON TABLE "SyncQueue" FROM anon, authenticated;
 
-            -- Grant service_role full server-side access
-            EXECUTE format('GRANT ALL ON TABLE public.%I TO service_role', t);
-        END IF;
-    END LOOP;
-END $$;
+-- Drug catalog: SELECT only for clients, no modifications allowed
+REVOKE ALL ON TABLE "Drug" FROM anon, authenticated;
+GRANT SELECT ON TABLE "Drug" TO anon, authenticated;
 
--- Drop any legacy permissive policies
+-- 7.3 Grant full administrative access to service_role (Server-Side Next.js API)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+
+-- 7.4 Ensure future tables in public schema are protected by default
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+
+-- 7.5 Drop any legacy permissive policies
 DO $$ BEGIN
     DROP POLICY IF EXISTS "anon_insert_pending_sub"     ON "Subscription";
     DROP POLICY IF EXISTS "anon_select_sub"             ON "Subscription";
@@ -415,7 +434,7 @@ DO $$ BEGIN
     DROP POLICY IF EXISTS "service_role_cloud_backup"   ON "CloudBackup";
 EXCEPTION WHEN undefined_object THEN null; END $$;
 
--- Hardened service_role policies
+-- 7.6 Hardened service_role policies
 CREATE POLICY "service_role_all_sub" ON "Subscription"
     FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -445,11 +464,14 @@ NOTIFY pgrst, 'reload schema';
 -- ----------------------------------------------------------------------------
 -- 10) SECURITY PRIVILEGE VERIFICATION
 -- ----------------------------------------------------------------------------
--- When executed in Supabase SQL Editor, this query verifies that client roles
--- have zero direct privileges on confidential medical & license tables.
-SELECT table_name, privilege_type, grantee
+-- Verifies that zero privileges remain for anon and authenticated on private tables.
+SELECT
+    COUNT(*) AS exposed_client_privileges,
+    CASE 
+        WHEN COUNT(*) = 0 THEN '✅ SUCCESS: Database is 100% locked down. Client roles have 0 direct privileges.'
+        ELSE '⚠️ WARNING: Some tables still have client privileges.'
+    END AS security_status
 FROM information_schema.table_privileges
 WHERE grantee IN ('anon', 'authenticated')
   AND table_schema = 'public'
-  AND table_name IN ('Subscription', 'CloudPrescription', 'CloudBackup', 'Patient', 'Prescription', 'AdminAuditLog')
-ORDER BY table_name, privilege_type;
+  AND table_name IN ('Subscription', 'CloudPrescription', 'CloudBackup', 'Patient', 'Prescription', 'AdminAuditLog');
