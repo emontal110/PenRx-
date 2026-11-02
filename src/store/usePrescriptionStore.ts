@@ -13,6 +13,9 @@ import {
   normalizePatientName,
   normalizePhoneDigits,
 } from "@/lib/patientRegistry";
+import { registerCustomDrug as registerOfflineCustomDrug } from "@/lib/offlineDrugStorage";
+import { getApiUrl } from "@/lib/cloudProxy";
+import { deviceAuthHeaders } from "@/lib/deviceAuthClient";
 
 export interface PrescriptionItem {
   id: string;
@@ -246,7 +249,6 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
         const state = get();
         const now = Date.now();
 
-        // 1. Identify existing patient using stable ID, clean phone, or normalized Arabic name
         const cleanCurrentPhone = normalizePhoneDigits(state.patient.phone || "");
         const normCurrentName = normalizePatientName(state.patient.name || "");
 
@@ -270,7 +272,6 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
         };
 
         if (existingIdx >= 0) {
-          // Merge patient fields preserving previously saved clinical history
           updatedPatients[existingIdx] = {
             ...updatedPatients[existingIdx],
             ...finalizedPatient,
@@ -299,7 +300,6 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
           items: state.items,
         };
 
-        // Apply 365-day retention policy (archived records are permanently kept)
         const retainedOld = state.savedPrescriptions.filter((r) => {
           if (r.isArchived) return true;
           const itemTime = new Date(r.createdAt).getTime();
@@ -311,10 +311,38 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
           savedPatients: updatedPatients,
         });
 
-        // Enqueue background cloud synchronization (offline-first & multi-tenant)
+        // Automatically register any new/custom medication written in this prescription
+        // both in local storage AND in the shared cloud Drug table so all users can find it!
         try {
           const subState = useSubscriptionStore.getState();
           const subId = subState.subscriberId || subState.machineId || "PRX-ACTIVE-SUB";
+
+          if (typeof window !== "undefined" && Array.isArray(state.items)) {
+            state.items.forEach((it) => {
+              if (it.drugName && (it.isCustom || !it.drugId)) {
+                registerOfflineCustomDrug({
+                  name: it.drugName,
+                  nameAr: it.drugName,
+                  activeIngredient: it.activeIngredient || "تركيبة دوائية معتمدة",
+                  dosageForm: it.doseForm || "Tablet (قرص)",
+                });
+
+                fetch(getApiUrl("/api/drugs/custom"), {
+                  method: "POST",
+                  headers: deviceAuthHeaders({ "Content-Type": "application/json" }),
+                  body: JSON.stringify({
+                    name: it.drugName,
+                    nameAr: it.drugName,
+                    activeIngredient: it.activeIngredient || "تركيبة دوائية معتمدة",
+                    dosageForm: it.doseForm || "Tablet (قرص)",
+                    category: "أدوية مساهمة الأطباء",
+                    subscriberId: subId,
+                  }),
+                }).catch(() => {});
+              }
+            });
+          }
+
           enqueueSyncAction("SAVE", newRecord.id, subId, newRecord);
         } catch (err) {
           console.warn("[PrescriptionStore] Cloud sync enqueue error:", err);
@@ -328,7 +356,6 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
           savedPrescriptions: state.savedPrescriptions.filter((r) => r.id !== id),
         }));
 
-        // Enqueue background cloud deletion (propagates to all devices of subscriber)
         try {
           const subState = useSubscriptionStore.getState();
           const subId = subState.subscriberId || subState.machineId || "PRX-ACTIVE-SUB";
@@ -411,7 +438,6 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
           const state = get();
           const localMap = new Map<string, SavedPrescription>();
 
-          // Merge local and cloud records (cloud updates newest first, avoiding duplicates)
           cloudRecords.forEach((r) => localMap.set(r.id, r));
           state.savedPrescriptions.forEach((r) => {
             if (!localMap.has(r.id)) {
@@ -428,7 +454,6 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
             })
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-          // Synchronize savedPatients from cloud merged prescriptions
           const unifiedPats = extractUnifiedPatients(state.savedPatients, merged);
           set({ savedPrescriptions: merged, savedPatients: unifiedPats });
         } catch (err) {
@@ -461,7 +486,7 @@ export const usePrescriptionStore = create<PrescriptionStoreState>()(
       name: "penrx_prescription_storage",
       storage: createJSONStorage(() => localStorage),
       version: 2,
-      migrate: (persistedState: any, version: number) => {
+      migrate: (persistedState: any) => {
         let clinicVisible = null;
         if (typeof window !== "undefined") {
           try {

@@ -21,47 +21,103 @@ function compareSemver(current: string, latest: string): boolean {
   }
 }
 
+function getGithubAuthToken(): string {
+  return (
+    process.env.GITHUB_RELEASE_TOKEN ||
+    process.env.GH_TOKEN ||
+    process.env.RELEASE_TOKEN ||
+    process.env.GITHUB_TOKEN ||
+    ""
+  ).trim();
+}
+
+function buildGithubHeaders(accept = "application/vnd.github.v3+json"): Record<string, string> {
+  const token = getGithubAuthToken();
+  return {
+    Accept: accept,
+    "User-Agent": "PenRX-App-Updater",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const clientVersion = searchParams.get("currentVersion");
+  const downloadType = searchParams.get("download"); // "exe" | "apk" | "blockmap" | "yml"
 
   const currentVersion = clientVersion
     ? clientVersion.replace(/^v/, "").trim()
-    : versionConfig.version || (packageInfo.version ? packageInfo.version.replace(/\.0$/, "") : "1.5");
+    : versionConfig.version || (packageInfo.version ? packageInfo.version.replace(/\.0$/, "") : "1.68");
   const repo = versionConfig.githubRepo || "emontal110/PenRx-";
+  const hasToken = Boolean(getGithubAuthToken());
 
   try {
-    // 1. Prioritize check: GitHub Releases API for published release with real assets
     const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-      headers: {
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "PenRX-App",
-      },
-      next: { revalidate: 60 },
+      headers: buildGithubHeaders(),
+      next: { revalidate: 30 },
     });
 
     if (res.ok) {
       const releaseData = await res.json();
+      const assets: any[] = Array.isArray(releaseData.assets) ? releaseData.assets : [];
+
+      // Private-repo compatible asset download redirector:
+      // Resolves the GitHub API asset endpoint using the server's GITHUB_RELEASE_TOKEN
+      // and redirects the client directly to the temporary signed S3 asset URL.
+      if (downloadType) {
+        const targetAsset = assets.find((a: any) => {
+          const name = String(a?.name || "").toLowerCase();
+          if (downloadType === "exe") return name.endsWith(".exe");
+          if (downloadType === "apk") return name.endsWith(".apk");
+          if (downloadType === "blockmap") return name.endsWith(".blockmap");
+          if (downloadType === "yml") return name === "latest.yml";
+          return false;
+        });
+
+        if (targetAsset) {
+          if (hasToken && targetAsset.url) {
+            const assetRes = await fetch(targetAsset.url, {
+              headers: buildGithubHeaders("application/octet-stream"),
+              redirect: "manual",
+            });
+            const signedLocation = assetRes.headers.get("location");
+            if (signedLocation) {
+              return NextResponse.redirect(signedLocation, 302);
+            }
+          }
+          if (targetAsset.browser_download_url) {
+            return NextResponse.redirect(targetAsset.browser_download_url, 302);
+          }
+        }
+      }
+
       const latestTag = releaseData.tag_name || releaseData.name || currentVersion;
       const latestVersion = latestTag.replace(/^v/, "").trim();
       const hasUpdate = compareSemver(currentVersion, latestVersion);
 
-      let desktopUrl = `https://github.com/${repo}/releases/latest/download/PenRX+-Setup.exe`;
-      let androidUrl = `https://github.com/${repo}/releases/latest/download/PenRX+.apk`;
+      const appBase = (process.env.NEXT_PUBLIC_APP_URL || "https://pen-rx.vercel.app").replace(/\/+$/, "");
+      let desktopUrl = hasToken
+        ? `${appBase}/api/version/check?download=exe`
+        : `https://github.com/${repo}/releases/latest/download/PenRX+-Setup.exe`;
+      let androidUrl = hasToken
+        ? `${appBase}/api/version/check?download=apk`
+        : `https://github.com/${repo}/releases/latest/download/PenRX+.apk`;
       let hasReadyInstallerAsset = false;
 
-      if (Array.isArray(releaseData.assets)) {
-        const exeAsset = releaseData.assets.find((a: any) => a.name?.endsWith(".exe"));
-        if (exeAsset?.browser_download_url) {
+      const exeAsset = assets.find((a: any) => a.name?.endsWith(".exe"));
+      if (exeAsset) {
+        if (!hasToken && exeAsset.browser_download_url) {
           desktopUrl = exeAsset.browser_download_url;
-          hasReadyInstallerAsset = true;
         }
+        hasReadyInstallerAsset = true;
+      }
 
-        const apkAsset = releaseData.assets.find((a: any) => a.name?.endsWith(".apk"));
-        if (apkAsset?.browser_download_url) {
+      const apkAsset = assets.find((a: any) => a.name?.endsWith(".apk"));
+      if (apkAsset) {
+        if (!hasToken && apkAsset.browser_download_url) {
           androidUrl = apkAsset.browser_download_url;
-          hasReadyInstallerAsset = true;
         }
+        hasReadyInstallerAsset = true;
       }
 
       return NextResponse.json({
@@ -72,10 +128,10 @@ export async function GET(req: Request) {
         releaseNotes: releaseData.body || versionConfig.releaseNotes,
         desktopDownloadUrl: desktopUrl,
         androidDownloadUrl: androidUrl,
+        privateRepoAuth: hasToken,
       });
     }
 
-    // Default if no update
     return NextResponse.json({
       hasUpdate: false,
       currentVersion,
@@ -84,7 +140,7 @@ export async function GET(req: Request) {
       desktopDownloadUrl: versionConfig.desktopDownloadUrl,
       androidDownloadUrl: versionConfig.androidDownloadUrl,
     });
-  } catch (err: any) {
+  } catch {
     return NextResponse.json({
       hasUpdate: false,
       currentVersion,

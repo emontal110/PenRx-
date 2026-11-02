@@ -7,26 +7,27 @@ import {
   Pill,
   Sparkles,
   PenTool,
-  Check,
   X,
-  Clock,
-  Calendar,
-  AlertCircle,
   AlertTriangle,
   CheckCircle2,
-  RefreshCw,
   Layers,
   Zap,
   ArrowLeftRight,
   Loader2,
+  Asterisk,
 } from "lucide-react";
 import { DrugRecord } from "@/types/drug";
 import { recordDrugPrescribed } from "@/lib/drugTracker";
 import { PrescriptionItem } from "@/store/usePrescriptionStore";
 import { getSmartDrugDosage, getCleanEnglishDrugName } from "@/lib/smartDrugDosage";
 import { checkInstantDrugConflict, InteractionConflict } from "@/lib/clinicalInteractionChecker";
-import { cacheDrugsLocally, searchOfflineDrugs } from "@/lib/offlineDrugStorage";
+import {
+  cacheDrugsLocally,
+  searchOfflineDrugs,
+  loadOfflineCatalogAsync,
+} from "@/lib/offlineDrugStorage";
 import { showGlobalToast } from "@/components/common/GlobalToast";
+import { getApiUrl } from "@/lib/cloudProxy";
 
 interface InlineDrugPadInputProps {
   onAddItem: (item: Omit<PrescriptionItem, "id">) => void;
@@ -57,6 +58,14 @@ const FREQUENCY_PRESETS = [
   "قبل الأكل بنصف ساعة",
 ];
 
+const QUICK_FREQ_CHIPS = [
+  { label: "كل 12 ساعة", value: "كل 12 ساعة بعد الأكل (مرتان)" },
+  { label: "كل 8 ساعات", value: "كل 8 ساعات بعد الأكل (3 مرات)" },
+  { label: "مرة يومياً", value: "مرة واحدة يومياً صباحاً" },
+  { label: "قبل النوم", value: "مرة واحدة يومياً مساءً قبل النوم" },
+  { label: "عند اللزوم", value: "عند اللزوم فقط (PRN)" },
+];
+
 const DURATION_PRESETS = [
   "لمدة 3 أيام",
   "لمدة 5 أيام",
@@ -67,12 +76,18 @@ const DURATION_PRESETS = [
   "عند الحاجة فقط",
 ];
 
+const QUICK_DURATION_CHIPS = [
+  { label: "3 أيام", value: "لمدة 3 أيام" },
+  { label: "5 أيام", value: "لمدة 5 أيام" },
+  { label: "7 أيام", value: "لمدة أسبوع (7 أيام)" },
+  { label: "14 يوماً", value: "لمدة أسبوعين (14 يوماً)" },
+  { label: "شهر", value: "لمدة شهر كامل" },
+];
+
 export function InlineDrugPadInput({
   onAddItem,
-  primaryColor = "#059669",
   currentItems = [],
 }: InlineDrugPadInputProps) {
-  // Mode: Search database vs Manual free writing
   const [isManualMode, setIsManualMode] = useState(false);
 
   // Search state
@@ -82,9 +97,13 @@ export function InlineDrugPadInput({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
 
+  // Mobile Rising Spotlight Search Mode (solves virtual keyboard collision 100%)
+  const [isMobileSpotlight, setIsMobileSpotlight] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
   // Advanced Search Toggles
   const [searchByActiveIngredient, setSearchByActiveIngredient] = useState(false);
-  const [searchByAi, setSearchByAi] = useState(true); // AI mode is ON by default
+  const [searchByAi, setSearchByAi] = useState(true);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // Selected drug or manual fields
@@ -107,53 +126,57 @@ export function InlineDrugPadInput({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const spotlightInputRef = useRef<HTMLInputElement>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isAddingRef = useRef(false);
 
-  // Smoothly scrolls page so the search input appears directly beneath the sticky header
-  const scrollToSearchBar = () => {
-    if (typeof window === "undefined" || !containerRef.current) return;
+  useEffect(() => {
+    loadOfflineCatalogAsync().catch(() => {});
+    if (typeof window !== "undefined") {
+      const checkViewport = () => {
+        setIsMobileViewport(window.innerWidth < 768);
+      };
+      checkViewport();
+      window.addEventListener("resize", checkViewport);
+      return () => window.removeEventListener("resize", checkViewport);
+    }
+  }, []);
 
-    try {
-      const stickyHeader =
-        document.querySelector(".sticky.top-0") ||
-        document.querySelector("header") ||
-        document.querySelector("nav");
-
-      const headerHeight = stickyHeader
-        ? stickyHeader.getBoundingClientRect().height
-        : 70;
-
-      const rect = containerRef.current.getBoundingClientRect();
-      const currentScrollY =
-        window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
-
-      const targetScrollY = Math.max(0, currentScrollY + rect.top - headerHeight - 6);
-
-      window.scrollTo({
-        top: targetScrollY,
-        behavior: "smooth",
-      });
-    } catch {
-      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const openMobileSpotlightIfNeeded = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 768 && !isManualMode) {
+      setIsMobileSpotlight(true);
+      setIsDropdownOpen(true);
+      setTimeout(() => {
+        spotlightInputRef.current?.focus();
+      }, 40);
     }
   };
 
   const handleSearchFocus = () => {
+    if (isMobileViewport && !isManualMode) {
+      openMobileSpotlightIfNeeded();
+      return;
+    }
     if (query.trim()) {
       setIsDropdownOpen(true);
     }
-    // Instantly scroll smoothly to position search engine below header
-    scrollToSearchBar();
-
-    // Accommodate mobile soft keyboard animation
-    setTimeout(scrollToSearchBar, 120);
-    setTimeout(scrollToSearchBar, 320);
   };
 
-  // Debounced Drug Search with Multi-layer Cascading & Offline Fallback
+  // Insert Drug Eye wildcard (*) at cursor or end of query
+  const handleInsertWildcard = () => {
+    const nextQ = query.endsWith("*") ? query : `${query}*`;
+    setQuery(nextQ);
+    setIsDropdownOpen(true);
+    if (isMobileSpotlight) {
+      spotlightInputRef.current?.focus();
+    } else {
+      searchInputRef.current?.focus();
+    }
+  };
+
+  // Debounced Multi-Layer Drug Search (Progressive Alphabetical + Drug Eye * + AI + Offline Fallback)
   useEffect(() => {
     const q = query.trim();
     if (!q || isManualMode) {
@@ -162,15 +185,19 @@ export function InlineDrugPadInput({
       }
       setIsSearching(false);
       setResults([]);
-      setIsDropdownOpen(false);
+      if (!isMobileSpotlight) setIsDropdownOpen(false);
       return;
     }
 
-    // Keep dropdown open so the doctor sees live status and results
     setIsDropdownOpen(true);
     setIsSearching(true);
 
-    // Cancel previous in-flight request to prevent race conditions
+    // Instant client-side offline preview while server responds (0ms feel)
+    const instantOffline = searchOfflineDrugs(q, searchByActiveIngredient);
+    if (instantOffline.length > 0 && results.length === 0) {
+      setResults(instantOffline);
+    }
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -180,24 +207,22 @@ export function InlineDrugPadInput({
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/drugs/search?q=${encodeURIComponent(q)}&includeActiveIngredient=${searchByActiveIngredient}&useAi=${searchByAi}`,
+          getApiUrl(
+            `/api/drugs/search?q=${encodeURIComponent(q)}&includeActiveIngredient=${searchByActiveIngredient}&useAi=${searchByAi}&limit=30`
+          ),
           { signal: controller.signal }
         );
         const data = await res.json();
-        const list: DrugRecord[] = (data.results || []).slice(0, 25);
+        const list: DrugRecord[] = (data.results || []).slice(0, 30);
         setResults(list);
         setHighlightedIndex(0);
         setIsOfflineMode(false);
 
-        // Cache results locally for offline resilience
         if (list.length > 0) {
           cacheDrugsLocally(list);
         }
       } catch (err: any) {
-        if (err.name === "AbortError") {
-          return; // Ignore canceled request
-        }
-        console.warn("Server search unreachable, switching to offline local engine:", err);
+        if (err.name === "AbortError") return;
         const offlineResults = searchOfflineDrugs(q, searchByActiveIngredient);
         setResults(offlineResults);
         setHighlightedIndex(0);
@@ -207,7 +232,7 @@ export function InlineDrugPadInput({
           setIsSearching(false);
         }
       }
-    }, 120);
+    }, 90);
 
     return () => {
       clearTimeout(timer);
@@ -215,9 +240,10 @@ export function InlineDrugPadInput({
     };
   }, [query, isManualMode, searchByActiveIngredient, searchByAi]);
 
-  // Click outside to dismiss autocomplete dropdown
+  // Click outside to dismiss desktop dropdown
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      if (isMobileSpotlight) return;
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(e.target as Node) &&
@@ -229,9 +255,8 @@ export function InlineDrugPadInput({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isMobileSpotlight]);
 
-  // Update conflict warning whenever selected drug or current items change
   useEffect(() => {
     if (selectedDrug) {
       const conflict = checkInstantDrugConflict(selectedDrug, currentItems);
@@ -241,31 +266,42 @@ export function InlineDrugPadInput({
     }
   }, [selectedDrug, currentItems]);
 
-  const handleSelectDrug = (drug: DrugRecord) => {
+  // Stage drug into dosage builder OR add directly
+  const handlePrepareDrug = (drug: DrugRecord) => {
+    const smart = getSmartDrugDosage(drug);
+    setSelectedDrug(drug);
+    setDoseQuantity(smart.doseQuantity || "1");
+    setDoseForm(smart.doseForm || "Tablet (قرص)");
+    setFrequency(
+      drug.isAiGenerated && drug.recommendedDose
+        ? drug.recommendedDose
+        : smart.frequency || "كل 8 ساعات بعد الأكل (3 مرات)"
+    );
+    setDuration(smart.duration || "لمدة 5 أيام");
+    setInstructions(smart.instructions || "");
+    setIsDropdownOpen(false);
+  };
+
+  const handleInstantAddDrug = (drug: DrugRecord) => {
     if (isAddingRef.current) return;
     isAddingRef.current = true;
 
     try {
-      // 1. Strictly resolve clean English drug name for prescription
       const finalDrugName = getCleanEnglishDrugName(drug.name, drug.nameAr);
-
-      // 2. Clinical Smart Auto-Fill for Dose Quantity, Form, Frequency, Duration, Instructions
       const smart = getSmartDrugDosage(drug);
-      const finalQuantity = smart.doseQuantity || "1";
-      const finalDoseForm = smart.doseForm || "Tablet (قرص)";
+      const finalQuantity = smart.doseQuantity || doseQuantity || "1";
+      const finalDoseForm = smart.doseForm || doseForm || "Tablet (قرص)";
 
-      let finalFrequency = smart.frequency || "كل 8 ساعات بعد الأكل (3 مرات)";
-      let finalDuration = smart.duration || "لمدة 5 أيام";
-      let finalInstructions = smart.instructions || "";
+      let finalFrequency = smart.frequency || frequency || "كل 8 ساعات بعد الأكل (3 مرات)";
+      let finalDuration = smart.duration || duration || "لمدة 5 أيام";
+      let finalInstructions = smart.instructions || instructions || "";
 
       if (drug.isAiGenerated && drug.recommendedDose) {
         finalFrequency = drug.recommendedDose;
-        finalDuration = "طوال فترة العلاج";
-        finalInstructions = "تم الضبط الذكي بواسطة Gemini 3.8 Flash";
       }
 
-      // 3. Immediately add item to prescription!
       onAddItem({
+        drugId: drug.isAiGenerated ? undefined : drug.id,
         drugName: finalDrugName,
         activeIngredient: drug.activeIngredient?.trim() || undefined,
         doseQuantity: finalQuantity,
@@ -273,51 +309,36 @@ export function InlineDrugPadInput({
         frequency: finalFrequency,
         duration: finalDuration,
         instructions: finalInstructions,
+        isCustom: Boolean(drug.isAiGenerated || drug.isCrowdSourced),
       });
 
-      // 4. Record usage in local tracking for popularity analytics
       recordDrugPrescribed(drug.name);
+      showGlobalToast(`✅ تمت إضافة ${finalDrugName} للروشتة`, "success");
 
-      // 5. Toast feedback
-      showGlobalToast("تمت الإضافة إلى الروشتة", "success");
-
-      // 6. Complete clear of search engine & filters (query, results, dropdown, and filter modes)
       setQuery("");
       setResults([]);
       setSelectedDrug(null);
       setIsDropdownOpen(false);
+      setIsMobileSpotlight(false);
       setShowEquivalents(false);
       setActiveConflict(null);
       setHighlightedIndex(0);
-      setSearchByActiveIngredient(false);
-      setSearchByAi(false);
-
-      // Reset default form presets
-      setDoseQuantity("1");
-      setDoseForm("Tablet (قرص)");
-      setFrequency("كل 8 ساعات بعد الأكل (3 مرات)");
-      setDuration("لمدة 5 أيام");
-      setInstructions("");
-
-      // 7. Keep focus on search input for lightning-fast continuous prescribing
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 60);
     } finally {
       setTimeout(() => {
         isAddingRef.current = false;
-      }, 200);
+      }, 180);
     }
   };
 
-  // Fetch Equivalents & Generics for selected drug
   const handleOpenEquivalents = async (drug: DrugRecord) => {
     setShowEquivalents(true);
     setLoadingEquivalents(true);
     try {
       const ingredient = drug.activeIngredient || drug.name;
       const res = await fetch(
-        `/api/drugs/equivalents?ingredient=${encodeURIComponent(ingredient)}&currentDrug=${encodeURIComponent(drug.name)}`
+        getApiUrl(
+          `/api/drugs/equivalents?ingredient=${encodeURIComponent(ingredient)}&currentDrug=${encodeURIComponent(drug.name)}`
+        )
       );
       const data = await res.json();
       setEquivalentsList(data.equivalents || []);
@@ -326,11 +347,6 @@ export function InlineDrugPadInput({
     } finally {
       setLoadingEquivalents(false);
     }
-  };
-
-  const handleSelectEquivalent = (alt: DrugRecord) => {
-    handleSelectDrug(alt);
-    setShowEquivalents(false);
   };
 
   const handleCommitItem = () => {
@@ -342,14 +358,13 @@ export function InlineDrugPadInput({
 
     if (!rawName) return;
 
-    // Strictly ensure English drug name in prescription
     const finalDrugName = getCleanEnglishDrugName(rawName, selectedDrug?.nameAr);
-
     const finalActiveIngredient = isManualMode
       ? manualActiveIngredient.trim()
       : selectedDrug?.activeIngredient?.trim() || "";
 
     onAddItem({
+      drugId: selectedDrug && !selectedDrug.isAiGenerated ? selectedDrug.id : undefined,
       drugName: finalDrugName,
       activeIngredient: finalActiveIngredient || undefined,
       doseQuantity: doseQuantity.trim() || "1",
@@ -357,16 +372,15 @@ export function InlineDrugPadInput({
       frequency: frequency.trim() || "كل 8 ساعات بعد الأكل (3 مرات)",
       duration: duration.trim() || "لمدة 5 أيام",
       instructions: instructions.trim() || "",
+      isCustom: Boolean(isManualMode || !selectedDrug || selectedDrug.isAiGenerated),
     });
 
-    // Record usage in local tracking for popularity analytics
     if (selectedDrug) {
       recordDrugPrescribed(selectedDrug.name);
     }
 
-    showGlobalToast("تمت الإضافة إلى الروشتة", "success");
+    showGlobalToast(`✅ تمت إضافة ${finalDrugName} للروشتة`, "success");
 
-    // Reset state for next entry
     setQuery("");
     setResults([]);
     setSelectedDrug(null);
@@ -374,21 +388,15 @@ export function InlineDrugPadInput({
     setManualActiveIngredient("");
     setIsManualMode(false);
     setIsDropdownOpen(false);
+    setIsMobileSpotlight(false);
     setShowEquivalents(false);
     setActiveConflict(null);
     setHighlightedIndex(0);
-    setSearchByActiveIngredient(false);
-    setSearchByAi(false);
     setDoseQuantity("1");
     setDoseForm("Tablet (قرص)");
     setFrequency("كل 8 ساعات بعد الأكل (3 مرات)");
     setDuration("لمدة 5 أيام");
     setInstructions("");
-
-    // Re-focus search input cleanly so doctor can search next drug immediately
-    setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 60);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -406,12 +414,13 @@ export function InlineDrugPadInput({
       if (e.key === "Enter") {
         e.preventDefault();
         if (results[highlightedIndex]) {
-          handleSelectDrug(results[highlightedIndex]);
+          handleInstantAddDrug(results[highlightedIndex]);
           return;
         }
       }
       if (e.key === "Escape") {
         setIsDropdownOpen(false);
+        setIsMobileSpotlight(false);
         return;
       }
     }
@@ -426,46 +435,348 @@ export function InlineDrugPadInput({
     ? Boolean(manualDrugName.trim())
     : Boolean(selectedDrug || query.trim());
 
-  return (
-    <div
-      ref={containerRef}
-      className="mt-3 p-3.5 sm:p-4 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-emerald-500/60 transition-all space-y-3 no-print relative scroll-mt-20 sm:scroll-mt-24"
-      dir="rtl"
-    >
-      {/* Top Strip: Input Mode Toggle & Advanced Clinical Layers */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200/90 pb-2 flex-wrap">
-        <div className="flex items-center gap-1.5 text-xs font-black text-slate-800">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span>كتابة الدواء مباشرة بالروشتة:</span>
-          {isOfflineMode && (
-            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black flex items-center gap-1 animate-pulse">
-              <Zap className="w-3 h-3 text-amber-600" />
-              وضع أوفلاين محلي
-            </span>
-          )}
+  const renderSearchResultsList = (isSpotlightModal = false) => {
+    if (!query.trim()) {
+      return (
+        <div className="p-4 text-center space-y-2.5 text-xs text-slate-400">
+          <p className="font-bold text-slate-300">
+            اكتب أول حرف للترتيب الأبجدي (مثل <span className="text-emerald-400">ب</span> ثم <span className="text-emerald-400">بن</span>) أو استخدم النجمة <span className="text-emerald-400 font-mono">*</span> مثل موقع Drug Eye:
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            {["*gm*n*600", "aug 1g", "concor 5", "بنادول", "مضاد حيوي", "باراسيتامول"].map((sample) => (
+              <button
+                key={sample}
+                type="button"
+                onClick={() => {
+                  setQuery(sample);
+                  setIsDropdownOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-300 border border-slate-800 hover:border-emerald-500/40 font-mono text-[11px] transition-all cursor-pointer"
+              >
+                {sample}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="divide-y divide-slate-800/80">
+        <div className="px-3.5 py-2 bg-slate-950/95 text-[10px] font-bold text-slate-400 flex items-center justify-between sticky top-0 z-10 border-b border-slate-800">
+          <span>
+            {isSearching ? (
+              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                جاري التصفية الفورية من القاعدة الموحدة...
+              </span>
+            ) : (
+              <span className="text-emerald-400">
+                النتائج المطابقة ({results.length}) — مرتبة أبجدياً
+              </span>
+            )}
+          </span>
+          <span className="flex items-center gap-1.5">
+            {isOfflineMode && <span className="text-amber-400 font-bold">⚡ أوفلاين</span>}
+            <span>اضغط للإدراج الفوري أو تخصيص الجرعة</span>
+          </span>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Mode switch */}
-          <div className="flex items-center gap-1 bg-white p-0.5 rounded-xl border border-slate-200 shadow-xs text-[11px]">
+        {results.length > 0 ? (
+          results.slice(0, 30).map((drug, idx) => {
+            const isSelected = idx === highlightedIndex;
+            const conflict = checkInstantDrugConflict(drug, currentItems);
+
+            return (
+              <div
+                key={drug.id || idx}
+                onMouseEnter={() => setHighlightedIndex(idx)}
+                className={`w-full text-right p-3 transition-colors flex items-center justify-between gap-2 ${
+                  isSelected
+                    ? "bg-emerald-500/15 border-r-4 border-r-emerald-400"
+                    : "hover:bg-slate-900/90"
+                }`}
+              >
+                <div
+                  onClick={() => handleInstantAddDrug(drug)}
+                  className="min-w-0 flex-1 cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Pill
+                      className={`w-3.5 h-3.5 shrink-0 ${
+                        drug.isAiGenerated ? "text-violet-400" : "text-emerald-400"
+                      }`}
+                    />
+                    <span className="font-black text-xs sm:text-sm text-slate-100 truncate" dir="ltr">
+                      {drug.name}
+                    </span>
+
+                    {drug.nameAr && drug.nameAr !== drug.name && (
+                      <span className="text-[11px] text-cyan-300 font-bold truncate">
+                        ({drug.nameAr})
+                      </span>
+                    )}
+
+                    {drug.dosageForm && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                        {drug.dosageForm}
+                      </span>
+                    )}
+
+                    {drug.isAiGenerated && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/40 font-bold flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5" />
+                        اقتراح ذكي
+                      </span>
+                    )}
+
+                    {conflict && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-black flex items-center gap-1 animate-pulse">
+                        <AlertTriangle className="w-3 h-3 text-rose-400" />
+                        تداخل: {conflict.conflictingWith}
+                      </span>
+                    )}
+                  </div>
+
+                  {drug.activeIngredient && (
+                    <p className="text-[10px] text-slate-400 pr-5 truncate mt-0.5 font-mono">
+                      المادة الفعالة: {drug.activeIngredient}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {drug.price && Number(drug.price) > 0 ? (
+                    <span className="text-[11px] font-mono font-bold text-emerald-300 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/30">
+                      {drug.price} ج.م
+                    </span>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handlePrepareDrug(drug);
+                      if (isSpotlightModal) setIsMobileSpotlight(false);
+                    }}
+                    className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-bold transition-colors cursor-pointer"
+                    title="ضبط الجرعة أو عرض البدائل قبل الإضافة"
+                  >
+                    جرعة/بدائل
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleInstantAddDrug(drug)}
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] shadow-sm transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>إدراج</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        ) : isSearching ? (
+          <div className="p-5 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            <span>جاري البحث في القاعدة المحلية والسحابية...</span>
+          </div>
+        ) : (
+          <div className="p-4 text-center space-y-2.5">
+            <p className="text-xs text-slate-300">
+              لم يُعثر على دواء مطابق تماماً لـ <span className="font-bold text-emerald-400">&quot;{query}&quot;</span>
+            </p>
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  handleCommitItem();
+                }}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>إدراج &quot;{query}&quot; بالروشتة وحفظه بقاعدة البيانات للجميع</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchByAi(true)}
+                className="px-3 py-2 rounded-xl bg-violet-600/30 hover:bg-violet-600/40 text-violet-200 border border-violet-500/40 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>توليد بدائل قريبة بالذكاء الاصطناعي</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {/* ========================================================================= */}
+      {/* MOBILE RISING SPOTLIGHT SEARCH OVERLAY (Pushes Search to Top Above KB!)  */}
+      {/* ========================================================================= */}
+      {isMobileSpotlight && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/98 backdrop-blur-xl flex flex-col h-[100dvh] overflow-hidden animate-in fade-in duration-150"
+          dir="rtl"
+        >
+          {/* Top Pinned Search Header */}
+          <div className="p-3 bg-slate-900 border-b border-emerald-500/30 space-y-2.5 shrink-0 shadow-lg">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsMobileSpotlight(false)}
+                className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center shrink-0 font-bold"
+                title="إغلاق نافذة البحث"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="relative flex-1 flex items-center">
+                {isSearching ? (
+                  <Loader2 className="w-4 h-4 absolute right-3 text-emerald-400 animate-spin pointer-events-none" />
+                ) : (
+                  <Search className="w-4 h-4 absolute right-3 text-emerald-400 pointer-events-none" />
+                )}
+                <input
+                  ref={spotlightInputRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="ابحث أبجدياً (ب، بن...) أو بالنجمة (*gm*n*600)..."
+                  className="w-full pr-9 pl-16 py-2.5 rounded-xl bg-slate-950 border-2 border-emerald-500 font-bold text-xs text-white placeholder:text-slate-400 focus:outline-none"
+                  autoComplete="off"
+                />
+                <div className="absolute left-1.5 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleInsertWildcard}
+                    className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono font-black text-xs"
+                    title="إدراج نجمة (*) للبحث بالحروف الناقصة مثل Drug Eye"
+                  >
+                    *
+                  </button>
+                  {query && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuery("");
+                        spotlightInputRef.current?.focus();
+                      }}
+                      className="p-1 text-slate-400 hover:text-white text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Compact Single-Row Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[11px]">
+              <button
+                type="button"
+                onClick={() => setSearchByActiveIngredient(false)}
+                className={`px-2.5 py-1 rounded-lg font-bold border shrink-0 transition-all ${
+                  !searchByActiveIngredient
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : "bg-slate-800 text-slate-400 border-slate-700"
+                }`}
+              >
+                🔍 الاسم التجاري + Drug Eye (*)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchByActiveIngredient(!searchByActiveIngredient)}
+                className={`px-2.5 py-1 rounded-lg font-bold border shrink-0 transition-all ${
+                  searchByActiveIngredient
+                    ? "bg-purple-500/25 text-purple-200 border-purple-500/50"
+                    : "bg-slate-800 text-slate-400 border-slate-700"
+                }`}
+              >
+                🧪 المادة الفعالة (المثائل)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchByAi(!searchByAi)}
+                className={`px-2.5 py-1 rounded-lg font-bold border shrink-0 transition-all ${
+                  searchByAi
+                    ? "bg-violet-500/25 text-violet-200 border-violet-500/50"
+                    : "bg-slate-800 text-slate-400 border-slate-700"
+                }`}
+              >
+                ✨ ذكاء اصطناعي
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable Results List in Upper Viewport (Above Mobile Keyboard!) */}
+          <div className="flex-1 overflow-y-auto overscroll-contain bg-slate-950">
+            {renderSearchResultsList(true)}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* UNIFIED DARK GLASS DRUG PAD (Seamless on Both Mobile & Desktop)           */}
+      {/* ========================================================================= */}
+      <div
+        ref={containerRef}
+        className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-slate-950/90 border border-slate-800 hover:border-emerald-500/40 transition-all space-y-3.5 no-print relative shadow-xl"
+        dir="rtl"
+      >
+        {/* Unified Single-Row Mode & Filter Bar */}
+        <div className="flex items-center justify-between gap-2 border-b border-slate-800/90 pb-3 flex-wrap">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => {
                 setIsManualMode(false);
-                scrollToSearchBar();
-                setTimeout(() => {
-                  searchInputRef.current?.focus();
-                  scrollToSearchBar();
-                }, 50);
+                setSearchByActiveIngredient(false);
               }}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                !isManualMode
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                !isManualMode && !searchByActiveIngredient
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm"
+                  : "bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800"
               }`}
             >
-              <Search className="w-3 h-3" />
-              <span>بحث الأدوية الذكي (43,000+ دواء)</span>
+              <Search className="w-3.5 h-3.5 text-emerald-400" />
+              <span>بحث الأدوية الذكي (Drug Eye *)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsManualMode(false);
+                setSearchByActiveIngredient(!searchByActiveIngredient);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                !isManualMode && searchByActiveIngredient
+                  ? "bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-sm"
+                  : "bg-slate-900 text-slate-400 hover:text-purple-300 border-slate-800"
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 text-purple-400" />
+              <span>بحث بالمادة الفعالة</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsManualMode(false);
+                setSearchByAi(!searchByAi);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                !isManualMode && searchByAi
+                  ? "bg-violet-500/20 text-violet-300 border-violet-500/40 shadow-sm"
+                  : "bg-slate-900 text-slate-400 hover:text-violet-300 border-slate-800"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+              <span>ذكاء Gemini الطبي</span>
             </button>
 
             <button
@@ -474,561 +785,410 @@ export function InlineDrugPadInput({
                 setIsManualMode(true);
                 setIsDropdownOpen(false);
                 setShowEquivalents(false);
-                scrollToSearchBar();
-                setTimeout(() => {
-                  manualInputRef.current?.focus();
-                  scrollToSearchBar();
-                }, 50);
+                setTimeout(() => manualInputRef.current?.focus(), 50);
               }}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                 isManualMode
-                  ? "bg-cyan-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm"
+                  : "bg-slate-900 text-slate-400 hover:text-cyan-300 border-slate-800"
               }`}
             >
-              <PenTool className="w-3 h-3" />
-              <span>كتابة مانيول حرة</span>
+              <PenTool className="w-3.5 h-3.5 text-cyan-400" />
+              <span>كتابة يدوية حرة</span>
             </button>
           </div>
 
-          {/* Active Ingredient Search Toggle */}
-          {!isManualMode && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchByActiveIngredient(!searchByActiveIngredient);
-                setTimeout(() => searchInputRef.current?.focus(), 50);
-              }}
-              title="تفعيل البحث بالمواد الفعالة بالإضافة إلى الأسماء التجارية"
-              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-black border transition-all flex items-center gap-1.5 cursor-pointer select-none active:scale-95 shadow-xs ${
-                searchByActiveIngredient
-                  ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-500 shadow-md shadow-purple-950/30"
-                  : "bg-white text-slate-700 hover:text-purple-700 border-slate-200 hover:border-purple-300"
-              }`}
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${searchByActiveIngredient ? "text-purple-200" : "text-purple-500"}`} />
-              <span>بحث بالمادة الفعالة</span>
-              {searchByActiveIngredient && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping shrink-0" />
-              )}
-            </button>
-          )}
-
-          {/* Google Gemini AI Deep Suggestion Toggle */}
-          {!isManualMode && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchByAi(!searchByAi);
-                setTimeout(() => searchInputRef.current?.focus(), 50);
-              }}
-              title="تفعيل بحث الذكاء الاصطناعي السريري العميق عبر Google Gemini 3.8 Flash"
-              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-black border transition-all flex items-center gap-1.5 cursor-pointer select-none active:scale-95 shadow-xs ${
-                searchByAi
-                  ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white border-violet-500 shadow-md shadow-violet-950/30"
-                  : "bg-white text-slate-700 hover:text-violet-700 border-slate-200 hover:border-violet-300"
-              }`}
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${searchByAi ? "text-fuchsia-200 animate-spin" : "text-violet-600"}`} />
-              <span>ذكاء اصطناعي (Gemini 3.8)</span>
-              {searchByAi && (
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse shrink-0" />
-              )}
-            </button>
+          {isOfflineMode && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-black flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-400" />
+              وضع أوفلاين
+            </span>
           )}
         </div>
-      </div>
 
-      {/* Main Input Line */}
-      {!isManualMode ? (
-        <div className="relative">
-          <div className="relative flex items-center">
-            {isSearching ? (
-              <Loader2 className="w-4 h-4 absolute right-3 text-emerald-600 animate-spin pointer-events-none" />
-            ) : (
-              <Search className={`w-4 h-4 absolute right-3 pointer-events-none ${searchByAi ? "text-fuchsia-600" : searchByActiveIngredient ? "text-purple-600" : "text-emerald-600"}`} />
-            )}
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={query}
-              onChange={(e) => {
-                const val = e.target.value;
-                setQuery(val);
-                if (!val.trim()) {
-                  setIsSearching(false);
-                  if (abortControllerRef.current) {
-                    abortControllerRef.current.abort();
-                  }
-                }
-                setSelectedDrug(null);
-                setShowEquivalents(false);
-              }}
-              onFocus={handleSearchFocus}
-              onClick={scrollToSearchBar}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                searchByAi
-                  ? "اسأل ذكاء Gemini الطبي عن دواء نادر أو عَرَض مرضي أو تركيبة..."
-                  : searchByActiveIngredient
-                  ? "ابحث باسم المادة الفعالة (مثال: Paracetamol, Amoxicillin, Omeprazole...)"
-                  : "ابحث بالاسم التجاري، العلمي، أو العَرَض (مثال: خافض حرارة، حساسية، مغص، كحة)..."
-              }
-              className={`w-full pr-9 pl-8 py-2.5 rounded-xl bg-white border font-bold text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 shadow-inner transition-all ${
-                searchByAi
-                  ? "border-violet-400 focus:border-violet-600 focus:ring-violet-500/20"
-                  : searchByActiveIngredient
-                  ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20"
-                  : "border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/20"
-              }`}
-              autoComplete="off"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (abortControllerRef.current) {
-                    abortControllerRef.current.abort();
-                  }
-                  setQuery("");
-                  setResults([]);
-                  setIsSearching(false);
-                  setSelectedDrug(null);
-                  setIsDropdownOpen(false);
-                  setShowEquivalents(false);
-                  setSearchByActiveIngredient(false);
-                  setSearchByAi(false);
-                  searchInputRef.current?.focus();
-                  scrollToSearchBar();
-                }}
-                className="absolute left-2.5 p-1 text-slate-400 hover:text-slate-700 transition-colors text-xs"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Autocomplete Dropdown */}
-          {isDropdownOpen && !isManualMode && query.trim().length > 0 && (
-            <div
-              ref={dropdownRef}
-              className="absolute z-50 top-full mt-1.5 w-full bg-white border border-slate-300 rounded-2xl shadow-2xl overflow-hidden divide-y divide-slate-100 max-h-72 overflow-y-auto animate-in fade-in text-right"
-              dir="rtl"
-            >
-              <div className="px-3.5 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 flex items-center justify-between border-b border-slate-200">
-                <span>
-                  {isSearching ? (
-                    <span className="flex items-center gap-1.5 text-emerald-700 font-bold">
-                      <Loader2 className="w-3 h-3 animate-spin text-emerald-600" />
-                      جاري البحث الفوري...
-                    </span>
-                  ) : (
-                    `نتائج البحث (${results.length})`
-                  )}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  {isOfflineMode && (
-                    <span className="text-amber-600 font-bold">⚡ أوفلاين</span>
-                  )}
-                  {results.length > 0 && <span>اضغط Enter للاختيار</span>}
-                </span>
-              </div>
-
-              {results.length > 0 ? (
-                results.slice(0, 25).map((drug, idx) => {
-                  const isSelected = idx === highlightedIndex;
-                  const conflict = checkInstantDrugConflict(drug, currentItems);
-
-                  return (
-                    <button
-                      key={drug.id || idx}
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleSelectDrug(drug);
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleSelectDrug(drug);
-                      }}
-                      onMouseEnter={() => setHighlightedIndex(idx)}
-                      className={`w-full text-right p-3 transition-colors flex items-center justify-between gap-2 cursor-pointer ${
-                        isSelected ? "bg-emerald-50 text-emerald-950 font-bold" : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Pill className={`w-3.5 h-3.5 shrink-0 ${drug.isAiGenerated ? "text-violet-600" : "text-emerald-600"}`} />
-                          <span className="font-black text-xs text-slate-900 truncate">
-                            {drug.name}
-                          </span>
-
-                          {drug.dosageForm && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                              {drug.dosageForm}
-                            </span>
-                          )}
-
-                          {drug.isAiGenerated && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200 font-black flex items-center gap-1">
-                              <Sparkles className="w-2.5 h-2.5 text-violet-600" />
-                              ذكاء اصطناعي (Gemini)
-                            </span>
-                          )}
-
-                          {drug.isIndicationMatch && drug.matchedIndication && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 border border-teal-200 font-bold">
-                              🎯 {drug.matchedIndication}
-                            </span>
-                          )}
-
-                          {conflict && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-black flex items-center gap-1 animate-pulse">
-                              <AlertTriangle className="w-3 h-3 text-amber-600" />
-                              تداخل مع: {conflict.conflictingWith}
-                            </span>
-                          )}
-                        </div>
-
-                        {drug.activeIngredient && (
-                          <p className="text-[10px] text-slate-500 pr-5 truncate mt-0.5">
-                            المادة الفعالة: {drug.activeIngredient}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        {drug.price && Number(drug.price) > 0 && (
-                          <span className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            {drug.price} ج.م
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
-              ) : isSearching ? (
-                <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-                  <span>جاري فحص بنك الأدوية (43,000+ دواء)...</span>
-                </div>
+        {/* Main Search Input or Manual Entry */}
+        {!isManualMode ? (
+          <div className="relative">
+            <div className="relative flex items-center">
+              {isSearching ? (
+                <Loader2 className="w-4 h-4 absolute right-3.5 text-emerald-400 animate-spin pointer-events-none" />
               ) : (
-                <div className="p-4 text-center space-y-2">
-                  <p className="text-xs text-slate-600">
-                    لم يتم العثور على أدوية مطابقة لـ <span className="font-bold text-slate-900">&quot;{query}&quot;</span> محلياً
-                  </p>
-                  <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setSearchByAi(true);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>بحث بواسطة ذكاء Gemini الطبي ✨</span>
-                    </button>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setIsManualMode(true);
-                        setManualDrugName(query);
-                        setIsDropdownOpen(false);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-slate-300"
-                    >
-                      <PenTool className="w-3.5 h-3.5" />
-                      <span>كتابة مانيول كدواء حر</span>
-                    </button>
-                  </div>
-                </div>
+                <Search
+                  className={`w-4 h-4 absolute right-3.5 pointer-events-none ${
+                    searchByActiveIngredient
+                      ? "text-purple-400"
+                      : searchByAi
+                      ? "text-emerald-400"
+                      : "text-emerald-400"
+                  }`}
+                />
               )}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* Manual Mode Inputs */
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-600 block">
-              اسم الدواء التجاري: *
-            </label>
-            <input
-              ref={manualInputRef}
-              type="text"
-              value={manualDrugName}
-              onChange={(e) => setManualDrugName(e.target.value)}
-              onFocus={handleSearchFocus}
-              onClick={scrollToSearchBar}
-              onKeyDown={handleKeyDown}
-              placeholder="اكتب اسم الدواء الحر..."
-              className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 font-bold text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-600 block">
-              المادة الفعالة (اختياري):
-            </label>
-            <input
-              type="text"
-              value={manualActiveIngredient}
-              onChange={(e) => setManualActiveIngredient(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="المادة الفعالة إن وجدت..."
-              className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Selected Drug Badge Indicator with Instant Equivalents & Conflict Alerts */}
-      {selectedDrug && !isManualMode && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs flex-wrap">
-            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="font-black text-emerald-950 truncate">{selectedDrug.name}</span>
-              {selectedDrug.activeIngredient && (
-                <span className="text-[10px] text-emerald-700 truncate font-medium">
-                  ({selectedDrug.activeIngredient})
-                </span>
-              )}
-              {selectedDrug.price && Number(selectedDrug.price) > 0 && (
-                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300">
-                  {selectedDrug.price} ج.م
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* Direct Generics & Alternatives Drawer Trigger */}
-              <button
-                type="button"
-                onClick={() => handleOpenEquivalents(selectedDrug)}
-                className="px-2.5 py-1 rounded-lg bg-white border border-emerald-300 hover:border-emerald-500 text-emerald-800 font-bold text-[11px] shadow-2xs hover:bg-emerald-100/60 transition-all flex items-center gap-1 cursor-pointer"
-                title="عرض الأدوية البديلة بنفس المادة الفعالة والتركيز"
-              >
-                <ArrowLeftRight className="w-3 h-3 text-emerald-600" />
-                <span>عرض البدائل والمثائل</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={query}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setQuery(val);
+                  if (!val.trim()) {
+                    setIsSearching(false);
+                    if (abortControllerRef.current) abortControllerRef.current.abort();
+                  }
                   setSelectedDrug(null);
                   setShowEquivalents(false);
                 }}
-                className="text-[10px] text-slate-500 hover:text-rose-600 font-bold px-2 py-1"
-              >
-                تغيير
-              </button>
-            </div>
-          </div>
+                onFocus={handleSearchFocus}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  searchByActiveIngredient
+                    ? "ابحث بالمادة الفعالة (مثال: Paracetamol, Bisoprolol, باراسيتامول...)"
+                    : "ابحث بالحروف الأبجدية (ب، بن...) أو بالنجمة (*gm*n*600) أو العَرَض..."
+                }
+                className="w-full pr-10 pl-20 py-3 rounded-xl bg-slate-900/95 border border-slate-700/90 focus:border-emerald-500 font-bold text-xs sm:text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-inner transition-all"
+                autoComplete="off"
+              />
 
-          {/* Clinical Real-Time Conflict Alert (Pre-Add Warning) */}
-          {activeConflict && (
-            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 flex items-start gap-2 animate-in fade-in">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div className="space-y-0.5 min-w-0">
-                <p className="font-black text-[11px] text-amber-900">
-                  تنبيه تعارض دوائي مع: {activeConflict.conflictingWith} ({activeConflict.titleAr})
-                </p>
-                <p className="text-[10px] text-amber-800 leading-relaxed">
-                  {activeConflict.reasonAr}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Inline Equivalents & Generics Drawer */}
-          {showEquivalents && (
-            <div className="p-3 rounded-2xl bg-white border border-emerald-300 shadow-md space-y-2 animate-in fade-in">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-black text-slate-800">
-                  <Layers className="w-4 h-4 text-emerald-600" />
-                  <span>البدائل والمثائل الصيدلانية المتاحة:</span>
-                </div>
+              <div className="absolute left-2 flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setShowEquivalents(false)}
-                  className="text-xs text-slate-400 hover:text-slate-700 font-bold p-1"
+                  onClick={handleInsertWildcard}
+                  className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-mono font-black text-xs transition-colors cursor-pointer flex items-center gap-0.5"
+                  title="إدراج نجمة (*) للبحث بالحروف الناقصة مثل موقع Drug Eye"
                 >
-                  ✕ إغلاق
+                  <Asterisk className="w-3 h-3" />
+                  <span className="text-[10px]">نجمة</span>
                 </button>
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (abortControllerRef.current) abortControllerRef.current.abort();
+                      setQuery("");
+                      setResults([]);
+                      setIsSearching(false);
+                      setSelectedDrug(null);
+                      setIsDropdownOpen(false);
+                      setShowEquivalents(false);
+                      searchInputRef.current?.focus();
+                    }}
+                    className="p-1 text-slate-400 hover:text-white transition-colors text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Desktop / Tablet Autocomplete Dropdown */}
+            {isDropdownOpen && !isMobileSpotlight && !isManualMode && (
+              <div
+                ref={dropdownRef}
+                className="absolute z-50 top-full mt-2 w-full bg-slate-950/98 backdrop-blur-2xl border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden max-h-80 overflow-y-auto animate-in fade-in text-right"
+                dir="rtl"
+              >
+                {renderSearchResultsList(false)}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Manual Mode Inputs */
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-300 block">
+                اسم الدواء التجاري (يُحفظ تلقائياً في قاعدة البيانات للجميع): *
+              </label>
+              <input
+                ref={manualInputRef}
+                type="text"
+                value={manualDrugName}
+                onChange={(e) => setManualDrugName(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="اكتب اسم الدواء أو التركيبة..."
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 font-bold text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-300 block">
+                المادة الفعالة (اختياري):
+              </label>
+              <input
+                type="text"
+                value={manualActiveIngredient}
+                onChange={(e) => setManualActiveIngredient(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="المادة الفعالة إن وجدت..."
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Selected Drug Banner with Equivalents & Conflict Warning */}
+        {selectedDrug && !isManualMode && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs flex-wrap">
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="font-black text-emerald-200 truncate" dir="ltr">
+                  {selectedDrug.name}
+                </span>
+                {selectedDrug.activeIngredient && (
+                  <span className="text-[10px] text-emerald-400/90 truncate font-mono">
+                    ({selectedDrug.activeIngredient})
+                  </span>
+                )}
+                {selectedDrug.price && Number(selectedDrug.price) > 0 && (
+                  <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    {selectedDrug.price} ج.م
+                  </span>
+                )}
               </div>
 
-              {loadingEquivalents ? (
-                <p className="text-center py-3 text-xs text-slate-500 animate-pulse">
-                  جاري جلب البدائل الصيدلانية...
-                </p>
-              ) : equivalentsList.length === 0 ? (
-                <p className="text-center py-3 text-xs text-slate-500">
-                  لا توجد بدائل مسجلة بنفس المادة الفعالة حالياً.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                  {equivalentsList.map((alt) => (
-                    <div
-                      key={alt.id}
-                      className="p-2 rounded-xl bg-slate-50 hover:bg-emerald-50/70 border border-slate-200 transition-all flex items-center justify-between gap-2 text-xs"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-black text-slate-900 truncate">{alt.name}</p>
-                        <p className="text-[10px] text-slate-500 truncate">
-                          {alt.company || "شركة أدوية"} • {alt.dosageForm || "قرص"}
-                        </p>
-                      </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleOpenEquivalents(selectedDrug)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 font-bold text-[11px] transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <ArrowLeftRight className="w-3 h-3 text-emerald-400" />
+                  <span>البدائل والمثائل</span>
+                </button>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        {alt.price && Number(alt.price) > 0 && (
-                          <span className="font-mono font-bold text-emerald-700 text-[11px]">
-                            {alt.price} ج.م
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleSelectEquivalent(alt)}
-                          className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-colors cursor-pointer"
-                        >
-                          اختيار البديل
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDrug(null);
+                    setShowEquivalents(false);
+                  }}
+                  className="text-[10px] text-slate-400 hover:text-rose-400 font-bold px-2 py-1"
+                >
+                  تغيير
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      )}
 
-      {/* Dosage, Frequency & Duration Preset Helpers */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs pt-1 border-t border-slate-200">
-        {/* Quantity & Form */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-600 block">الكمية والشكل:</label>
-          <div className="grid grid-cols-3 gap-1">
+            {activeConflict && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-xs text-rose-200 flex items-start gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5 min-w-0">
+                  <p className="font-black text-[11px] text-rose-300">
+                    تنبيه تعارض دوائي مع: {activeConflict.conflictingWith} ({activeConflict.titleAr})
+                  </p>
+                  <p className="text-[10px] text-rose-200/90 leading-relaxed">
+                    {activeConflict.reasonAr}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {showEquivalents && (
+              <div className="p-3 rounded-2xl bg-slate-900 border border-emerald-500/30 shadow-lg space-y-2 animate-in fade-in">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-emerald-300">
+                    <Layers className="w-4 h-4 text-emerald-400" />
+                    <span>البدائل والمثائل الصيدلانية المتاحة بنفس المادة الفعالة:</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowEquivalents(false)}
+                    className="text-xs text-slate-400 hover:text-white font-bold p-1"
+                  >
+                    ✕ إغلاق
+                  </button>
+                </div>
+
+                {loadingEquivalents ? (
+                  <p className="text-center py-3 text-xs text-slate-400 animate-pulse">
+                    جاري جلب البدائل الصيدلانية...
+                  </p>
+                ) : equivalentsList.length === 0 ? (
+                  <p className="text-center py-3 text-xs text-slate-400">
+                    لا توجد بدائل مسجلة بنفس المادة الفعالة حالياً.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                    {equivalentsList.map((alt) => (
+                      <div
+                        key={alt.id}
+                        className="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 transition-all flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-black text-slate-100 truncate" dir="ltr">{alt.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {alt.company || "شركة أدوية"} • {alt.dosageForm || "قرص"}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {alt.price && Number(alt.price) > 0 && (
+                            <span className="font-mono font-bold text-emerald-400 text-[11px]">
+                              {alt.price} ج.م
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleInstantAddDrug(alt);
+                              setShowEquivalents(false);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[10px] transition-colors cursor-pointer"
+                          >
+                            + اختيار البديل
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Quick 1-Tap Dosage & Duration Chips + Editable Inputs */}
+        <div className="space-y-2.5 pt-2 border-t border-slate-800/80 text-xs">
+          {/* 1-Tap Quick Chips Row */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-bold text-slate-400 ml-1">جرعة سريعة:</span>
+            {QUICK_FREQ_CHIPS.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => setFrequency(chip.value)}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                  frequency === chip.value
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50"
+                    : "bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800"
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+            <span className="text-slate-700 mx-0.5">|</span>
+            {QUICK_DURATION_CHIPS.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => setDuration(chip.value)}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                  duration === chip.value
+                    ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/50"
+                    : "bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800"
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {/* Quantity & Form */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 block">الكمية والشكل:</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                <input
+                  type="text"
+                  value={doseQuantity}
+                  onChange={(e) => setDoseQuantity(e.target.value)}
+                  placeholder="1"
+                  className="px-2 py-2 rounded-xl bg-slate-900 border border-slate-800 font-bold text-slate-100 text-center text-xs focus:outline-none focus:border-emerald-500"
+                />
+                <select
+                  value={doseForm}
+                  onChange={(e) => setDoseForm(e.target.value)}
+                  className="col-span-2 px-2 py-2 rounded-xl bg-slate-900 border border-slate-800 font-bold text-slate-200 text-[11px] focus:outline-none focus:border-emerald-500"
+                >
+                  {COMMON_DOSE_FORMS.map((f) => (
+                    <option key={f} value={f} className="bg-slate-900 text-slate-100">
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Frequency */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-slate-400 block">مواعيد الجرعة:</label>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) setFrequency(e.target.value);
+                  }}
+                  className="text-[10px] font-bold text-emerald-400 bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 cursor-pointer focus:outline-none"
+                >
+                  <option value="">⚡ قوالب جاهزة...</option>
+                  {FREQUENCY_PRESETS.map((fq) => (
+                    <option key={fq} value={fq}>
+                      {fq}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                type="text"
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="اكتب مواعيد الجرعة..."
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 font-bold text-slate-100 text-[11px] placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Duration */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-slate-400 block">مدة العلاج:</label>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) setDuration(e.target.value);
+                  }}
+                  className="text-[10px] font-bold text-cyan-400 bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 cursor-pointer focus:outline-none"
+                >
+                  <option value="">⚡ مدة جاهزة...</option>
+                  {DURATION_PRESETS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                type="text"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="اكتب مدة العلاج..."
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 font-bold text-slate-100 text-[11px] placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* Special Instructions & Commit Button */}
+          <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
             <input
               type="text"
-              value={doseQuantity}
-              onChange={(e) => setDoseQuantity(e.target.value)}
-              placeholder="1"
-              className="px-2 py-1.5 rounded-lg bg-white border border-slate-300 font-bold text-slate-900 text-center text-xs focus:outline-none focus:border-emerald-500"
-            />
-            <select
-              value={doseForm}
-              onChange={(e) => setDoseForm(e.target.value)}
-              className="col-span-2 px-2 py-1.5 rounded-lg bg-white border border-slate-300 font-bold text-slate-800 text-[11px] focus:outline-none focus:border-emerald-500"
-            >
-              {COMMON_DOSE_FORMS.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Frequency - Free Text + Quick Presets */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-bold text-slate-700 block">مواعيد الجرعة (كتابة حرة):</label>
-            <select
-              value=""
-              onChange={(e) => {
-                if (e.target.value) setFrequency(e.target.value);
-              }}
-              className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 cursor-pointer focus:outline-none hover:bg-emerald-100"
-              title="اختيار موعد جرعة جاهز"
-            >
-              <option value="">⚡ اختر جاهز...</option>
-              {FREQUENCY_PRESETS.map((fq) => (
-                <option key={fq} value={fq}>
-                  {fq}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="relative">
-            <input
-              type="text"
-              list="frequency-presets-list"
-              value={frequency}
-              onChange={(e) => setFrequency(e.target.value)}
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="اكتب مواعيد الجرعة بحرية..."
-              className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 font-bold text-slate-800 text-[11px] placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 shadow-2xs"
+              placeholder="ملاحظات إضافية للدواء (مثال: يرج جيداً قبل الاستعمال، قبل الأكل بنصف ساعة...)"
+              className="w-full sm:flex-1 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-xs placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
             />
-            <datalist id="frequency-presets-list">
-              {FREQUENCY_PRESETS.map((fq) => (
-                <option key={fq} value={fq} />
-              ))}
-            </datalist>
-          </div>
-        </div>
 
-        {/* Duration - Free Text + Quick Presets */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-bold text-slate-700 block">مدة العلاج (كتابة حرة):</label>
-            <select
-              value=""
-              onChange={(e) => {
-                if (e.target.value) setDuration(e.target.value);
-              }}
-              className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 cursor-pointer focus:outline-none hover:bg-emerald-100"
-              title="اختيار مدة علاج جاهزة"
+            <button
+              type="button"
+              onClick={handleCommitItem}
+              disabled={!isReadyToAdd}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/50 active:scale-95 shrink-0"
             >
-              <option value="">⚡ اختر جاهز...</option>
-              {DURATION_PRESETS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="relative">
-            <input
-              type="text"
-              list="duration-presets-list"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="اكتب مدة العلاج بحرية..."
-              className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 font-bold text-slate-800 text-[11px] placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 shadow-2xs"
-            />
-            <datalist id="duration-presets-list">
-              {DURATION_PRESETS.map((d) => (
-                <option key={d} value={d} />
-              ))}
-            </datalist>
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>إضافة الدواء للروشتة ↵</span>
+            </button>
           </div>
         </div>
       </div>
-
-      {/* Special Instructions & Add Button Row */}
-      <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
-        <input
-          type="text"
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="ملاحظات خاصة (مثال: بعد الأكل بنصف ساعة، قبل النوم مباشرة...)"
-          className="w-full sm:flex-1 px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
-        />
-
-        <button
-          type="button"
-          onClick={handleCommitItem}
-          disabled={!isReadyToAdd}
-          className="w-full sm:w-auto px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:pointer-events-none text-white font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-950/30 active:scale-95"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>إضافة الدواء للروشتة ↵</span>
-        </button>
-      </div>
-    </div>
+    </>
   );
 }

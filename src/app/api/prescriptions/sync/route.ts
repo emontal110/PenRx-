@@ -15,6 +15,8 @@ import { readDeviceToken } from "@/lib/deviceAuth";
 import { isAdminRequest } from "@/lib/adminAuth";
 import { supabaseRest } from "@/lib/supabaseRest";
 import { getSubscriptionBySubscriberId, machineOwnsSubscription } from "@/lib/subscriptionService";
+import { isDrugInCatalog, registerCustomDrug, normalizeDrugCanonicalKey } from "@/lib/drugSearchEngine";
+import { invalidateCommunityDrugsCache } from "@/app/api/drugs/search/route";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,6 @@ export async function OPTIONS(request: Request) {
   return preflight(request);
 }
 
-/** Minifies medication items before storing in JSONB to keep free-tier usage low. */
 function minifyItemsForDb(items: LeanPrescriptionItem[]): LeanPrescriptionItem[] {
   if (!Array.isArray(items)) return [];
   return items.slice(0, 60).map((it) => {
@@ -60,11 +61,6 @@ function toLean(row: any): LeanCloudPrescription {
   } as LeanCloudPrescription;
 }
 
-/**
- * Tenant gate. Access requires a device token minted by this server for an ACTIVE
- * subscription; the subscription is re-read every call so suspension or expiry is
- * enforced immediately, and the token's device must still belong to it.
- */
 async function authorizeTenant(
   request: Request
 ): Promise<{ ok: true; subscriberId: string } | { ok: false; message: string; status: number }> {
@@ -92,7 +88,55 @@ async function authorizeTenant(
   return { ok: true, subscriberId };
 }
 
-/** The doctor's own prescriptions inside the retention window, always read from PostgreSQL. */
+/**
+ * Automatically harvests any novel/custom drugs written in a prescription
+ * and stores them in the shared `Drug` table so all other doctors can search for them!
+ */
+async function harvestNovelDrugsToSharedCatalog(
+  items: LeanPrescriptionItem[],
+  subscriberId: string
+): Promise<void> {
+  if (!Array.isArray(items) || items.length === 0) return;
+
+  for (const it of items) {
+    const cleanName = (it.n || "").replace(/[<>'"&]/g, "").trim();
+    if (cleanName.length < 3) continue;
+    if (isDrugInCatalog(cleanName)) continue;
+
+    const cleanActive = (it.a || "تركيبة دوائية معتمدة").replace(/[<>'"&]/g, "").trim();
+    const cleanForm = (it.f || "Tablet (قرص)").replace(/[<>'"&]/g, "").trim();
+
+    registerCustomDrug({
+      name: cleanName,
+      nameAr: cleanName,
+      activeIngredient: cleanActive,
+      dosageForm: cleanForm,
+      doctorContributor: subscriberId,
+    });
+
+    const canonicalId = `drug-${normalizeDrugCanonicalKey(cleanName, cleanForm).replace(/[^a-z0-9\u0600-\u06FF_-]/g, "").slice(0, 48)}`;
+    await supabaseRest("Drug", {
+      method: "POST",
+      query: "on_conflict=id",
+      body: {
+        id: canonicalId,
+        name: cleanName,
+        nameAr: cleanName,
+        activeIngredient: cleanActive,
+        dosageForm: cleanForm,
+        company: "مضاف من روشتات أطباء PenRX+",
+        category: "General Medication",
+        isControlled: false,
+        addedBy: subscriberId,
+        updatedAt: new Date().toISOString(),
+      },
+      prefer: "resolution=merge-duplicates,return=minimal",
+    }).catch(() => null);
+
+    invalidateCommunityDrugsCache();
+  }
+}
+
 export async function GET(request: Request) {
   if (!hasCloudCredentials()) return proxyToCloud(request, "/api/prescriptions/sync");
 
@@ -127,11 +171,6 @@ export async function GET(request: Request) {
   });
 }
 
-/**
- * SAVE and DELETE are persisted before responding. Acknowledging a write that was
- * never stored is how prescriptions get silently lost, so failures return 502 and
- * the device keeps the item in its retry queue.
- */
 export async function POST(request: Request) {
   if (!hasCloudCredentials()) return proxyToCloud(request, "/api/prescriptions/sync");
 
@@ -196,6 +235,9 @@ export async function POST(request: Request) {
         prefer: "resolution=merge-duplicates,return=minimal",
       });
 
+      // Automatically harvest any new/custom drugs into the shared Drug database
+      harvestNovelDrugsToSharedCatalog(compactItems, auth.subscriberId).catch(() => {});
+
       if (process.env.ENABLE_RELATIONAL_DUAL_WRITE === "true") {
         savePrescriptionRelational(
           decompressPrescription({ ...data, items: compactItems }),
@@ -222,7 +264,9 @@ export async function POST(request: Request) {
       });
 
       if (process.env.ENABLE_RELATIONAL_DUAL_WRITE === "true") {
-        deletePrescriptionRelational(id).catch((err) => console.warn("[RxSync dual-delete] notice:", err?.message || err));
+        deletePrescriptionRelational(id, auth.subscriberId).catch((err) =>
+          console.warn("[RxSync dual-delete] notice:", err?.message || err)
+        );
       }
 
       return apiJson(request, { success: true, action: "DELETE", prescriptionId: id });

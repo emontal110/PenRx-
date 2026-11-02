@@ -23,6 +23,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -44,10 +45,6 @@ public class MainActivity extends BridgeActivity {
     private String cachedHardwareDeviceId = null;
     private View splashOverlay = null;
 
-    /**
-     * Shows a native branded loading overlay with logo, title, and emerald progress bar.
-     * Prevents any black screen during WebView initialization and remote cold start.
-     */
     private void showNativeSplashOverlay() {
         try {
             int brandDark = Color.parseColor("#0b1329");
@@ -68,7 +65,6 @@ public class MainActivity extends BridgeActivity {
             centerParams.gravity = Gravity.CENTER;
             centerBox.setLayoutParams(centerParams);
 
-            // 1. Logo
             ImageView logo = new ImageView(this);
             int logoSize = (int) TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP, 92, getResources().getDisplayMetrics()
@@ -87,7 +83,6 @@ public class MainActivity extends BridgeActivity {
             }
             centerBox.addView(logo);
 
-            // 2. App Title: PenRX+
             TextView title = new TextView(this);
             title.setText("PenRX+");
             title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
@@ -96,7 +91,6 @@ public class MainActivity extends BridgeActivity {
             title.setGravity(Gravity.CENTER);
             centerBox.addView(title);
 
-            // 3. Subtitle
             TextView subTitle = new TextView(this);
             subTitle.setText("منظومة إدارة الروشتات والعيادات الطبية الذكية");
             subTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
@@ -115,7 +109,6 @@ public class MainActivity extends BridgeActivity {
             subTitle.setLayoutParams(subParams);
             centerBox.addView(subTitle);
 
-            // 4. Progress Spinner
             ProgressBar pb = new ProgressBar(this);
             int pbSize = (int) TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP, 32, getResources().getDisplayMetrics()
@@ -130,7 +123,6 @@ public class MainActivity extends BridgeActivity {
             }
             centerBox.addView(pb);
 
-            // 5. Loading status text
             TextView statusText = new TextView(this);
             statusText.setText("جاري فتح العيادة الذكية...");
             statusText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
@@ -150,9 +142,6 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    /**
-     * Smoothly dismisses the native splash overlay once the web interface finishes hydration.
-     */
     public void dismissSplashOverlay() {
         runOnUiThread(new Runnable() {
             @Override
@@ -178,11 +167,6 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
-    /**
-     * Computes a deterministic, immutable Hardware Machine ID (PRX-ANDR-XXXX-XXXX)
-     * derived from Android's hardware/signing-key-bound ANDROID_ID (SSAID).
-     * Never changes across app uninstalls and reinstalls.
-     */
     private String resolveImmutableHardwareId() {
         if (cachedHardwareDeviceId != null && cachedHardwareDeviceId.startsWith("PRX-")) {
             return cachedHardwareDeviceId;
@@ -230,6 +214,25 @@ public class MainActivity extends BridgeActivity {
         return cachedHardwareDeviceId;
     }
 
+    /**
+     * Normalizes Egyptian and international phone numbers to strict WhatsApp JID format
+     * (e.g. "01012345678" -> "201012345678", "+201012345678" -> "201012345678")
+     */
+    private String normalizeWhatsAppJidPhone(String rawPhone) {
+        if (rawPhone == null) return "";
+        String digits = rawPhone.replaceAll("[^0-9]", "");
+        if (digits.startsWith("00")) {
+            digits = digits.substring(2);
+        }
+        if (digits.startsWith("01") && digits.length() == 11) {
+            return "2" + digits;
+        }
+        if (digits.startsWith("1") && digits.length() == 10) {
+            return "20" + digits;
+        }
+        return digits;
+    }
+
     private boolean isNetworkAvailable() {
         try {
             ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -252,12 +255,6 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    private void loadOfflineShell(WebView webView) {
-        try {
-            webView.loadUrl("file:///android_asset/public/index.html");
-        } catch (Exception ignored) {}
-    }
-
     private boolean isPackageInstalled(String packageName) {
         try {
             PackageManager pm = getPackageManager();
@@ -275,6 +272,8 @@ public class MainActivity extends BridgeActivity {
             if (window != null) {
                 int brandDark = Color.parseColor("#0b1329");
                 window.setBackgroundDrawable(new ColorDrawable(brandDark));
+                // Ensure soft keyboard resizes WebView cleanly so rising Spotlight search stays above keyboard
+                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     window.setStatusBarColor(brandDark);
                     window.setNavigationBarColor(brandDark);
@@ -284,16 +283,14 @@ public class MainActivity extends BridgeActivity {
 
         super.onCreate(savedInstanceState);
 
-        // Instantly display native branded splash overlay so there is zero black screen during startup/cold start
         showNativeSplashOverlay();
 
-        // Safety fallback timer: auto-dismiss splash after 7 seconds if network takes too long
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 dismissSplashOverlay();
             }
-        }, 7000);
+        }, 6500);
 
         final String hwId = resolveImmutableHardwareId();
 
@@ -314,6 +311,8 @@ public class MainActivity extends BridgeActivity {
                 settings.setLoadWithOverviewMode(true);
                 settings.setUseWideViewPort(true);
 
+                // Use cache-else-network when offline so the same Next.js origin (https://pen-rx.vercel.app)
+                // and its localStorage/IndexedDB remain unified!
                 if (isNetworkAvailable()) {
                     settings.setCacheMode(WebSettings.LOAD_DEFAULT);
                 } else {
@@ -331,10 +330,6 @@ public class MainActivity extends BridgeActivity {
                         return hwId;
                     }
 
-                    /**
-                     * Signals the native layer that React hydration is complete,
-                     * smoothly fading out the native splash overlay.
-                     */
                     @JavascriptInterface
                     public void hideSplashScreen() {
                         dismissSplashOverlay();
@@ -342,7 +337,8 @@ public class MainActivity extends BridgeActivity {
 
                     /**
                      * Directly opens the patient's WhatsApp chat (via JID phone@s.whatsapp.net)
-                     * with the generated Prescription Image (PNG) or PDF already attached!
+                     * in the native Android WhatsApp or WhatsApp Business app with the
+                     * Prescription Image (PNG) or PDF already attached and ready to send!
                      */
                     @JavascriptInterface
                     public String shareFileToWhatsAppDirect(
@@ -384,7 +380,7 @@ public class MainActivity extends BridgeActivity {
                                 ? mimeType.trim()
                                 : "image/png";
 
-                            String digitsOnly = (cleanPhone != null) ? cleanPhone.replaceAll("[^0-9]", "") : "";
+                            String normalizedPhone = normalizeWhatsAppJidPhone(cleanPhone);
 
                             String targetPackage = null;
                             if (isPackageInstalled("com.whatsapp")) {
@@ -399,12 +395,16 @@ public class MainActivity extends BridgeActivity {
                             if (caption != null && !caption.trim().isEmpty()) {
                                 sendIntent.putExtra(Intent.EXTRA_TEXT, caption.trim());
                             }
-                            if (!digitsOnly.isEmpty()) {
+                            if (!normalizedPhone.isEmpty()) {
                                 // Direct WhatsApp JID targeting: opens patient's conversation directly with the file attached!
-                                sendIntent.putExtra("jid", digitsOnly + "@s.whatsapp.net");
+                                sendIntent.putExtra("jid", normalizedPhone + "@s.whatsapp.net");
                             }
-                            sendIntent.setClipData(ClipData.newRawUri("", contentUri));
-                            sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                            sendIntent.setClipData(ClipData.newRawUri("Prescription", contentUri));
+                            sendIntent.addFlags(
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                                Intent.FLAG_ACTIVITY_NEW_TASK |
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            );
 
                             if (targetPackage != null) {
                                 sendIntent.setPackage(targetPackage);
@@ -433,20 +433,6 @@ public class MainActivity extends BridgeActivity {
                         } catch (Exception ignored) {}
                     }
                 }, 250);
-
-                if (!isNetworkAvailable()) {
-                    loadOfflineShell(webView);
-                }
-
-                webView.setWebViewClient(new android.webkit.WebViewClient() {
-                    @Override
-                    public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                        super.onReceivedError(view, errorCode, description, failingUrl);
-                        if (view.getUrl() == null || view.getUrl().startsWith("https://pen-rx.vercel.app")) {
-                            loadOfflineShell(view);
-                        }
-                    }
-                });
             }
         } catch (Exception ignored) {}
     }

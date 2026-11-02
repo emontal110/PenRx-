@@ -1163,6 +1163,14 @@
       const history = JSON.parse(localStorage.getItem("penrx_saved_prescriptions") || "[]");
       history.unshift(rxRecord);
       localStorage.setItem("penrx_saved_prescriptions", JSON.stringify(history));
+      try {
+        const zRaw = localStorage.getItem("penrx_prescription_storage");
+        const zObj = zRaw ? JSON.parse(zRaw) : { state: { savedPrescriptions: [], savedPatients: [] }, version: 2 };
+        if (zObj && zObj.state) {
+          zObj.state.savedPrescriptions = [rxRecord, ...(zObj.state.savedPrescriptions || [])];
+          localStorage.setItem("penrx_prescription_storage", JSON.stringify(zObj));
+        }
+      } catch (e) {}
 
       renderHistoryList();
       renderHomeStats();

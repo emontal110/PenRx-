@@ -4,7 +4,7 @@
  * Features:
  *   1. Hardware-Accelerated GZIP Stream Compression (saves 80%+ file size).
  *   2. Cryptographically Strong AES-256-GCM Encryption with PBKDF2 (100,000 rounds).
- *   3. Multi-Device & Reinstall Compatible Key Derivation (tries Subscriber ID key + Machine ID key).
+ *   3. Multi-Device & Reinstall Compatible Key Derivation (tries Subscriber ID key + Machine ID key + Vault key).
  *   4. Cloud Backup (Multi-Tenant Partitioned by subscriberId with zero collisions & automatic deduplication).
  *   5. Silent Daily Auto-Backup & Automatic Post-Reinstall Restoration of Clinic Profile + Patients.
  */
@@ -15,9 +15,7 @@ import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { getApiUrl } from "@/lib/cloudProxy";
 import { deviceAuthHeaders } from "@/lib/deviceAuthClient";
 
-/** Current format: key material is a device-local random secret. */
 const MAGIC_HEADER = "PRX_ENC_V3";
-/** Legacy format: key material was derived from the subscriber/machine id. */
 const LEGACY_MAGIC_HEADER = "PRX_ENC_V2";
 const MACHINE_KEY_PREFIX = "PenRX_MK_2026_";
 const VAULT_KEY_STORAGE = "penrx_backup_vault_key";
@@ -42,10 +40,6 @@ export interface BackupPayload {
   customDrugs?: any[];
 }
 
-/**
- * Device-local backup secret. Generated once and never uploaded, so a stolen
- * database row or a leaked subscriber/machine id is not a decryption key.
- */
 function getVaultKey(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -80,7 +74,8 @@ function getSubscriberPassphrase(): string | null {
 }
 
 /**
- * Derives a per-machine passphrase for backup encryption.
+ * Derives a deterministic per-subscriber or per-machine passphrase for backup encryption
+ * so backups survive OS reinstalls and work across a doctor's linked devices (APK + EXE).
  */
 function getMachinePassphrase(): string {
   if (typeof window === "undefined") return `${MACHINE_KEY_PREFIX}SERVER`;
@@ -88,39 +83,25 @@ function getMachinePassphrase(): string {
   const subPass = getSubscriberPassphrase();
   if (subPass) return subPass;
 
-  const machineId = localStorage.getItem("penrx_unique_machine_id");
+  const machineId =
+    useSubscriptionStore.getState()?.machineId ||
+    localStorage.getItem("penrx_unique_machine_id");
   if (machineId && machineId.startsWith("PRX-")) {
-    return `${MACHINE_KEY_PREFIX}${machineId}`;
+    return `${MACHINE_KEY_PREFIX}${machineId.trim().toUpperCase()}`;
   }
 
-  const INSTALL_KEY = "penrx_install_enc_key";
-  const existing = localStorage.getItem(INSTALL_KEY);
-  if (existing && existing.length > 20) return existing;
-
-  const randomKey = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  const installKey = `${MACHINE_KEY_PREFIX}${randomKey}`;
-  localStorage.setItem(INSTALL_KEY, installKey);
-  return installKey;
+  return getVaultKey() || `${MACHINE_KEY_PREFIX}DEFAULT`;
 }
 
 /**
- * Candidate passphrases for decryption (supports subscriber key, machine key, and universal fallback)
+ * Candidate passphrases for decryption: ALWAYS checks userPassphrase, subscriber key,
+ * hardware machine key, and local vault key so both PRX_ENC_V3 and PRX_ENC_V2 backups
+ * restore without failure after formatting or across linked devices.
  */
-function getCandidateDecryptionPassphrases(userPassphrase?: string, legacy = false): string[] {
+function getCandidateDecryptionPassphrases(userPassphrase?: string): string[] {
   const candidates = new Set<string>();
   if (userPassphrase && userPassphrase.trim()) {
     candidates.add(userPassphrase.trim());
-  }
-  if (!legacy) {
-    const vault = getVaultKey();
-    if (vault) candidates.add(vault);
-    if (typeof window !== "undefined") {
-      const installKey = localStorage.getItem("penrx_install_enc_key");
-      if (installKey) candidates.add(installKey);
-    }
-    return Array.from(candidates);
   }
 
   const subPass = getSubscriberPassphrase();
@@ -137,16 +118,16 @@ function getCandidateDecryptionPassphrases(userPassphrase?: string, legacy = fal
     if (initMid && initMid.startsWith("PRX-")) {
       candidates.add(`${MACHINE_KEY_PREFIX}${initMid.trim().toUpperCase()}`);
     }
+    const vault = localStorage.getItem(VAULT_KEY_STORAGE);
+    if (vault) candidates.add(vault);
     const installKey = localStorage.getItem("penrx_install_enc_key");
     if (installKey) candidates.add(installKey);
   }
+
   candidates.add(getMachinePassphrase());
-  return Array.from(candidates);
+  return Array.from(candidates).filter(Boolean);
 }
 
-/**
- * Derives a 256-bit AES-GCM key from a passphrase and salt using PBKDF2
- */
 async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
   const enc = new TextEncoder();
   const rawKey = passphrase || getMachinePassphrase();
@@ -172,9 +153,6 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
   );
 }
 
-/**
- * Compresses data using native CompressionStream (GZIP)
- */
 async function compressData(data: Uint8Array): Promise<Uint8Array> {
   if (typeof CompressionStream !== "undefined") {
     const cs = new CompressionStream("gzip");
@@ -187,9 +165,6 @@ async function compressData(data: Uint8Array): Promise<Uint8Array> {
   return data;
 }
 
-/**
- * Decompresses data using native DecompressionStream (GZIP)
- */
 async function decompressData(data: Uint8Array): Promise<Uint8Array> {
   if (typeof DecompressionStream !== "undefined") {
     const ds = new DecompressionStream("gzip");
@@ -221,9 +196,6 @@ export function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-/**
- * Generates an encrypted & compressed backup file (.penrx)
- */
 export async function exportEncryptedBackup(userPassphrase?: string): Promise<{
   blob: Blob;
   fileName: string;
@@ -246,7 +218,7 @@ export async function exportEncryptedBackup(userPassphrase?: string): Promise<{
 
   const nowIso = new Date().toISOString();
   const metadata: BackupMetadata = {
-    version: "1.4",
+    version: "1.68",
     exportedAt: nowIso,
     clinicName: clinicStore.clinic.name || clinicStore.clinic.nameAr || "العيادة الرئيسية",
     doctorName: clinicStore.clinic.doctorName || "الاستشاري",
@@ -270,9 +242,9 @@ export async function exportEncryptedBackup(userPassphrase?: string): Promise<{
 
   const compressedBytes = await compressData(jsonBytes);
 
-  // A doctor-chosen passphrase is portable; otherwise the device-local vault key is
-  // used so the cloud never holds anything an attacker can derive from ids.
-  const passphrase = (userPassphrase?.trim() || getVaultKey() || getMachinePassphrase());
+  // Use subscriber/machine deterministic key when no manual passphrase is given
+  // so automatic cloud backups can always be decrypted after reinstall or on linked devices!
+  const passphrase = userPassphrase?.trim() || getSubscriberPassphrase() || getMachinePassphrase();
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(passphrase, salt);
@@ -328,9 +300,6 @@ export function downloadBackupFile(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Decrypts, decompresses, and restores a raw backup buffer
- */
 export async function restoreFromBackupBuffer(
   data: Uint8Array,
   mode: "MERGE" | "REPLACE" = "MERGE",
@@ -371,7 +340,7 @@ export async function restoreFromBackupBuffer(
   const ciphertext = data.slice(headerLength + 16 + 12);
 
   let decryptedBytes: ArrayBuffer | null = null;
-  const passphrases = getCandidateDecryptionPassphrases(userPassphrase, isLegacyFile);
+  const passphrases = getCandidateDecryptionPassphrases(userPassphrase);
   for (const pass of passphrases) {
     try {
       const key = await deriveKey(pass, salt);
@@ -389,7 +358,7 @@ export async function restoreFromBackupBuffer(
       success: false,
       message: userPassphrase
         ? "فشل فك التشفير بكلمة المرور المدخلة. تأكد من صحتها ومن سلامة الملف."
-        : "هذه النسخة محمية بكلمة مرور أو بجهاز النسخة الأصلية. أدخل كلمة مرور النسخة الاحتياطية للمتابعة.",
+        : "هذه النسخة محمية بكلمة مرور مخصصة. أدخل كلمة مرور النسخة الاحتياطية للمتابعة.",
       error: "فشل فك التشفير.",
       restoredPrescriptionsCount: 0,
       restoredPatientsCount: 0,
@@ -417,8 +386,6 @@ export async function restoreFromBackupBuffer(
   let newRxCount = 0;
   let newPatCount = 0;
 
-  // Always restore clinic profile settings if the user's current profile was wiped by reinstall
-  // or when mode === "REPLACE"
   if (payload.clinic && (mode === "REPLACE" || !clinicStore.clinic.isProfileSaved || !clinicStore.clinic.specialty)) {
     clinicStore.saveClinicAndCreateFirstBranch({
       ...payload.clinic,
@@ -600,9 +567,6 @@ export async function restoreFromCloudBackup(
   return restoreFromBackupBuffer(data, mode);
 }
 
-/**
- * Silent Daily Backup & Silent Annual Auto-Archiving
- */
 export async function runDailySilentBackupAndAutoArchival(forceBackup = false): Promise<{
   didBackup: boolean;
   archivedCount: number;
@@ -637,7 +601,6 @@ export async function runDailySilentBackupAndAutoArchival(forceBackup = false): 
 
     if (hasChanges && archivedCount > 0) {
       rxStore.setSavedPrescriptions(updatedRx);
-      console.log(`[AutoArchive] Silently archived ${archivedCount} prescriptions.`);
     }
   } catch (err) {
     console.warn("[AutoArchive Error]:", err);

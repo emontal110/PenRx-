@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { analyzePrescriptionWithGemini } from "@/lib/gemini";
+import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
+import { corsHeaders, securityHeaders } from "@/lib/httpSecurity";
+import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
@@ -152,7 +155,15 @@ const CLINICAL_INTERACTION_RULES: InteractionRule[] = [
   },
 ];
 
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: { ...securityHeaders(), ...corsHeaders(request) } });
+}
+
 export async function POST(request: Request) {
+  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/ai/analyze-prescription");
+  if (!checkRateLimit(request, { maxRequests: 60, windowMs: 60_000, prefix: "ai-analyze" })) {
+    return rateLimitExceededResponse(request, 30);
+  }
   try {
     const body = await request.json();
     const items: PrescriptionItemInput[] = body.items || [];

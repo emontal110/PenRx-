@@ -1,11 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import Link from "next/link";
 import {
   User,
   Phone,
-  Calendar,
   AlertTriangle,
   Building2,
   Save,
@@ -14,9 +12,7 @@ import {
   Printer,
   MessageCircle,
   CheckCircle2,
-  Share2,
   Stethoscope,
-  Plus,
   Settings2,
   Eye,
   ZoomIn,
@@ -24,7 +20,10 @@ import {
   Pill,
   Trash2,
   X,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import Link from "next/link";
 import { usePrescriptionStore } from "@/store/usePrescriptionStore";
 import { useClinicStore } from "@/store/useClinicStore";
 import { LivePrescriptionPreview } from "@/components/prescription/LivePrescriptionPreview";
@@ -33,9 +32,8 @@ import { AiInteractionModal, InteractionAlert } from "@/components/prescription/
 import { PrintValidationModal } from "@/components/prescription/PrintValidationModal";
 import { WhatsAppShareModal } from "@/components/prescription/WhatsAppShareModal";
 import { NewPrescriptionPromptModal } from "@/components/prescription/NewPrescriptionPromptModal";
-import { PatientInfoForm } from "@/components/prescription/PatientInfoForm";
 import { showGlobalToast } from "@/components/common/GlobalToast";
-import { formatEgyptPhoneNumber, calculateBmiInfo } from "@/lib/utils";
+import { calculateBmiInfo } from "@/lib/utils";
 import {
   UnifiedPatientRecord,
   extractUnifiedPatients,
@@ -55,7 +53,6 @@ export default function NewPrescriptionPage() {
     setNotes,
     items,
     addItem,
-    updateItem,
     removeItem,
     clearItems,
     resetCurrentPrescription,
@@ -71,9 +68,10 @@ export default function NewPrescriptionPage() {
   const { branches, clinic } = useClinicStore();
 
   const [mounted, setMounted] = useState(false);
+  const [isPatientVitalsExpanded, setIsPatientVitalsExpanded] = useState(false);
+
   useEffect(() => {
     setMounted(true);
-    // Ensure visibleFields are synchronized from clinic settings if available
     try {
       const raw = localStorage.getItem("penrx_clinic_storage");
       if (raw) {
@@ -83,7 +81,7 @@ export default function NewPrescriptionPage() {
         }
       }
     } catch {}
-  }, []);
+  }, [setVisibleFields]);
 
   const bmiInfo = calculateBmiInfo(patient.height, patient.weight);
 
@@ -105,17 +103,11 @@ export default function NewPrescriptionPage() {
     if (typeof window !== "undefined") {
       const updateScale = () => {
         const w = window.innerWidth;
-        if (w < 380) {
-          setMobilePreviewScale(0.68);
-        } else if (w < 480) {
-          setMobilePreviewScale(0.76);
-        } else if (w < 640) {
-          setMobilePreviewScale(0.85);
-        } else if (w < 1024) {
-          setMobilePreviewScale(0.92);
-        } else {
-          setMobilePreviewScale(1);
-        }
+        if (w < 380) setMobilePreviewScale(0.68);
+        else if (w < 480) setMobilePreviewScale(0.76);
+        else if (w < 640) setMobilePreviewScale(0.85);
+        else if (w < 1024) setMobilePreviewScale(0.92);
+        else setMobilePreviewScale(1);
       };
       updateScale();
       window.addEventListener("resize", updateScale);
@@ -123,12 +115,10 @@ export default function NewPrescriptionPage() {
     }
   }, []);
 
-  // Background AI interaction alerts & modal state (Silent background engine)
   const [aiAlerts, setAiAlerts] = useState<InteractionAlert[]>([]);
   const [selectedAiAlert, setSelectedAiAlert] = useState<InteractionAlert | null>(null);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
-  // Background AI Drug-Drug & Allergy Conflict Checker (Silent until conflict found)
   useEffect(() => {
     if (!items || items.length === 0) {
       setAiAlerts([]);
@@ -162,10 +152,8 @@ export default function NewPrescriptionPage() {
             setAiAlerts(data.interactions);
           }
         }
-      } catch (err) {
-        console.error("Background AI conflict check error:", err);
-      }
-    }, 600);
+      } catch {}
+    }, 550);
 
     return () => clearTimeout(timer);
   }, [items, patient.allergyNotes, patient.medicalHistory]);
@@ -181,22 +169,18 @@ export default function NewPrescriptionPage() {
     setIsAiModalOpen(false);
   };
 
-  // Input ref for focusing patient name on validation failure
   const patientNameInputRef = useRef<HTMLInputElement>(null);
 
-  // Unified catalog of all patients across savedPatients and historical prescriptions
   const unifiedCatalog = React.useMemo(() => {
     return extractUnifiedPatients(savedPatients, savedPrescriptions);
   }, [savedPatients, savedPrescriptions]);
 
-  // Check if current patient matches a record in the doctor's registry
   const matchedPatientRecord = React.useMemo(() => {
     if (!patient.name || !patient.name.trim()) return null;
     const norm = normalizePatientName(patient.name);
     return unifiedCatalog.find((p) => normalizePatientName(p.name) === norm) || null;
   }, [patient.name, unifiedCatalog]);
 
-  // Click outside to dismiss suggestions dropdown
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -212,7 +196,6 @@ export default function NewPrescriptionPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Detect whether current prescription has active unsaved data
   const hasPrescriptionData = Boolean(
     (patient.name && patient.name.trim().length > 0) ||
     items.length > 0 ||
@@ -221,7 +204,6 @@ export default function NewPrescriptionPage() {
     (patient.phone && patient.phone.trim().length > 0)
   );
 
-  // Autocomplete existing patients with smart Arabic normalization & phone search
   const handleNameChange = (val: string) => {
     setPatient({ name: val });
     if (val.trim().length >= 1) {
@@ -244,28 +226,21 @@ export default function NewPrescriptionPage() {
   };
 
   const handleNameBlur = () => {
-    // Slight delay to allow mouse click on suggestion item to register
     setTimeout(() => {
       setShowSuggestionsDropdown(false);
-      // Auto-fill if exact match found and phone is still blank
       if (patient.name && (!patient.phone || !patient.phone.trim())) {
         const norm = normalizePatientName(patient.name);
         const exact = unifiedCatalog.find((p) => normalizePatientName(p.name) === norm);
-        if (exact) {
-          handleSelectPatient(exact);
-        }
+        if (exact) handleSelectPatient(exact);
       }
     }, 200);
   };
 
-  // Keyboard navigation inside the patient name input
   const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!showSuggestionsDropdown || patientSuggestions.length === 0) {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && matchedPatientRecord) {
         e.preventDefault();
-        if (matchedPatientRecord) {
-          handleSelectPatient(matchedPatientRecord);
-        }
+        handleSelectPatient(matchedPatientRecord);
       }
       return;
     }
@@ -290,7 +265,6 @@ export default function NewPrescriptionPage() {
     }
   };
 
-  // Select patient and auto-fill ALL patient records instantly
   const handleSelectPatient = (p: UnifiedPatientRecord) => {
     setPatient({
       id: p.id,
@@ -305,12 +279,10 @@ export default function NewPrescriptionPage() {
       medicalHistory: p.medicalHistory || "",
     });
 
-    // Auto-fill diagnosis if empty and patient has previous diagnosis
     if ((!diagnosis || !diagnosis.trim()) && p.lastDiagnosis) {
       setDiagnosis(p.lastDiagnosis);
     }
 
-    // Automatically make populated fields visible so the doctor can review them
     const fieldsToReveal: Partial<typeof visibleFields> = {};
     if (p.age) fieldsToReveal.showAge = true;
     if (p.gender) fieldsToReveal.showGender = true;
@@ -327,18 +299,17 @@ export default function NewPrescriptionPage() {
 
     if (p.allergyNotes) {
       showGlobalToast(
-        `✅ تم استرجاع وتعبئة كامل بيانات ${p.name} بنجاح! ⚠️ تنبيه: المريض لديه حساسية مسجلة (${p.allergyNotes})`,
+        `✅ تم استرجاع بيانات ${p.name}! ⚠️ تنبيه: حساسية مسجلة (${p.allergyNotes})`,
         "info"
       );
     } else {
       showGlobalToast(
-        `✅ تم اختيار وتعبئة كامل بيانات المريض (${p.name}) من سجل العيادة تلقائياً!`,
+        `✅ تم اختيار وتعبئة بيانات المريض (${p.name}) تلقائياً!`,
         "success"
       );
     }
   };
 
-  // Reset saved status whenever doctor edits the prescription
   useEffect(() => {
     setIsPrescriptionSaved(false);
   }, [patient.name, patient.phone, items, diagnosis, notes]);
@@ -351,36 +322,14 @@ export default function NewPrescriptionPage() {
     const branchObj = branches.find((b) => b.id === selectedBranchId);
     savePrescription(branchObj?.nameAr);
     setIsPrescriptionSaved(true);
-    
-    // Silently register any uncatalogued or custom drugs into community database
-    if (typeof window !== "undefined") {
-      items.forEach((it) => {
-        if (it.isCustom || !it.drugId) {
-          fetch(getApiUrl("/api/drugs/custom"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: it.drugName,
-              nameAr: it.drugName,
-              activeIngredient: it.activeIngredient || "تركيبة طبية خاصة",
-              dosageForm: it.doseForm || "Tablet",
-              category: "أدوية مساهمة الأطباء",
-              doctorContributor: "طبيب PenRX+",
-            }),
-          }).catch(() => {});
-        }
-      });
-    }
-
     setPatientSuggestions([]);
     setShowSuggestionsDropdown(false);
-    
-    showGlobalToast("✅ تم حفظ الروشتة في سجل العيادة بنجاح!", "success");
-    setToast("✅ تم حفظ الروشتة في سجل العيادة بنجاح! يمكنك مراجعتها أو الضغط على (روشتة جديدة +) للمريض التالي.");
-    setTimeout(() => setToast(null), 4000);
+
+    showGlobalToast("✅ تم حفظ الروشتة وأي أدوية جديدة في قاعدة البيانات بنجاح!", "success");
+    setToast("✅ تم حفظ الروشتة في سجل العيادة بنجاح!");
+    setTimeout(() => setToast(null), 3500);
   };
 
-  // Save & Print action: Ensures prescription is saved in clinic history before printing
   const handlePrintOnly = () => {
     const hasName = Boolean(patient.name && patient.name.trim().length > 0);
     const hasItems = items.length > 0;
@@ -397,7 +346,6 @@ export default function NewPrescriptionPage() {
     window.print();
   };
 
-  // Pure WhatsApp action: Does NOT save prescription automatically
   const handleShareWhatsApp = () => {
     const hasName = Boolean(patient.name && patient.name.trim().length > 0);
     const hasItems = items.length > 0;
@@ -408,77 +356,53 @@ export default function NewPrescriptionPage() {
     setIsWhatsAppModalOpen(true);
   };
 
-  // Triggered when doctor clicks "روشتة جديدة"
   const handleRequestNewPrescription = () => {
     if (hasPrescriptionData && !isPrescriptionSaved) {
-      // Unsaved data exists -> Show confirmation prompt modal to ask if they want to save or discard
       setIsNewRxPromptOpen(true);
     } else if (hasPrescriptionData && isPrescriptionSaved) {
-      // Already saved -> Directly reset for new prescription cleanly
       resetCurrentPrescription();
       setIsPrescriptionSaved(false);
-      showGlobalToast("✨ تم حفظ الروشتة مسبقاً بالسجل، وتجهيز روشتة فارغة للمريض التالي!", "success");
-      setToast("✨ تم فتح روشتة جديدة للمريض التالي بنجاح");
-      setTimeout(() => setToast(null), 3000);
+      showGlobalToast("✨ تم تجهيز روشتة فارغة للمريض التالي!", "success");
     } else {
-      setToast("ℹ️ الروشتة فارغة بالفعل ولا توجد أي بيانات لتفريغها.");
-      setTimeout(() => setToast(null), 3000);
+      setToast("ℹ️ الروشتة فارغة بالفعل.");
+      setTimeout(() => setToast(null), 2500);
     }
   };
 
-  // Option 1 from Prompt modal: Save current prescription then reset for a new one
   const handleSaveAndStartNew = () => {
     if (!patient.name.trim()) {
-      setToast("⚠️ يرجى كتابة اسم المريض أولاً لحفظ الروشتة بالسجل");
-      setTimeout(() => setToast(null), 3500);
       setIsPrintValidationOpen(true);
       return;
     }
     const branchObj = branches.find((b) => b.id === selectedBranchId);
     savePrescription(branchObj?.nameAr);
-
-    // Silently register any custom drugs
-    if (typeof window !== "undefined") {
-      items.forEach((it) => {
-        if (it.isCustom || !it.drugId) {
-          fetch(getApiUrl("/api/drugs/custom"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: it.drugName,
-              nameAr: it.drugName,
-              activeIngredient: it.activeIngredient || "تركيبة طبية خاصة",
-              dosageForm: it.doseForm || "Tablet",
-              category: "أدوية مساهمة الأطباء",
-              doctorContributor: "طبيب PenRX+",
-            }),
-          }).catch(() => {});
-        }
-      });
-    }
-
     resetCurrentPrescription();
     setIsPrescriptionSaved(false);
-    showGlobalToast("✅ تم حفظ الروشتة السابقة بالسجل وتجهيز روشتة جديدة ✨", "success");
-    setToast("✅ تم حفظ الروشتة السابقة بالسجل وتجهيز روشتة جديدة بنجاح ✨");
-    setTimeout(() => setToast(null), 4000);
+    showGlobalToast("✅ تم حفظ الروشتة السابقة وتجهيز روشتة جديدة ✨", "success");
   };
 
-  // Option 2 from Prompt modal: Discard unsaved changes and open a blank new prescription
   const handleConfirmDiscard = () => {
     resetCurrentPrescription();
     setIsPrescriptionSaved(false);
-    setToast("🗑️ تم تفريغ الروشتة الحالية نهائياً وبدء روشتة فارغة جديدة");
-    setTimeout(() => setToast(null), 3500);
+    setToast("🗑️ تم تفريغ الروشتة الحالية وبدء روشتة جديدة");
+    setTimeout(() => setToast(null), 3000);
   };
 
+  const hasExtraVitalsConfigured =
+    visibleFields.showAge ||
+    visibleFields.showGender ||
+    visibleFields.showHeight ||
+    visibleFields.showWeight ||
+    visibleFields.showBloodType ||
+    visibleFields.showMedicalHistory ||
+    visibleFields.showAllergies;
+
   return (
-    <div className="space-y-6 pb-28 sm:pb-20">
-      {/* Toast */}
+    <div className="space-y-4 sm:space-y-6 pb-28 sm:pb-20">
       {toast && (
-        <div className="p-4 rounded-2xl bg-emerald-500/20 border-2 border-emerald-500 text-emerald-200 text-xs font-black shadow-xl flex items-center justify-between animate-bounce">
+        <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500 text-emerald-200 text-xs font-black shadow-xl flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{toast}</span>
           </div>
           <button onClick={() => setToast(null)} className="text-emerald-300 font-bold">
@@ -487,39 +411,34 @@ export default function NewPrescriptionPage() {
         </div>
       )}
 
-      {/* Container 1: Prescription Editor Header & Clinic/Branch Clarification */}
-      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 bg-slate-900/90 border border-slate-800 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-lg no-print print:!hidden">
-        <div className="space-y-1">
+      {/* Top Header Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl shadow-lg no-print print:!hidden">
+        <div className="space-y-0.5">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-lg sm:text-2xl font-black text-slate-100 tracking-tight">
+            <h1 className="text-base sm:text-2xl font-black text-slate-100 tracking-tight">
               محرر وكتابة الروشتات الطبية
             </h1>
             <span
               suppressHydrationWarning
-              className="font-mono text-[10px] sm:text-[11px] font-bold text-emerald-400/90 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800"
+              className="font-mono text-[10px] sm:text-[11px] font-bold text-emerald-400 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800"
               dir="ltr"
-              title="رقم الروشتة الحالي"
             >
               {mounted ? prescriptionNo : "..."}
             </span>
           </div>
-          <p className="text-[11px] sm:text-xs text-slate-400">
-            أدخل بيانات المريض وابحث عن الأدوية بسرعة البرق مع الفحص الدوائي الذكي
+          <p className="text-[11px] text-slate-400 hidden sm:block">
+            ابحث أبجدياً أو بنظام Drug Eye (*) مع الفحص الدوائي الذكي والمشاركة المباشرة عبر واتساب
           </p>
         </div>
 
-        {/* Branch / Clinic Clarification & Selector */}
         <div className="flex items-center gap-2 shrink-0">
           {branches && branches.length > 1 ? (
-            <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800/90 px-3 py-1.5 rounded-xl shadow-inner">
-              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 shrink-0">
-                <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-                <span>الفرع:</span>
-              </span>
+            <div className="flex items-center gap-2 bg-slate-950/90 border border-slate-800 px-3 py-1.5 rounded-xl">
+              <Building2 className="w-3.5 h-3.5 text-cyan-400" />
               <select
                 value={selectedBranchId}
                 onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="bg-transparent border-none text-xs font-bold text-slate-200 focus:outline-none focus:text-emerald-300 cursor-pointer py-0.5"
+                className="bg-transparent border-none text-xs font-bold text-slate-200 focus:outline-none cursor-pointer"
               >
                 {branches.map((b) => (
                   <option key={b.id} value={b.id} className="bg-slate-900 text-slate-100">
@@ -528,460 +447,298 @@ export default function NewPrescriptionPage() {
                 ))}
               </select>
             </div>
-          ) : branches && branches.length === 1 ? (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs font-bold text-slate-300 shadow-inner">
-              <Building2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="text-[11px] text-slate-400 font-medium">الفرع:</span>
-              <span className="text-emerald-300">{branches[0].nameAr || branches[0].name}</span>
-            </div>
           ) : (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs font-bold text-slate-300 shadow-inner">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs font-bold text-emerald-300">
               <Building2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="text-emerald-300">{clinic.nameAr || clinic.name || "العيادة الرئيسية"}</span>
+              <span>{branches?.[0]?.nameAr || clinic.nameAr || clinic.name || "العيادة الرئيسية"}</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Responsive Grid: Side-by-Side on Desktop (EXE), Clean Dedicated Input Form on Mobile (APK) */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start print:!block print:!m-0 print:!p-0">
-        {/* Column 1: Input Forms (Patient Data + Drug Entry Pad + Diagnosis & Notes + Action Bar) */}
-        <div className="xl:col-span-5 2xl:col-span-5 space-y-6 no-print print:!hidden">
-          {/* Patient Information Box */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <span className="text-xs sm:text-sm font-black text-slate-200 flex items-center gap-2">
-                <User className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>بيانات المريض</span>
-              </span>
+      {/* Main Responsive Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start print:!block print:!m-0 print:!p-0">
+        {/* Column 1: Smart Prescription Workflow */}
+        <div className="xl:col-span-5 space-y-4 sm:space-y-5 no-print print:!hidden">
 
-              {/* Patient Settings Button directly beside the title */}
-              <Link
-                href="/settings?tab=patientFields"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-emerald-300 border border-slate-700 hover:border-emerald-500/50 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer group"
-                title="تخصيص وإعدادات حقول بيانات المريض بالروشتة"
-              >
-                <Settings2 className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-45 transition-transform" />
-                <span>إعدادات المريض</span>
-              </Link>
+          {/* 1. COMPACT & COLLAPSIBLE PATIENT INFO CARD */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <User className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-xs sm:text-sm font-black text-slate-100">بيانات المريض</span>
+
+                {/* Compact Summary Badges when collapsed */}
+                {bmiInfo && (
+                  <span
+                    className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono"
+                    dir="ltr"
+                  >
+                    BMI {bmiInfo.bmiFormatted} ({bmiInfo.label})
+                  </span>
+                )}
+                {patient.allergyNotes && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                    <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                    <span className="truncate max-w-[110px]">{patient.allergyNotes}</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {hasExtraVitalsConfigured && (
+                  <button
+                    type="button"
+                    onClick={() => setIsPatientVitalsExpanded(!isPatientVitalsExpanded)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-bold transition-colors cursor-pointer"
+                  >
+                    <span>{isPatientVitalsExpanded ? "طي القياسات" : "القياسات والتاريخ"}</span>
+                    {isPatientVitalsExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                  </button>
+                )}
+
+                <Link
+                  href="/settings?tab=patientFields"
+                  className="p-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-emerald-300 border border-slate-700 transition-all"
+                  title="إعدادات حقول المريض"
+                >
+                  <Settings2 className="w-3.5 h-3.5 text-emerald-400" />
+                </Link>
+              </div>
             </div>
 
-            {/* Patient Fields: Spacious, Elegant 2-Column Responsive Layout */}
-            <div className="space-y-4">
-              {/* Primary Patient Row: Name (50%) & Phone (50%) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                {/* Patient Name with Autocomplete */}
-                <div className="space-y-1.5 relative">
-                  <div className="flex items-center justify-between gap-1 flex-wrap">
-                    <label className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
-                      <User className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>اسم المريض: *</span>
-                    </label>
+            {/* Primary Row: Patient Name & WhatsApp Phone */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="space-y-1 relative">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-300 text-[11px]">اسم المريض: *</label>
+                  {matchedPatientRecord && (
+                    <span className="text-[10px] font-bold text-emerald-400">
+                      ✓ مسجل ({matchedPatientRecord.prescriptionCount} روشتة)
+                    </span>
+                  )}
+                </div>
 
-                    {matchedPatientRecord && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 animate-in fade-in duration-200">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                        <span>
-                          مسجل بالسجل
-                          {matchedPatientRecord.prescriptionCount > 0
-                            ? ` (${matchedPatientRecord.prescriptionCount} ${
-                                matchedPatientRecord.prescriptionCount === 1 ? "روشتة" : "روشتات"
-                              })`
-                            : ""}
-                        </span>
-                      </span>
-                    )}
-
-                    {patient.allergyNotes && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse">
-                        <AlertTriangle className="w-3 h-3 text-amber-400" />
-                        <span className="truncate max-w-[150px]">حساسية: {patient.allergyNotes}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="relative">
-                    <input
-                      ref={patientNameInputRef}
-                      type="text"
-                      value={patient.name}
-                      onChange={(e) => handleNameChange(e.target.value)}
-                      onFocus={handleNameFocus}
-                      onBlur={handleNameBlur}
-                      onKeyDown={handleNameKeyDown}
-                      placeholder="اكتب اسم المريض أو رقم الهاتف للترشيح الفوري من السجل..."
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-black text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
-                      autoComplete="off"
-                    />
-
-                    {patient.name && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPatient({ name: "", phone: "", age: "", height: "", weight: "", bloodType: "", allergyNotes: "", medicalHistory: "" });
-                          setPatientSuggestions([]);
-                          setShowSuggestionsDropdown(false);
-                          patientNameInputRef.current?.focus();
-                        }}
-                        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1 text-xs transition-colors"
-                        title="مسح الاسم والبيانات"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Autocomplete Dropdown */}
-                  {showSuggestionsDropdown && patientSuggestions.length > 0 && (
-                    <div
-                      ref={patientDropdownRef}
-                      className="absolute z-50 top-full mt-2 w-full min-w-[320px] sm:min-w-[440px] bg-slate-900/98 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl shadow-2xl overflow-hidden divide-y divide-slate-800/80 animate-in fade-in zoom-in-95 duration-200"
-                      dir="rtl"
+                <div className="relative">
+                  <input
+                    ref={patientNameInputRef}
+                    type="text"
+                    value={patient.name}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    onFocus={handleNameFocus}
+                    onBlur={handleNameBlur}
+                    onKeyDown={handleNameKeyDown}
+                    placeholder="اسم المريض أو رقم الهاتف للترشيح..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/90 font-black text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                    autoComplete="off"
+                  />
+                  {patient.name && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPatient({
+                          name: "",
+                          phone: "",
+                          age: "",
+                          height: "",
+                          weight: "",
+                          bloodType: "",
+                          allergyNotes: "",
+                          medicalHistory: "",
+                        });
+                        setPatientSuggestions([]);
+                        setShowSuggestionsDropdown(false);
+                        patientNameInputRef.current?.focus();
+                      }}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1 text-xs"
                     >
-                      {/* Header with count & keyboard hint */}
-                      <div className="px-4 py-2.5 bg-slate-950/90 flex items-center justify-between text-[11px] text-slate-400 font-bold border-b border-slate-800/80">
-                        <div className="flex items-center gap-1.5 text-emerald-400">
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>نتائج مطابقة من سجل المرضى ({patientSuggestions.length})</span>
-                        </div>
-                        <span className="text-[10px] text-slate-500 font-normal">
-                          اضغط Enter أو اختر بالماوس
-                        </span>
-                      </div>
+                      ✕
+                    </button>
+                  )}
+                </div>
 
-                      {/* Suggestions list */}
-                      <div className="max-h-72 overflow-y-auto divide-y divide-slate-800/50">
-                        {patientSuggestions.map((p, i) => {
-                          const isSelected = i === highlightedSuggestionIndex;
-                          return (
-                            <button
-                              key={p.id || i}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                handleSelectPatient(p);
-                              }}
-                              onMouseEnter={() => setHighlightedSuggestionIndex(i)}
-                              className={`w-full text-right p-3.5 transition-all flex flex-col gap-2 cursor-pointer ${
-                                isSelected
-                                  ? "bg-emerald-500/10 border-r-4 border-r-emerald-400 pl-3"
-                                  : "hover:bg-slate-800/60"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div
-                                    className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
-                                      p.gender === "FEMALE"
-                                        ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
-                                        : "bg-teal-500/15 text-teal-300 border border-teal-500/30"
-                                    }`}
-                                  >
-                                    {p.gender === "FEMALE" ? "👩" : "👨"}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <span className="font-black text-sm text-slate-100 block truncate">
-                                      {p.name}
-                                    </span>
-                                    {p.phone && (
-                                      <span className="font-mono text-xs text-emerald-400 flex items-center gap-1 dir-ltr inline-block">
-                                        {p.phone}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
+                {/* Patient Autocomplete Dropdown */}
+                {showSuggestionsDropdown && patientSuggestions.length > 0 && (
+                  <div
+                    ref={patientDropdownRef}
+                    className="absolute z-50 top-full mt-1.5 w-full min-w-[290px] sm:min-w-[400px] bg-slate-900/98 backdrop-blur-2xl border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden divide-y divide-slate-800/80"
+                    dir="rtl"
+                  >
+                    <div className="px-3.5 py-2 bg-slate-950/90 flex items-center justify-between text-[10px] text-emerald-400 font-bold">
+                      <span>سجل المرضى ({patientSuggestions.length})</span>
+                      <span className="text-slate-400">اضغط للتعبئة التلقائية</span>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto divide-y divide-slate-800/50">
+                      {patientSuggestions.map((p, i) => (
+                        <button
+                          key={p.id || i}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectPatient(p);
+                          }}
+                          className={`w-full text-right p-3 transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                            i === highlightedSuggestionIndex ? "bg-emerald-500/15" : "hover:bg-slate-800/60"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <span className="font-black text-xs text-slate-100 block truncate">
+                              {p.name}
+                            </span>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                              {p.phone && <span className="font-mono text-emerald-400">{p.phone}</span>}
+                              {p.age && <span>السن: {p.age}</span>}
+                            </div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 text-[10px] font-bold shrink-0">
+                            اختيار
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <span className="px-2.5 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-black flex items-center gap-1 shadow-sm">
-                                    <span>تعبئة تلقائية</span>
-                                    <CheckCircle2 className="w-3 h-3" />
-                                  </span>
-                                </div>
-                              </div>
+              {/* Patient Phone */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-300 text-[11px] flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-emerald-400" />
+                  <span>رقم الهاتف (واتساب):</span>
+                </label>
+                <div
+                  className="flex items-stretch rounded-xl overflow-hidden border border-slate-700/90 focus-within:border-emerald-500 bg-slate-950"
+                  dir="ltr"
+                >
+                  <span className="flex items-center justify-center px-3 bg-slate-900 border-r border-slate-800 text-emerald-400 font-mono font-bold text-xs select-none">
+                    +2
+                  </span>
+                  <input
+                    type="tel"
+                    value={patient.phone || ""}
+                    onChange={(e) => setPatient({ phone: e.target.value })}
+                    placeholder="01012345678"
+                    className="w-full px-3 py-2.5 bg-transparent font-mono font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none text-left text-xs"
+                  />
+                </div>
+              </div>
+            </div>
 
-                              {/* Badges / Clinical details */}
-                              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                                {p.age && (
-                                  <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 font-bold">
-                                    السن: {p.age} سنة
-                                  </span>
-                                )}
-                                {p.bloodType && (
-                                  <span className="px-2 py-0.5 rounded-lg bg-red-500/10 text-red-300 border border-red-500/20 font-bold font-mono">
-                                    🩸 {p.bloodType}
-                                  </span>
-                                )}
-                                {p.allergyNotes && (
-                                  <span className="px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-1">
-                                    <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
-                                    <span>حساسية: {p.allergyNotes}</span>
-                                  </span>
-                                )}
-                                {p.medicalHistory && (
-                                  <span className="px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-bold">
-                                    📋 {p.medicalHistory}
-                                  </span>
-                                )}
-                                {p.prescriptionCount > 0 && (
-                                  <span className="px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-300 border border-purple-500/20 font-bold">
-                                    🩺 {p.prescriptionCount}{" "}
-                                    {p.prescriptionCount === 1 ? "روشتة سابقة" : "روشتات سابقة"}
-                                  </span>
-                                )}
-                                {p.lastDiagnosis && (
-                                  <span className="px-2 py-0.5 rounded-lg bg-slate-800/80 text-slate-400 border border-slate-700/80 max-w-[220px] truncate font-medium">
-                                    آخر تشخيص: {p.lastDiagnosis}
-                                  </span>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Footer Hint */}
-                      <div className="px-4 py-2 bg-slate-950/80 text-[10px] text-slate-400 flex items-center justify-between">
-                        <span>💡 بمجرد الاختيار يتم تعبئة كافة البيانات (الهاتف، السن، الحساسية، التاريخ الطبي) تلقائياً دون إدخال إضافي</span>
-                        <span className="font-mono text-emerald-400 font-bold">سجل PenRX+</span>
-                      </div>
+            {/* Expandable Vitals, BMI & Allergy Fields (Hidden on mobile by default unless expanded, keeping search near top!) */}
+            {hasExtraVitalsConfigured && isPatientVitalsExpanded && (
+              <div className="pt-3 border-t border-slate-800/80 space-y-3 animate-in fade-in duration-150">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
+                  {visibleFields.showAge && (
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-400 text-[11px]">السن:</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={patient.age || ""}
+                        onChange={(e) => setPatient({ age: e.target.value.replace(/[^0-9]/g, "") })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+                  {visibleFields.showGender && (
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-400 text-[11px]">الجنس:</label>
+                      <select
+                        value={patient.gender || "MALE"}
+                        onChange={(e) => setPatient({ gender: e.target.value as any })}
+                        className="w-full px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-800 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="MALE">ذكر 👨</option>
+                        <option value="FEMALE">أنثى 👩</option>
+                      </select>
+                    </div>
+                  )}
+                  {visibleFields.showHeight && (
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-400 text-[11px]">الطول (سم):</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={patient.height || ""}
+                        onChange={(e) => setPatient({ height: e.target.value.replace(/[^0-9.]/g, "") })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+                  {visibleFields.showWeight && (
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-400 text-[11px]">الوزن (كجم):</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={patient.weight || ""}
+                        onChange={(e) => setPatient({ weight: e.target.value.replace(/[^0-9.]/g, "") })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+                  {visibleFields.showBloodType && (
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-400 text-[11px]">فصيلة الدم:</label>
+                      <select
+                        value={patient.bloodType || ""}
+                        onChange={(e) => setPatient({ bloodType: e.target.value })}
+                        className="w-full px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-800 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="">غير محدد</option>
+                        {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bt) => (
+                          <option key={bt} value={bt}>{bt}</option>
+                        ))}
+                      </select>
                     </div>
                   )}
                 </div>
 
-                {/* Patient Phone */}
-                <div className="space-y-1.5">
-                  <label className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
-                    <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>رقم الهاتف (واتساب):</span>
-                  </label>
-                  <div className="flex items-stretch rounded-xl overflow-hidden border border-slate-700/80 focus-within:border-emerald-500 bg-slate-950 transition-colors" dir="ltr">
-                    <span className="flex items-center justify-center px-3.5 bg-slate-900 border-r border-slate-800 text-emerald-400 font-mono font-bold text-xs select-none shadow-inner">
-                      +2
-                    </span>
-                    <input
-                      type="text"
-                      value={patient.phone || ""}
-                      onChange={(e) => setPatient({ phone: e.target.value })}
-                      placeholder="01012345678"
-                      className="w-full px-3.5 py-2.5 bg-transparent font-mono font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none text-left text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Diagnosis: Generous, Full Width Field */}
-              {visibleFields.showDiagnosis && (
-                <div className="space-y-1.5 text-xs">
-                  <label className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
-                    <Stethoscope className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>التشخيص الطبي (Diagnosis):</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={diagnosis}
-                    onChange={(e) => setDiagnosis(e.target.value)}
-                    placeholder="مثال: Acute Bronchitis, GERD, نزلة معوية، التهاب اللوزتين..."
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              )}
-
-              {/* Optional Physical/Vitals Fields (Shown only if doctor enabled them in Settings) */}
-              {(visibleFields.showAge ||
-                visibleFields.showGender ||
-                visibleFields.showHeight ||
-                visibleFields.showWeight ||
-                visibleFields.showBloodType) && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 pt-2.5 border-t border-slate-800/80 text-xs">
-                    {visibleFields.showAge && (
+                {(visibleFields.showMedicalHistory || visibleFields.showAllergies) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    {visibleFields.showMedicalHistory && (
                       <div className="space-y-1">
-                        <label className="font-bold text-slate-300">السن (بالسنوات):</label>
+                        <label className="font-bold text-cyan-400 text-[11px]">الأمراض المزمنة والتاريخ الطبي:</label>
                         <input
                           type="text"
-                          inputMode="numeric"
-                          value={patient.age || ""}
-                          onChange={(e) => setPatient({ age: e.target.value.replace(/[^0-9]/g, "") })}
-                          placeholder=""
-                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          value={patient.medicalHistory || ""}
+                          onChange={(e) => setPatient({ medicalHistory: e.target.value })}
+                          placeholder="سكري، ضغط، ربو شعبي..."
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 font-bold text-cyan-200 focus:outline-none focus:border-cyan-500"
                         />
                       </div>
                     )}
-
-                    {visibleFields.showGender && (
+                    {visibleFields.showAllergies && (
                       <div className="space-y-1">
-                        <label className="font-bold text-slate-300">الجنس:</label>
-                        <select
-                          value={patient.gender || "MALE"}
-                          onChange={(e) => setPatient({ gender: e.target.value as any })}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                        >
-                          <option value="MALE">ذكر 👨</option>
-                          <option value="FEMALE">أنثى 👩</option>
-                        </select>
-                      </div>
-                    )}
-
-                    {visibleFields.showHeight && (
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-300">الطول (سم):</label>
+                        <label className="font-bold text-amber-400 text-[11px]">تنبيه حساسية المريض (Allergies):</label>
                         <input
                           type="text"
-                          inputMode="decimal"
-                          value={patient.height || ""}
-                          onChange={(e) => setPatient({ height: e.target.value.replace(/[^0-9.]/g, "") })}
-                          placeholder=""
-                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          value={patient.allergyNotes || ""}
+                          onChange={(e) => setPatient({ allergyNotes: e.target.value })}
+                          placeholder="حساسية بنسلين، سلفا..."
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-amber-500/30 font-bold text-amber-300 focus:outline-none focus:border-amber-500"
                         />
-                      </div>
-                    )}
-
-                    {visibleFields.showWeight && (
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-300">الوزن (كجم):</label>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={patient.weight || ""}
-                          onChange={(e) => setPatient({ weight: e.target.value.replace(/[^0-9.]/g, "") })}
-                          placeholder=""
-                          className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
-                      </div>
-                    )}
-
-                    {visibleFields.showBloodType && (
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-300">فصيلة الدم:</label>
-                        <select
-                          value={patient.bloodType || ""}
-                          onChange={(e) => setPatient({ bloodType: e.target.value })}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
-                        >
-                          <option value="">غير محدد</option>
-                          <option value="A+">A+</option>
-                          <option value="A-">A-</option>
-                          <option value="B+">B+</option>
-                          <option value="B-">B-</option>
-                          <option value="AB+">AB+</option>
-                          <option value="AB-">AB-</option>
-                          <option value="O+">O+</option>
-                          <option value="O-">O-</option>
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Smart Clinical BMI Gauge & Indicator with Distinctive Colors */}
-                    {bmiInfo && (
-                      <div className="col-span-2 sm:col-span-3 md:col-span-5 p-3.5 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 space-y-2.5 shadow-lg animate-in fade-in duration-200">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl shrink-0 p-1.5 rounded-xl bg-slate-900 border border-slate-800 shadow-inner">
-                              {bmiInfo.icon}
-                            </span>
-                            <div>
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-xs font-black text-slate-100">
-                                  مؤشر كتلة الجسم (BMI):
-                                </span>
-                                <span
-                                  className="font-mono font-black text-sm px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-700/80"
-                                  style={{ color: bmiInfo.colorHex }}
-                                  dir="ltr"
-                                >
-                                  {bmiInfo.bmiFormatted} kg/m²
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-slate-400 mt-0.5">
-                                الوزن المثالي المقترح لهذا الطول:{" "}
-                                <strong className="text-emerald-400 font-mono">
-                                  {bmiInfo.idealWeightMin} – {bmiInfo.idealWeightMax} كجم
-                                </strong>
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`px-3 py-1 rounded-xl text-xs font-black border tracking-wide transition-all ${bmiInfo.badgeClass}`}
-                            >
-                              {bmiInfo.label}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Distinctive Visual BMI Spectrum Gauge */}
-                        <div className="space-y-1 pt-1">
-                          <div className="relative h-2 w-full rounded-full overflow-hidden flex bg-slate-950 border border-slate-800 shadow-inner">
-                            {/* 1. Underweight (Sky) */}
-                            <div className="h-full w-[20%] bg-gradient-to-r from-sky-500 to-blue-500" title="نقص وزن (< 18.5)" />
-                            {/* 2. Normal (Emerald) */}
-                            <div className="h-full w-[26%] bg-gradient-to-r from-emerald-500 to-teal-400" title="وزن مثالي (18.5 - 24.9)" />
-                            {/* 3. Overweight (Amber) */}
-                            <div className="h-full w-[20%] bg-gradient-to-r from-amber-400 to-orange-400" title="وزن زائد (25 - 29.9)" />
-                            {/* 4. Obese 1 (Orange-Red) */}
-                            <div className="h-full w-[20%] bg-gradient-to-r from-orange-500 to-rose-500" title="سمنة درجة أولى (30 - 34.9)" />
-                            {/* 5. Severe (Rose-Crimson) */}
-                            <div className="h-full w-[14%] bg-gradient-to-r from-rose-600 to-purple-600" title="سمنة مفرطة (>= 35)" />
-                          </div>
-
-                          {/* Gauge Labels */}
-                          <div className="flex items-center justify-between text-[9px] font-bold text-slate-500 px-0.5">
-                            <span className="text-sky-400 font-mono">&lt; 18.5 نحافة</span>
-                            <span className="text-emerald-400 font-mono">18.5 - 25 مثالي</span>
-                            <span className="text-amber-400 font-mono">25 - 30 زائد</span>
-                            <span className="text-rose-400 font-mono">&gt; 30 سمنة</span>
-                          </div>
-                        </div>
                       </div>
                     )}
                   </div>
                 )}
-
-              {/* Chronic Medical History & Allergies (If enabled in Settings) */}
-              {(visibleFields.showMedicalHistory || visibleFields.showAllergies) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-slate-800/80 text-xs">
-                  {visibleFields.showMedicalHistory && (
-                    <div className="space-y-1">
-                      <label className="font-bold text-cyan-400">الأمراض المزمنة والتاريخ الطبي:</label>
-                      <input
-                        type="text"
-                        value={patient.medicalHistory || ""}
-                        onChange={(e) => setPatient({ medicalHistory: e.target.value })}
-                        placeholder="مثال: سكري، ضغط، ربو شعبي..."
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-cyan-500/30 font-bold text-cyan-200 placeholder:text-cyan-500/40 focus:outline-none focus:border-cyan-500"
-                      />
-                    </div>
-                  )}
-
-                  {visibleFields.showAllergies && (
-                    <div className="space-y-1">
-                      <label className="font-bold text-amber-400 flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>تنبيه حساسية المريض (Allergies):</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={patient.allergyNotes || ""}
-                        onChange={(e) => setPatient({ allergyNotes: e.target.value })}
-                        placeholder="مثال: حساسية بنسلين، حساسية سلفا، قرحة معدة..."
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-amber-500/30 font-bold text-amber-300 placeholder:text-amber-500/40 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
-          {/* In-Place Drug Search & Add Pad */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <span className="text-xs font-black text-slate-200 flex items-center gap-2">
+          {/* 2. GIANT MULTI-SOURCE DRUG SEARCH & ADD PAD (Near Top of Page!) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <span className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-2">
                 <Pill className="w-4 h-4 text-emerald-400" />
-                <span>إضافة دواء جديد للروشتة</span>
+                <span>محرك بحث وإضافة الأدوية الذكي</span>
               </span>
               <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                {items.length} {items.length === 1 ? "دواء" : "أدوية"}
+                {items.length} {items.length === 1 ? "دواء بالروشتة" : "أدوية بالروشتة"}
               </span>
             </div>
 
@@ -992,48 +749,12 @@ export default function NewPrescriptionPage() {
             />
           </div>
 
-          {/* Diagnosis & Instructions Card */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <span className="text-xs font-black text-slate-200 flex items-center gap-2">
-                <Stethoscope className="w-4 h-4 text-cyan-400" />
-                <span>التشخيص الطبي والتعليمات الختامية</span>
-              </span>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              {!visibleFields.showDiagnosis && (
-                <div className="space-y-1.5">
-                  <label className="font-bold text-slate-300">التشخيص الطبي (Diagnosis):</label>
-                  <input
-                    type="text"
-                    value={diagnosis}
-                    onChange={(e) => setDiagnosis(e.target.value)}
-                    placeholder="اكتب التشخيص الطبي (مثال: التهاب حاد بالحلق، نزلة معوية...)"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
-                  />
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-300">تعليمات وإرشادات المريض (تطبع بأسفل الروشتة):</label>
-                <textarea
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع للاطمئنان..."
-                  className="w-full px-4 py-2 rounded-xl bg-slate-950 border border-slate-700/80 font-medium text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Prescribed Items Quick Summary & Action Bar */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <span className="text-xs font-black text-slate-200 flex items-center gap-2">
+          {/* 3. PRESCRIBED DRUGS LIST (Placed IMMEDIATELY Below Search Pad so Doctor Sees Added Drugs Instantly!) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <span className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-400" />
-                <span>قائمة الأدوية بالروشتة ({items.length})</span>
+                <span>قائمة الأدوية المضافة بالروشتة ({items.length})</span>
               </span>
 
               {items.length > 0 && (
@@ -1047,31 +768,66 @@ export default function NewPrescriptionPage() {
               )}
             </div>
 
+            {/* AI Clinical Conflict Warnings Banner */}
+            {aiAlerts.length > 0 && (
+              <div className="space-y-1.5">
+                {aiAlerts.map((alert) => (
+                  <button
+                    key={alert.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedAiAlert(alert);
+                      setIsAiModalOpen(true);
+                    }}
+                    className="w-full text-right p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-xs text-rose-200 flex items-center justify-between gap-2 hover:bg-rose-500/25 transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+                      <span className="font-bold truncate">{alert.titleAr}</span>
+                    </div>
+                    <span className="text-[10px] bg-rose-500/30 px-2 py-0.5 rounded font-bold shrink-0">
+                      التفاصيل
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {items.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-4">لم يتم إضافة أي أدوية حتى الآن</p>
+              <div className="text-xs text-slate-500 text-center py-5 border border-dashed border-slate-800 rounded-2xl">
+                ابحث عن الدواء بالأعلى واضغط &quot;إدراج&quot; ليظهر هنا فوراً
+              </div>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {items.map((it, idx) => (
                   <div
                     key={it.id}
-                    className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/80 flex items-center justify-between gap-3 text-xs"
+                    className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800/90 hover:border-emerald-500/30 flex items-center justify-between gap-3 text-xs transition-all"
                   >
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center gap-2">
                         <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold text-[10px] flex items-center justify-center shrink-0">
                           {idx + 1}
                         </span>
-                        <h4 className="font-black text-slate-100 truncate">{it.drugName}</h4>
+                        <h4 className="font-black text-slate-100 truncate" dir="ltr">
+                          {it.drugName}
+                        </h4>
                       </div>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        {it.doseForm} • {it.frequency} {it.duration ? `• ${it.duration}` : ""}
+                      <p className="text-[11px] text-emerald-300/90 truncate pr-7">
+                        {it.doseQuantity} {it.doseForm} • {it.frequency}{" "}
+                        {it.duration ? `• ${it.duration}` : ""}
                       </p>
+                      {it.instructions && (
+                        <p className="text-[10px] text-slate-400 truncate pr-7">
+                          ملاحظة: {it.instructions}
+                        </p>
+                      )}
                     </div>
 
                     <button
                       type="button"
                       onClick={() => removeItem(it.id)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
                       title="حذف هذا الدواء"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1080,13 +836,51 @@ export default function NewPrescriptionPage() {
                 ))}
               </div>
             )}
+          </div>
 
-            {/* Quick Actions Grid */}
+          {/* 4. DIAGNOSIS & CLOSING INSTRUCTIONS CARD */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <span className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-2">
+                <Stethoscope className="w-4 h-4 text-cyan-400" />
+                <span>التشخيص الطبي والتعليمات الختامية</span>
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-300 text-[11px]">
+                  التشخيص الطبي (Diagnosis):
+                </label>
+                <input
+                  type="text"
+                  value={diagnosis}
+                  onChange={(e) => setDiagnosis(e.target.value)}
+                  placeholder="مثال: Acute Bronchitis, التهاب حاد بالحلق، نزلة معوية..."
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/80 font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-300 text-[11px]">
+                  تعليمات وإرشادات المريض (تطبع بأسفل الروشتة):
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع..."
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700/80 font-medium text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Unified Action Buttons Bar */}
             <div className="pt-2 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
                 onClick={handlePrintOnly}
-                className="py-3 px-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                className="py-3 px-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>حفظ وطباعة</span>
@@ -1095,10 +889,10 @@ export default function NewPrescriptionPage() {
               <button
                 type="button"
                 onClick={handleShareWhatsApp}
-                className="py-3 px-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-700 hover:brightness-110 text-white font-black text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                className="py-3 px-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:brightness-110 text-white font-black text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
-                <span>واتساب</span>
+                <span>واتساب مباشر</span>
               </button>
 
               <button
@@ -1120,10 +914,11 @@ export default function NewPrescriptionPage() {
               </button>
             </div>
           </div>
+
         </div>
 
-        {/* Column 2: Live Prescription Sheet (Desktop / EXE Side-by-Side View & Dedicated Print Target) */}
-        <div className="hidden xl:block print:!block print:!w-full print:!m-0 print:!p-0 print:!static xl:col-span-7 2xl:col-span-7 sticky top-20">
+        {/* Column 2: Live Prescription Sheet (Desktop Side-by-Side View & Print Target) */}
+        <div className="hidden xl:block print:!block print:!w-full print:!m-0 print:!p-0 print:!static xl:col-span-7 sticky top-20">
           <LivePrescriptionPreview
             prescriptionNo={prescriptionNo}
             patient={patient}
@@ -1146,28 +941,26 @@ export default function NewPrescriptionPage() {
         </div>
       </div>
 
-      {/* Mobile Floating Action Button (FAB) for Live Prescription Sheet */}
+      {/* Mobile Floating Preview Pill */}
       <div className="xl:hidden fixed bottom-20 left-3 sm:left-4 z-40 select-none">
         <button
           type="button"
           onClick={() => setIsMobilePreviewOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-[11px] shadow-xl shadow-emerald-950/70 border border-emerald-300 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
-          title="معاينة الروشتة الحية"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/70 border border-emerald-300 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
         >
-          <Eye className="w-3.5 h-3.5 stroke-[2.5]" />
-          <span>معاينة</span>
+          <Eye className="w-4 h-4 stroke-[2.5]" />
+          <span>معاينة الروشتة</span>
           {items.length > 0 && (
-            <span className="w-4 h-4 rounded-full bg-slate-950 text-emerald-400 text-[9px] font-mono flex items-center justify-center font-bold">
+            <span className="w-5 h-5 rounded-full bg-slate-950 text-emerald-400 text-[10px] font-mono flex items-center justify-center font-bold">
               {items.length}
             </span>
           )}
         </button>
       </div>
 
-      {/* Mobile Live Prescription Sheet Modal (with Responsive Scaling & Pinch/Zoom Controls) */}
+      {/* Mobile Live Prescription Sheet Modal */}
       {isMobilePreviewOpen && (
         <div className="xl:hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex flex-col animate-in fade-in duration-200">
-          {/* Modal Header */}
           <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-emerald-400" />
@@ -1178,35 +971,30 @@ export default function NewPrescriptionPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Zoom Controls */}
               <button
                 type="button"
                 onClick={() => setMobilePreviewScale((s) => Math.max(0.5, s - 0.1))}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                title="تصغير"
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
               >
                 <ZoomOut className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 onClick={() => setMobilePreviewScale((s) => Math.min(1.2, s + 0.1))}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                title="تكبير"
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
               >
                 <ZoomIn className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 onClick={() => setIsMobilePreviewOpen(false)}
-                className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 transition-colors"
-                title="إغلاق المعاينة"
+                className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30"
               >
                 <X className="w-5 h-5 stroke-[2.5]" />
               </button>
             </div>
           </div>
 
-          {/* Modal Content with Responsive Scaling */}
           <div className="flex-1 overflow-x-auto overflow-y-auto p-4 flex justify-center items-start">
             <div
               style={{
@@ -1237,7 +1025,6 @@ export default function NewPrescriptionPage() {
         </div>
       )}
 
-      {/* Modern Print Validation Alert Modal */}
       <PrintValidationModal
         isOpen={isPrintValidationOpen}
         onClose={() => setIsPrintValidationOpen(false)}
@@ -1248,7 +1035,6 @@ export default function NewPrescriptionPage() {
         }}
       />
 
-      {/* WhatsApp Share Options Modal (Direct to Patient Phone without App Chooser) */}
       <WhatsAppShareModal
         isOpen={isWhatsAppModalOpen}
         onClose={() => setIsWhatsAppModalOpen(false)}
@@ -1267,7 +1053,6 @@ export default function NewPrescriptionPage() {
         }}
       />
 
-      {/* 2-Step Confirmation Modal for Starting a New Prescription when unsaved data exists */}
       <NewPrescriptionPromptModal
         isOpen={isNewRxPromptOpen}
         onClose={() => setIsNewRxPromptOpen(false)}
@@ -1278,7 +1063,6 @@ export default function NewPrescriptionPage() {
         onConfirmDiscard={handleConfirmDiscard}
       />
 
-      {/* AI Drug Conflict Safety Guidance Modal */}
       <AiInteractionModal
         isOpen={isAiModalOpen}
         onClose={() => setIsAiModalOpen(false)}
@@ -1288,4 +1072,3 @@ export default function NewPrescriptionPage() {
     </div>
   );
 }
-

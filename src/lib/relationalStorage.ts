@@ -9,13 +9,6 @@ export interface ClinicMetaInfo {
   address?: string;
 }
 
-/**
- * Relational mirror of the prescription (Clinic -> Branch -> User -> Patient ->
- * Prescription -> PrescriptionItems). Only reachable from server route handlers
- * and only when ENABLE_RELATIONAL_DUAL_WRITE=true; access is env-keyed, never
- * sourced from code.
- */
-
 async function listRow<T = any>(table: string, query: string): Promise<T[]> {
   try {
     const rows = await supabaseRest<T[]>(table, { query });
@@ -47,51 +40,55 @@ export async function savePrescriptionRelational(
   subscriberId?: string
 ) {
   const now = new Date().toISOString();
+  const cleanSub = (subscriberId || "default").replace(/[^a-zA-Z0-9_-]/g, "");
+  const tenantClinicId = `clinic-${cleanSub}`;
+  const tenantBranchId = `branch-${cleanSub}`;
+  const tenantDoctorId = `doctor-${cleanSub}`;
 
   const clinicId = await firstOrCreate(
     "Clinic",
-    "limit=1",
+    `id=eq.${encodeURIComponent(tenantClinicId)}&limit=1`,
     {
-      id: "clinic-default",
+      id: tenantClinicId,
       name:
         clinicData?.name ||
-        (clinicData?.doctorName ? `عيادة د. ${clinicData.doctorName}` : "عيادة PenRX+ الطبية"),
+        (clinicData?.doctorName ? `عيادة د. ${clinicData.doctorName}` : `عيادة المشترك ${cleanSub}`),
       specialty: clinicData?.specialty || "طب عام واستشارات",
       headerText: clinicData?.name || null,
       footerText: clinicData?.phone || null,
       updatedAt: now,
     },
-    "clinic-default"
+    tenantClinicId
   );
 
   const branchId = await firstOrCreate(
     "Branch",
     `clinicId=eq.${encodeURIComponent(clinicId)}&limit=1`,
     {
-      id: "branch-default",
+      id: tenantBranchId,
       clinicId,
       name: rx.branchName || "الفرع الرئيسي",
       address: clinicData?.address || "العيادة الرئيسية",
-      phone: clinicData?.phone || null,
+      phone: clinicData?.phone || "01000000000",
       isDefault: true,
       updatedAt: now,
     },
-    "branch-default"
+    tenantBranchId
   );
 
   const doctorId = await firstOrCreate(
     "User",
     `clinicId=eq.${encodeURIComponent(clinicId)}&role=eq.DOCTOR&limit=1`,
     {
-      id: "doctor-default",
+      id: tenantDoctorId,
       clinicId,
       name: clinicData?.doctorName || "طبيب العيادة",
-      email: `doctor-${clinicId.slice(0, 8)}@penrx.local`,
+      email: `doctor-${cleanSub.toLowerCase()}@penrx.local`,
       role: "DOCTOR",
       specialty: clinicData?.specialty || "استشاري",
       updatedAt: now,
     },
-    "doctor-default"
+    tenantDoctorId
   );
 
   const patientName = (rx.patient.name || "مريض بدون اسم").trim();
@@ -100,11 +97,12 @@ export async function savePrescriptionRelational(
     ? `clinicId=eq.${encodeURIComponent(clinicId)}&phone=eq.${encodeURIComponent(patientPhone)}&limit=1`
     : `clinicId=eq.${encodeURIComponent(clinicId)}&name=eq.${encodeURIComponent(patientName)}&limit=1`;
 
+  const fallbackPatId = `patient-${cleanSub}-${Date.now()}`;
   const patientId = await firstOrCreate(
     "Patient",
     patientQuery,
     {
-      id: `patient-${Date.now()}`,
+      id: fallbackPatId,
       clinicId,
       name: patientName,
       phone: patientPhone || null,
@@ -112,7 +110,7 @@ export async function savePrescriptionRelational(
       gender: rx.patient.gender || null,
       updatedAt: now,
     },
-    `patient-${Date.now()}`
+    fallbackPatId
   );
 
   const prescriptionRecord = {
@@ -165,9 +163,15 @@ export async function savePrescriptionRelational(
   return prescriptionRecord;
 }
 
-/** Deletes a prescription (items cascade) from the relational tables. */
-export async function deletePrescriptionRelational(prescriptionIdOrNo: string): Promise<boolean> {
-  const scoped = `or=(id.eq.${encodeURIComponent(prescriptionIdOrNo)},prescriptionNo.eq.${encodeURIComponent(prescriptionIdOrNo)})`;
+/** Deletes a prescription (items cascade) from the relational tables, strictly tenant-scoped. */
+export async function deletePrescriptionRelational(
+  prescriptionIdOrNo: string,
+  subscriberId?: string
+): Promise<boolean> {
+  const baseScope = `or=(id.eq.${encodeURIComponent(prescriptionIdOrNo)},prescriptionNo.eq.${encodeURIComponent(prescriptionIdOrNo)})`;
+  const scoped = subscriberId
+    ? `${baseScope}&subscriberId=eq.${encodeURIComponent(subscriberId)}`
+    : baseScope;
   try {
     await supabaseRest("Prescription", { method: "DELETE", query: scoped });
     return true;
@@ -177,12 +181,16 @@ export async function deletePrescriptionRelational(prescriptionIdOrNo: string): 
   }
 }
 
-/** Archives or un-archives a prescription in the relational tables. */
+/** Archives or un-archives a prescription in the relational tables, strictly tenant-scoped. */
 export async function setPrescriptionArchiveStatus(
   prescriptionIdOrNo: string,
-  isArchived: boolean
+  isArchived: boolean,
+  subscriberId?: string
 ): Promise<boolean> {
-  const scoped = `or=(id.eq.${encodeURIComponent(prescriptionIdOrNo)},prescriptionNo.eq.${encodeURIComponent(prescriptionIdOrNo)})`;
+  const baseScope = `or=(id.eq.${encodeURIComponent(prescriptionIdOrNo)},prescriptionNo.eq.${encodeURIComponent(prescriptionIdOrNo)})`;
+  const scoped = subscriberId
+    ? `${baseScope}&subscriberId=eq.${encodeURIComponent(subscriberId)}`
+    : baseScope;
   try {
     await supabaseRest("Prescription", {
       method: "PATCH",
