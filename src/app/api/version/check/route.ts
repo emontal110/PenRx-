@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import versionConfig from "@/config/version.json";
 import packageInfo from "../../../../../package.json";
+import { proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,18 @@ export async function GET(req: Request) {
     ? clientVersion.replace(/^v/, "").trim()
     : versionConfig.version || (packageInfo.version ? packageInfo.version.replace(/\.0$/, "") : "1.68");
   const repo = versionConfig.githubRepo || "emontal110/PenRx-";
-  const hasToken = Boolean(getGithubAuthToken());
+  const token = getGithubAuthToken();
+  const hasToken = Boolean(token);
+
+  // Packaged desktop runtime (without local secrets) transparently forwards
+  // to the authoritative Vercel deployment which holds GITHUB_RELEASE_TOKEN.
+  if (!hasToken && !process.env.VERCEL && !process.env.NEXT_PUBLIC_VERCEL_ENV) {
+    try {
+      return await proxyToCloud(req, "/api/version/check");
+    } catch (proxyErr) {
+      console.warn("[VersionCheck] Cloud proxy notice:", proxyErr);
+    }
+  }
 
   try {
     const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {

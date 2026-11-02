@@ -72,7 +72,7 @@
         "owner": "emontal110",
         "repo": "PenRx-",
         "releaseType": "release",
-        "private": false
+        "private": true
       }
     ],
     "files": [

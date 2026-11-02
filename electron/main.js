@@ -1028,6 +1028,13 @@ async function ensureServerRunning() {
       }
     });
 
+    serverProcess.on("exit", (code) => {
+      if (!resolved) {
+        console.warn(`[PenRX+ Server] Process exited early with code ${code}, falling back to cloud`);
+        finish(fallbackCloudUrl);
+      }
+    });
+
     const pollInterval = setInterval(async () => {
       if (resolved) {
         clearInterval(pollInterval);
@@ -1038,14 +1045,14 @@ async function ensureServerRunning() {
         clearInterval(pollInterval);
         finish(`http://localhost:${targetPort}`);
       }
-    }, 300);
+    }, 150);
 
     setTimeout(() => {
       clearInterval(pollInterval);
       if (!resolved) {
         finish(fallbackCloudUrl);
       }
-    }, 12000);
+    }, 4500);
   });
 }
 
@@ -1238,8 +1245,11 @@ function createMainWindow(targetUrl) {
   };
 
   mainWindow.webContents.once("did-finish-load", revealMainWindow);
+  mainWindow.webContents.once("dom-ready", () => {
+    setTimeout(revealMainWindow, 400);
+  });
   ipcMain.once("app-ready", revealMainWindow);
-  setTimeout(revealMainWindow, 9000);
+  setTimeout(revealMainWindow, 4000);
 
   mainWindow.webContents.on("before-input-event", (event, input) => {
     if (input.type === "keyDown") {
