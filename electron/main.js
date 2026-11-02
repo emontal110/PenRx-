@@ -7,6 +7,17 @@ const http = require("http");
 const { exec, execSync, fork, spawn } = require("child_process");
 
 // ─────────────────────────────────────────────────────────────────────────────
+// HARDWARE ACCELERATION & GPU SAFEGUARD
+// Prevents black-screen window glitches caused by conflicting Intel/Windows DWM GPU drivers
+// ─────────────────────────────────────────────────────────────────────────────
+if (process.platform === "win32") {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("disable-gpu-compositing");
+  app.commandLine.appendSwitch("disable-software-rasterizer");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SECURITY POLICY (shared by IPC, window.open and navigation guards)
 //
 // The renderer only ever needs two kinds of outbound links:
@@ -319,7 +330,7 @@ app.on("second-instance", () => {
 
 // Real OS working directory for child processes (never an .asar file path)
 const processCwd = app.isPackaged
-  ? process.resourcesPath
+  ? (fs.existsSync(path.join(process.resourcesPath, "app")) ? path.join(process.resourcesPath, "app") : process.resourcesPath)
   : path.resolve(__dirname, "..");
 
 // --- HARDWARE FINGERPRINTING ENGINE (Immutable across uninstalls/reinstalls) ---
@@ -1047,8 +1058,12 @@ async function ensureServerRunning() {
   }
 
   return new Promise((resolve) => {
-    const serverScript = path.join(__dirname, "start-server.js");
+    const packagedServerScript = path.join(process.resourcesPath, "app", "electron", "start-server.js");
+    const serverScript = (app.isPackaged && fs.existsSync(packagedServerScript))
+      ? packagedServerScript
+      : path.join(__dirname, "start-server.js");
     const targetPort = 3000;
+    const fallbackCloudUrl = process.env.PENRX_CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://pen-rx.vercel.app";
 
     console.log(`[PenRX+ Electron] Spawning background Next.js server via ${serverScript}...`);
 
@@ -1091,10 +1106,17 @@ async function ensureServerRunning() {
       }
     }, 300);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       clearInterval(pollInterval);
       if (!activeServerUrl) {
-        activeServerUrl = `http://localhost:${targetPort}`;
+        console.warn("[PenRX+ Electron] Local Next.js server startup timeout. Testing cloud fallback...");
+        const cloudUp = await pingUrl(fallbackCloudUrl).catch(() => false);
+        if (cloudUp) {
+          console.log(`[PenRX+ Electron] Cloud fallback ready: ${fallbackCloudUrl}`);
+          activeServerUrl = fallbackCloudUrl;
+        } else {
+          activeServerUrl = `http://localhost:${targetPort}`;
+        }
         resolve(activeServerUrl);
       }
     }, 15000);
@@ -1398,8 +1420,9 @@ function createMainWindow(targetUrl) {
     }, 220);
   };
 
+  mainWindow.webContents.once("did-finish-load", revealMainWindow);
   ipcMain.once("app-ready", revealMainWindow);
-  setTimeout(revealMainWindow, 4500);
+  setTimeout(revealMainWindow, 12000);
 
   mainWindow.webContents.on("before-input-event", (event, input) => {
     if (input.type === "keyDown") {
@@ -1441,13 +1464,21 @@ function createMainWindow(targetUrl) {
   // webview/BrowserWindow created from this one.
   mainWindow.webContents.on("will-attach-webview", (event) => event.preventDefault());
 
+  let localhostFailCount = 0;
   mainWindow.webContents.on("did-fail-load", (_event, _errorCode, _errorDescription, validatedURL) => {
     if (validatedURL && validatedURL.includes("localhost")) {
-      setTimeout(() => {
-        if (mainWindow && !mainWindow.isDestroyed() && activeServerUrl) {
-          mainWindow.loadURL(`${activeServerUrl}/`);
-        }
-      }, 800);
+      localhostFailCount++;
+      if (localhostFailCount <= 3) {
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed() && activeServerUrl) {
+            mainWindow.loadURL(`${activeServerUrl}/`);
+          }
+        }, 1200);
+      } else {
+        const cloudFallback = process.env.PENRX_CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://pen-rx.vercel.app";
+        console.warn(`[PenRX+ Electron] Local server unreachable. Redirecting to cloud portal (${cloudFallback})...`);
+        mainWindow.loadURL(`${cloudFallback}/`);
+      }
     }
   });
 

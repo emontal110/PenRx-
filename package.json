@@ -58,7 +58,7 @@
     "appId": "com.penrxplus.app",
     "productName": "PenRX+",
     "compression": "normal",
-    "asar": true,
+    "asar": false,
     "publish": [
       {
         "provider": "github",
