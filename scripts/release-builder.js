@@ -104,14 +104,27 @@ console.log(`[*] Project Path: ${rootDir}`);
 console.log(`[*] Start Time:   ${new Date().toLocaleTimeString("en-US")}`);
 console.log(`[*] Push to Git:  ${shouldPush ? "ENABLED" : "DISABLED (Local build only)"}\n`);
 
-// Ensure releasesDir exists and clean any old subfolders
+// Ensure releasesDir exists and clean any old version files/subfolders
 if (!fs.existsSync(releasesDir)) {
   fs.mkdirSync(releasesDir, { recursive: true });
 } else {
   const items = fs.readdirSync(releasesDir, { withFileTypes: true });
   for (const item of items) {
-    if (item.isDirectory()) {
-      fs.rmSync(path.join(releasesDir, item.name), { recursive: true, force: true });
+    const fullPath = path.join(releasesDir, item.name);
+    try {
+      if (item.isDirectory()) {
+        fs.rmSync(fullPath, { recursive: true, force: true });
+      } else if (
+        item.name.startsWith("PenRX+-Setup") ||
+        item.name.endsWith(".blockmap") ||
+        item.name === "latest.yml" ||
+        item.name === "PenRX+.exe" ||
+        item.name.endsWith(".txt")
+      ) {
+        fs.unlinkSync(fullPath);
+      }
+    } catch (e) {
+      console.warn(`[!] Note: could not delete old release artifact ${item.name}:`, e.message);
     }
   }
 }
@@ -323,6 +336,19 @@ console.log("⚡ Compressing and packaging Windows Setup installer (optimized fa
 run("npx electron-builder --win --publish never");
 
 if (fs.existsSync(distElectron)) {
+  // Clear any existing setup executables, manifests, or blockmaps before copying new ones
+  for (const item of fs.readdirSync(releasesDir)) {
+    if (
+      (item.startsWith("PenRX+-Setup") && (item.endsWith(".exe") || item.endsWith(".blockmap"))) ||
+      item === "latest.yml" ||
+      item === "PenRX+.exe"
+    ) {
+      try {
+        fs.unlinkSync(path.join(releasesDir, item));
+      } catch {}
+    }
+  }
+
   const winUnpacked = path.join(distElectron, "win-unpacked");
   if (fs.existsSync(winUnpacked)) {
     const mainExe = path.join(winUnpacked, "PenRX+.exe");
