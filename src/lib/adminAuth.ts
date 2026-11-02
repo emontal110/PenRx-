@@ -71,7 +71,10 @@ export async function verifySupabaseAdminAuth(
     ).trim().replace(/\/+$/, "");
 
     const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-    if (!projectUrl || !serviceKey) {
+    const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
+    const apiKey = anonKey || serviceKey;
+
+    if (!projectUrl || (!serviceKey && !anonKey)) {
       return { ok: false, reason: "إعدادات Supabase غير مهيأة على السيرفر." };
     }
 
@@ -80,7 +83,8 @@ export async function verifySupabaseAdminAuth(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: serviceKey,
+        apikey: apiKey,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ email: email.trim(), password }),
     });
@@ -118,7 +122,10 @@ export async function sendSupabasePasswordReset(email: string): Promise<{ ok: bo
     ).trim().replace(/\/+$/, "");
 
     const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-    if (!projectUrl || !serviceKey) {
+    const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
+    const apiKey = anonKey || serviceKey;
+
+    if (!projectUrl || (!serviceKey && !anonKey)) {
       return { ok: false, message: "إعدادات Supabase غير مهيأة على السيرفر." };
     }
 
@@ -126,7 +133,8 @@ export async function sendSupabasePasswordReset(email: string): Promise<{ ok: bo
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: serviceKey,
+        apikey: apiKey,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ email: email.trim() }),
     });
