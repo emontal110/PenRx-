@@ -22,6 +22,12 @@ echo [i] Project Directory: %CD%
 echo.
 
 if not exist "out" mkdir "out"
+if exist "public\error.html" copy /Y "public\error.html" "out\error.html" >nul 2>&1
+if exist "public\logo-penrx.jpg" copy /Y "public\logo-penrx.jpg" "out\logo-penrx.jpg" >nul 2>&1
+if exist "public\favicon.ico" copy /Y "public\favicon.ico" "out\favicon.ico" >nul 2>&1
+if exist "public\icon-192.png" copy /Y "public\icon-192.png" "out\icon-192.png" >nul 2>&1
+if exist "public\icon-512.png" copy /Y "public\icon-512.png" "out\icon-512.png" >nul 2>&1
+if exist "public\apple-touch-icon.png" copy /Y "public\apple-touch-icon.png" "out\apple-touch-icon.png" >nul 2>&1
 if exist "public\mobile.html" (
     copy /Y "public\mobile.html" "out\index.html" >nul 2>&1
 ) else if exist "public\download.html" (
