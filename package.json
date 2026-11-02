@@ -49,6 +49,7 @@
     "electron-builder": "^24.13.3",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
+    "png-to-ico": "^3.0.2",
     "postcss": "^8.4.45",
     "tailwindcss": "^3.4.11",
     "tweetsodium": "^0.0.4",
@@ -63,9 +64,7 @@
     "asarUnpack": [
       ".next/**/*",
       "electron/start-server.js",
-      "public/**/*",
-      "next.config.mjs",
-      "node_modules/next/**/*"
+      "public/**/*"
     ],
     "publish": [
       {
@@ -95,7 +94,7 @@
         "nsis"
       ],
       "icon": "public/icon.ico",
-      "artifactName": "PenRX+-Setup.${ext}",
+      "artifactName": "PenRX+-Setup-${version}.${ext}",
       "legalTrademarks": "PenRX+ Medical Systems",
       "signAndEditExecutable": false
     },
@@ -108,7 +107,7 @@
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
       "shortcutName": "PenRX+",
-      "artifactName": "PenRX+-Setup.${ext}",
+      "artifactName": "PenRX+-Setup-${version}.${ext}",
       "installerIcon": "public/icon.ico",
       "uninstallerIcon": "public/icon.ico"
     }

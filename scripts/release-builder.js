@@ -311,21 +311,23 @@ if (fs.existsSync(distElectron)) {
   const exeInstaller = files.find((f) => f.endsWith(".exe") && !f.includes("win-unpacked"));
   if (exeInstaller) {
     const installerSource = path.join(distElectron, exeInstaller);
+    // 1. Versioned installer name requested by owner (e.g. PenRX+-Setup-1.68.0.exe)
+    fs.copyFileSync(installerSource, path.join(releasesDir, exeInstaller));
+    // 2. Canonical unversioned installer for static direct links
     fs.copyFileSync(installerSource, path.join(releasesDir, "PenRX+-Setup.exe"));
-    console.log(`✓ Updated official Windows Setup installer:`);
+    console.log(`✓ Updated official Windows Setup installers:`);
+    console.log(`   - releases/${exeInstaller}`);
     console.log(`   - releases/PenRX+-Setup.exe`);
   }
 
   for (const f of files) {
     if (f.endsWith(".blockmap")) {
+      fs.copyFileSync(path.join(distElectron, f), path.join(releasesDir, f));
       fs.copyFileSync(path.join(distElectron, f), path.join(releasesDir, "PenRX+-Setup.exe.blockmap"));
-      console.log(`✓ Updated differential blockmap: releases/PenRX+-Setup.exe.blockmap`);
+      console.log(`✓ Updated differential blockmap: releases/${f}`);
     } else if (f === "latest.yml") {
-      let ymlContent = fs.readFileSync(path.join(distElectron, f), "utf8");
-      ymlContent = ymlContent.replace(/url:\s+[^\r\n]+/g, "url: PenRX+-Setup.exe");
-      ymlContent = ymlContent.replace(/path:\s+[^\r\n]+/g, "path: PenRX+-Setup.exe");
-      fs.writeFileSync(path.join(releasesDir, "latest.yml"), ymlContent, "utf8");
-      console.log(`✓ Updated differential manifest: releases/latest.yml (pointing to PenRX+-Setup.exe)`);
+      fs.copyFileSync(path.join(distElectron, f), path.join(releasesDir, "latest.yml"));
+      console.log(`✓ Updated differential manifest: releases/latest.yml`);
     }
   }
 }
