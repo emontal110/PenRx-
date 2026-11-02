@@ -270,8 +270,8 @@ function performQuitAndInstall(customInstallerPath = null) {
         `try { Wait-Process -Id ${currentPid} -Timeout 10 -ErrorAction SilentlyContinue } catch {}`,
         `Start-Sleep -Milliseconds 600`,
         `$installer = Start-Process -FilePath '${escapedInstaller}' -Wait -PassThru`,
-        `Start-Sleep -Milliseconds 700`,
-        `if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' }`,
+        `Start-Sleep -Milliseconds 1200`,
+        `if (-not (Get-Process -Name 'PenRX+' -ErrorAction SilentlyContinue)) { if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' } }`,
         `if ($installer -and $installer.ExitCode -ne 0) { exit $installer.ExitCode }`,
       ].join("; ");
 
