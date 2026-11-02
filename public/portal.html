@@ -7,6 +7,16 @@
   <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <link rel="icon" type="image/jpeg" href="logo-penrx.jpg" />
+  <!-- Suppress Development Warning from Tailwind Play CDN -->
+  <script>
+    (function(){
+      const origWarn = console.warn;
+      console.warn = function(...args) {
+        if (args[0] && typeof args[0] === 'string' && args[0].includes('tailwindcss.com')) return;
+        origWarn.apply(console, args);
+      };
+    })();
+  </script>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Font Cairo -->
@@ -153,7 +163,7 @@
       <p id="recover-success" class="text-emerald-400 text-xs font-bold hidden text-center p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 leading-relaxed"></p>
 
       <!-- Main Login Form -->
-      <form id="login-form" class="space-y-4 text-xs">
+      <form id="login-form" method="POST" onsubmit="return false;" class="space-y-4 text-xs">
         <!-- Email Input -->
         <div class="space-y-1.5 text-right">
           <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
@@ -218,7 +228,7 @@
       </form>
 
       <!-- Password Recovery Form (Hidden by default) -->
-      <form id="recover-form" class="space-y-4 text-xs hidden">
+      <form id="recover-form" method="POST" onsubmit="return false;" class="space-y-4 text-xs hidden">
         <div class="space-y-1.5 text-right">
           <label class="font-bold text-slate-300 block flex items-center gap-1.5 text-xs">
             <i data-lucide="mail" class="w-3.5 h-3.5 text-emerald-400"></i>
@@ -1081,36 +1091,13 @@
         // Remember the identity only; the secrets stay out of browser storage.
         saveCredentials(enteredEmail);
         if (passwordInput) passwordInput.value = "";
+        csrfHeader = session && session.csrfHeader ? session.csrfHeader : csrfHeader;
         enterDashboard(session && session.ttlSeconds);
-        showToast("مرحباً بك في لوحة تحكم PenRX+", true);
+        showToast("مرحباً بك د. أيمن | تم تسجيل الدخول بنجاح عبر الخادم 👑", true);
       } catch (err) {
         submitBtn.disabled = false;
         btnText.innerText = "دخول آمن إلى لوحة التحكم";
         recordFailedAttempt(err.message || "بيانات الدخول غير صحيحة.");
-      }
-    });
-
-        // The session id lives in the httpOnly cookie issued by the server.
-        csrfHeader = session && session.csrfHeader ? session.csrfHeader : csrfHeader;
-        enterDashboard(session && session.ttlSeconds);
-        showToast("مرحباً بك د. أيمن | تم تسجيل الدخول بنجاح عبر الخادم 👑");
-      } catch (err) {
-        await new Promise((r) => setTimeout(r, 300));
-        const status = err && err.status ? err.status : 0;
-        if (status === 429) {
-          const waitSeconds = (err.retryAfterSeconds || 900);
-          localStorage.setItem("penrx_lockout_until", String(Date.now() + waitSeconds * 1000));
-          localStorage.setItem("penrx_failed_attempts", "0");
-          checkLockout();
-        } else if (status === 401 || status === 400 || status === 403) {
-          recordFailedAttempt(err.message);
-        } else {
-          loginError.innerHTML = esc(err.message || "تعذر الاتصال بخادم PenRX+.");
-          loginError.classList.remove("hidden");
-        }
-      } finally {
-        // checkLockout() restores the button state (locked = disabled + lock text).
-        checkLockout();
       }
     });
 
