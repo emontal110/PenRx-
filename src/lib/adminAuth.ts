@@ -91,8 +91,15 @@ export async function verifySupabaseAdminAuth(
 
     const data = await res.json();
     if (!res.ok || !data.access_token) {
-      const errDetail =
+      let errDetail =
         data.error_description || data.msg || data.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+      if (data.error_code === "email_provider_disabled" || errDetail.includes("Email logins are disabled")) {
+        errDetail = "تسجيل الدخول عبر البريد معطّل في سوبا بيز. يرجى تفعيله من: Supabase Dashboard -> Authentication -> Providers -> Email -> تفعيل Enable Email provider.";
+      } else if (errDetail.toLowerCase().includes("invalid login credentials")) {
+        errDetail = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+      } else if (errDetail.toLowerCase().includes("email not confirmed")) {
+        errDetail = "البريد الإلكتروني لم يتم تأكيده في سوبا بيز بعد.";
+      }
       return { ok: false, reason: errDetail };
     }
 
