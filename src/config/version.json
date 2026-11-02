@@ -1,8 +1,9 @@
 {
-  "version": "1.68.0",
+  "version": "1.69",
   "releaseDate": "2026-11-02",
   "githubRepo": "emontal110/PenRx-",
-  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe",
-  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk",
-  "releaseNotes": "تحديث شامل v1.68.0: تطوير محرك البحث العملاق للأدوية بنظام Drug Eye والفلترة الأبجدية التراكمية ومصادر الأدوية المتعددة، وتطوير واجهة الروشتة للموبايل والكمبيوتر مع وضع البحث الصاعد الذكي فوق الكيبورد، وإرفاق وإرسال الروشتة تلقائياً عبر تطبيق واتساب، وتسريع تسطيب وتحديث نسخة الكمبيوتر."
+  "desktopDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.69/PenRX+-Setup.exe",
+  "androidDownloadUrl": "https://github.com/emontal110/PenRx-/releases/download/v1.69/PenRX+.apk",
+  "releaseNotes": "PenRX+ Official Automated Release",
+  "versionCode": 2
 }
