@@ -95,8 +95,7 @@
       ],
       "icon": "public/icon.ico",
       "artifactName": "PenRX+-Setup-${version}.${ext}",
-      "legalTrademarks": "PenRX+ Medical Systems",
-      "signAndEditExecutable": false
+      "legalTrademarks": "PenRX+ Medical Systems"
     },
     "nsis": {
       "differentialPackage": true,
