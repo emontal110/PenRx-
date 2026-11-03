@@ -53,13 +53,14 @@ export async function GET(req: Request) {
   const token = getGithubAuthToken();
   const hasToken = Boolean(token);
 
-  // Packaged desktop runtime (without local secrets) transparently forwards
-  // to the authoritative Vercel deployment which holds GITHUB_RELEASE_TOKEN.
+  // Packaged desktop runtime forwards to authoritative Vercel deployment,
+  // or falls back to direct public GitHub releases if cloud proxy is unreachable.
   if (!hasToken && !process.env.VERCEL && !process.env.NEXT_PUBLIC_VERCEL_ENV) {
     try {
-      return await proxyToCloud(req, "/api/version/check");
+      const cloudRes = await proxyToCloud(req, "/api/version/check");
+      if (cloudRes.ok) return cloudRes;
     } catch (proxyErr) {
-      console.warn("[VersionCheck] Cloud proxy notice:", proxyErr);
+      console.warn("[VersionCheck] Cloud proxy notice, falling back to direct public GitHub:", proxyErr);
     }
   }
 
