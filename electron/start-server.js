@@ -31,6 +31,13 @@ function resolveAppDir() {
 const appDir = resolveAppDir();
 const preferredPort = parseInt(process.env.PORT, 10) || 3000;
 
+if (process.resourcesPath) {
+  const asarModules = path.join(process.resourcesPath, "app.asar", "node_modules");
+  if (!module.paths.includes(asarModules)) {
+    module.paths.unshift(asarModules);
+  }
+}
+
 let next;
 try {
   next = require("next");

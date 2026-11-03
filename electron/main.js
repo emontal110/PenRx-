@@ -61,7 +61,22 @@ function isInternalAppUrl(rawUrl) {
     return false;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname === "pen-rx.vercel.app"
+  ) {
+    return true;
+  }
+  if (activeServerUrl) {
+    try {
+      const activeHost = new URL(activeServerUrl).hostname.toLowerCase();
+      if (hostname === activeHost) return true;
+    } catch {}
+  }
+  return false;
 }
 
 function openExternalSafely(rawUrl) {
@@ -1002,6 +1017,9 @@ async function ensureServerRunning() {
     const targetPort = 3000;
     const fallbackCloudUrl = process.env.PENRX_CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://pen-rx.vercel.app";
 
+    const asarModules = app.isPackaged && process.resourcesPath ? path.join(process.resourcesPath, "app.asar", "node_modules") : "";
+    const nodePaths = [asarModules, process.env.NODE_PATH || ""].filter(Boolean).join(path.delimiter);
+
     serverProcess = fork(serverScript, [], {
       cwd: processCwd,
       env: {
@@ -1009,6 +1027,7 @@ async function ensureServerRunning() {
         PORT: String(targetPort),
         NODE_ENV: "production",
         ELECTRON_RUN_AS_NODE: "1",
+        ...(nodePaths ? { NODE_PATH: nodePaths } : {}),
       },
       stdio: ["ignore", "pipe", "pipe", "ipc"],
       windowsHide: true,
