@@ -12,18 +12,25 @@ process.env.PENRX_DESKTOP_RUNTIME = "1";
 process.env.NEXT_TELEMETRY_DISABLED = "1";
 
 function resolveAppDir() {
-  const candidates = [
-    path.resolve(__dirname, ".."),
-    process.cwd(),
-  ];
+  const candidates = [];
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, "app.asar"));
+    candidates.push(path.join(process.resourcesPath, "app.asar.unpacked"));
+    candidates.push(path.join(process.resourcesPath, "app"));
+  }
+  candidates.push(path.resolve(__dirname, ".."));
+  candidates.push(process.cwd());
+
   for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, ".next"))) {
-      return dir;
-    }
-    const unpackedDir = dir.replace(/app\.asar([\\/]|$)/, "app.asar.unpacked$1");
-    if (unpackedDir !== dir && fs.existsSync(path.join(unpackedDir, ".next"))) {
-      return unpackedDir;
-    }
+    try {
+      if (dir && fs.existsSync(path.join(dir, ".next"))) {
+        return dir;
+      }
+      const unpackedDir = String(dir || "").replace(/app\.asar([\\/]|$)/, "app.asar.unpacked$1");
+      if (unpackedDir !== dir && fs.existsSync(path.join(unpackedDir, ".next"))) {
+        return unpackedDir;
+      }
+    } catch {}
   }
   return path.resolve(__dirname, "..");
 }

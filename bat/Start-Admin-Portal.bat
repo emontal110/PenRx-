@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title PenRX+ - Admin Cloud Portal
 color 05
 
@@ -24,6 +25,7 @@ echo   [1] Open Cloud Portal (https://pen-rx.vercel.app/portal)
 echo   [2] Open Local Portal (http://localhost:3000/portal)
 echo   [3] Open Standalone Offline Portal (public\portal.html)
 echo.
+set "PORTAL_CHOICE="
 set /p "PORTAL_CHOICE=>> Choose portal option [Default: 1]: "
 
 if "%PORTAL_CHOICE%"=="2" (
@@ -45,4 +47,4 @@ if "%PORTAL_CHOICE%"=="2" (
 echo.
 echo [OK] Portal launched successfully.
 ping 127.0.0.1 -n 3 >nul
-exit
+exit /b 0

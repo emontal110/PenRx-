@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title PenRX+ - Android APK Builder
 color 0B
 
@@ -20,17 +21,31 @@ echo =========================================================
 echo.
 echo [i] Project Directory: %CD%
 
-if "%JAVA_HOME%"=="" (
-    if exist "C:\Program Files\Android\Android Studio\jbr" set "JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
-    if exist "C:\Program Files\Android\Android Studio\jre" set "JAVA_HOME=C:\Program Files\Android\Android Studio\jre"
-    if exist "%LOCALAPPDATA%\Programs\Android Studio\jbr" set "JAVA_HOME=%LOCALAPPDATA%\Programs\Android Studio\jbr"
+REM Always detect ANDROID_HOME independently of JAVA_HOME
+if "%ANDROID_HOME%"=="" (
     if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
-    if exist "C:\Program Files\Java\jdk-17" set "JAVA_HOME=C:\Program Files\Java\jdk-17"
-    if exist "C:\Program Files\Java\jdk-21" set "JAVA_HOME=C:\Program Files\Java\jdk-21"
-    if exist "C:\Program Files\Eclipse Adoptium\jdk-17" set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17"
-    if exist "C:\Program Files\Eclipse Adoptium\jdk-21" set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21"
-    if exist "C:\Program Files\Microsoft\jdk-17" set "JAVA_HOME=C:\Program Files\Microsoft\jdk-17"
-    if exist "C:\Program Files\Microsoft\jdk-21" set "JAVA_HOME=C:\Program Files\Microsoft\jdk-21"
+)
+
+if "%JAVA_HOME%"=="" (
+    if exist "C:\Program Files\Android\Android Studio\jbr" (
+        set "JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
+    ) else if exist "%LOCALAPPDATA%\Programs\Android Studio\jbr" (
+        set "JAVA_HOME=%LOCALAPPDATA%\Programs\Android Studio\jbr"
+    ) else if exist "C:\Program Files\Android\Android Studio\jre" (
+        set "JAVA_HOME=C:\Program Files\Android\Android Studio\jre"
+    ) else if exist "C:\Program Files\Eclipse Adoptium\jdk-21" (
+        set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21"
+    ) else if exist "C:\Program Files\Eclipse Adoptium\jdk-17" (
+        set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17"
+    ) else if exist "C:\Program Files\Java\jdk-21" (
+        set "JAVA_HOME=C:\Program Files\Java\jdk-21"
+    ) else if exist "C:\Program Files\Java\jdk-17" (
+        set "JAVA_HOME=C:\Program Files\Java\jdk-17"
+    ) else if exist "C:\Program Files\Microsoft\jdk-21" (
+        set "JAVA_HOME=C:\Program Files\Microsoft\jdk-21"
+    ) else if exist "C:\Program Files\Microsoft\jdk-17" (
+        set "JAVA_HOME=C:\Program Files\Microsoft\jdk-17"
+    )
 )
 
 if not "%JAVA_HOME%"=="" (
@@ -41,12 +56,7 @@ if not "%JAVA_HOME%"=="" (
 )
 
 echo.
-echo 1. Building Web App Production Bundle...
-if exist ".next" rmdir /s /q ".next" >nul 2>&1
-call npm run build
-
-echo.
-echo 2. Syncing Capacitor Android Assets...
+echo 1. Preparing Capacitor Android Web Assets...
 if not exist "out" mkdir "out"
 if exist "public\error.html" copy /Y "public\error.html" "out\error.html" >nul 2>&1
 if exist "public\logo-penrx.jpg" copy /Y "public\logo-penrx.jpg" "out\logo-penrx.jpg" >nul 2>&1
@@ -64,7 +74,7 @@ if exist "public\mobile.html" (
 call npx cap sync android
 
 echo.
-echo 3. Compiling Signed Release Android APK via Gradle...
+echo 2. Compiling Signed Release Android APK via Gradle...
 cd android
 if exist "gradlew.bat" (
     call gradlew.bat assembleRelease
@@ -74,23 +84,26 @@ if exist "gradlew.bat" (
 cd /d "%PROJECT_ROOT%"
 
 echo.
-echo 4. Deploying Signed Release APK to public downloads folder...
+echo 3. Deploying Signed Release APK to downloads & releases folders...
 if not exist "public\downloads" mkdir "public\downloads"
+if not exist "releases" mkdir "releases"
 if exist "android\app\build\outputs\apk\release\app-release.apk" (
-    copy /Y "android\app\build\outputs\apk\release\app-release.apk" "public\downloads\PenRX+.apk"
+    copy /Y "android\app\build\outputs\apk\release\app-release.apk" "public\downloads\PenRX+.apk" >nul
+    copy /Y "android\app\build\outputs\apk\release\app-release.apk" "releases\PenRX+.apk" >nul
     echo.
     echo =========================================================
     echo [SUCCESS] Official Signed Production APK deployed to:
+    echo    - %CD%\releases\PenRX+.apk
     echo    - %CD%\public\downloads\PenRX+.apk
-    echo    - %CD%\android\app\build\outputs\apk\release\app-release.apk
     echo =========================================================
-    start "" explorer "%CD%\public\downloads"
+    start "" explorer "%CD%\releases"
 ) else if exist "android\app\build\outputs\apk\debug\app-debug.apk" (
-    copy /Y "android\app\build\outputs\apk\debug\app-debug.apk" "public\downloads\PenRX+.apk"
+    copy /Y "android\app\build\outputs\apk\debug\app-debug.apk" "public\downloads\PenRX+.apk" >nul
+    copy /Y "android\app\build\outputs\apk\debug\app-debug.apk" "releases\PenRX+.apk" >nul
     echo.
     echo =========================================================
     echo [NOTICE] Debug fallback APK deployed to:
-    echo    - %CD%\public\downloads\PenRX+.apk
+    echo    - %CD%\releases\PenRX+.apk
     echo =========================================================
 ) else (
     echo.
@@ -101,3 +114,4 @@ if exist "android\app\build\outputs\apk\release\app-release.apk" (
 
 echo.
 pause
+exit /b 0

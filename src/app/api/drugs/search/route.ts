@@ -12,7 +12,6 @@ import { synthesizeClinicalAiDrug } from "@/lib/clinicalAiSynthesis";
 import { corsHeaders, securityHeaders } from "@/lib/httpSecurity";
 import { checkRateLimit, rateLimitExceededResponse } from "@/lib/rateLimiter";
 import { supabaseRest } from "@/lib/supabaseRest";
-import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 
 export const dynamic = "force-dynamic";
 
@@ -20,14 +19,72 @@ function responseHeaders(request: Request): Record<string, string> {
   return { ...securityHeaders(), ...corsHeaders(request) };
 }
 
-// ── In-Memory LRU Cache for External Multi-Source APIs (2 Hour TTL) ──────────
 const EXTERNAL_CACHE = new Map<string, { timestamp: number; results: DrugRecord[] }>();
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000;
 
-// ── In-Memory Community Drugs Cache (Zero-latency RAM cache synced in background) ──
 let COMMUNITY_CACHE: DrugRecord[] = [];
 let lastCommunitySync = 0;
-const COMMUNITY_SYNC_INTERVAL = 90 * 1000; // 90 seconds for fast multi-doctor sharing
+const COMMUNITY_SYNC_INTERVAL = 90 * 1000;
+
+// ── Background Synchronizer for 25,070+ Official Egyptian Drug Eye Records ──
+let officialEdaSynced = false;
+let officialEdaSyncing = false;
+
+function mapRouteToDosageForm(route: string, name: string): string {
+  const r = (route || "").toUpperCase();
+  const n = (name || "").toLowerCase();
+  if (n.includes("syrup") || n.includes("syr")) return "Syrup (شراب)";
+  if (n.includes("susp")) return "Suspension (معلق)";
+  if (n.includes("drop") || r.includes("OPHTHALMIC") || r.includes("OTIC")) return "Drops (قطرة)";
+  if (n.includes("amp") || n.includes("vial") || r.includes("INJECTION") || r.includes("PARENTERAL")) return "Ampoule (حقنة)";
+  if (n.includes("cream") || n.includes("crm")) return "Cream (كريم)";
+  if (n.includes("oint")) return "Ointment (مرهم)";
+  if (n.includes("gel")) return "Gel (جل)";
+  if (n.includes("spray") || r.includes("NASAL")) return "Spray (بخاخ)";
+  if (n.includes("inhaler") || r.includes("INHALATION")) return "Inhaler (بخاخ)";
+  if (n.includes("supp") || r.includes("RECTAL") || r.includes("VAGINAL")) return "Suppository (لبوس)";
+  if (n.includes("sachet") || n.includes("eff")) return "Effervescent (فوار)";
+  if (n.includes("cap")) return "Capsule (كبسولة)";
+  return "Tablet (قرص)";
+}
+
+async function syncOfficialEgyptianDrugDatabaseInBackground() {
+  if (officialEdaSynced || officialEdaSyncing) return;
+  officialEdaSyncing = true;
+
+  try {
+    const res = await fetch(
+      "https://raw.githubusercontent.com/karem505/egyptian-drug-database/main/data/egyptian-drugs.json",
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (res.ok) {
+      const records = await res.json();
+      if (Array.isArray(records) && records.length > 0) {
+        const mappedUpdates = [];
+        for (const row of records) {
+          const nameEn = String(row.commercial_name_en || "").trim();
+          if (!nameEn) continue;
+          const priceVal = row.price_egp ? parseFloat(String(row.price_egp)) : undefined;
+          mappedUpdates.push({
+            name: nameEn,
+            nameAr: String(row.commercial_name_ar || nameEn).trim(),
+            activeIngredient: String(row.scientific_name || "مادة فعالة معتمدة").trim(),
+            company: String(row.manufacturer || "شركة أدوية مصرية").trim(),
+            category: String(row.drug_class || "Egyptian Drug Authority").trim(),
+            dosageForm: mapRouteToDosageForm(row.route, nameEn),
+            price: priceVal && priceVal > 0 ? priceVal : undefined,
+          });
+        }
+        updateDrugPricesFromCloud(mappedUpdates);
+        officialEdaSynced = true;
+      }
+    }
+  } catch {
+    // Offline or GitHub unreachable — built-in verified catalog serves seamlessly
+  } finally {
+    officialEdaSyncing = false;
+  }
+}
 
 export function invalidateCommunityDrugsCache() {
   lastCommunitySync = 0;
@@ -58,7 +115,6 @@ async function syncCommunityDrugsInBackground() {
         isCrowdSourced: true,
       }));
 
-      // Automatically persist cloud price & new drug updates into in-memory engine
       updateDrugPricesFromCloud(
         COMMUNITY_CACHE.map((d) => ({
           name: d.name,
@@ -71,59 +127,10 @@ async function syncCommunityDrugsInBackground() {
         }))
       );
     }
-  } catch {
-    // Supabase offline or slow — proceed cleanly with memory
-  }
+  } catch {}
 }
 
-// ── Source 3: Live Egyptian Drug Database API (27,600+ Egyptian Drugs & Updated Prices) ──
-async function fetchEgyptianDrugsLiveApi(query: string, limit = 15): Promise<DrugRecord[]> {
-  try {
-    const cleanQ = query.replace(/[*%]/g, " ").trim();
-    if (cleanQ.length < 2) return [];
-
-    const url = `https://eg-drugs-api.mahmoudfalous.workers.dev/v1/search?q=${encodeURIComponent(cleanQ)}&limit=${Math.min(limit, 25)}`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(950),
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!Array.isArray(data?.results) || data.results.length === 0) return [];
-
-    const mapped: DrugRecord[] = data.results.map((r: any) => ({
-      id: `eg-api-${r.id || Date.now()}`,
-      name: r.name || cleanQ,
-      nameAr: r.arabic || r.name || cleanQ,
-      activeIngredient: r.active || "مادة فعالة معتمدة",
-      company: r.company || "شركة أدوية مصرية",
-      price: r.price ? parseFloat(String(r.price)) || undefined : undefined,
-      dosageForm: /syrup|شراب/i.test(r.name || "")
-        ? "Syrup (شراب)"
-        : /susp|معلق/i.test(r.name || "")
-        ? "Suspension (معلق)"
-        : /amp|vial|حقن|امبول/i.test(r.name || "")
-        ? "Ampoule (حقنة)"
-        : /cream|كريم/i.test(r.name || "")
-        ? "Cream (كريم)"
-        : /cap|كبسول/i.test(r.name || "")
-        ? "Capsule (كبسولة)"
-        : "Tablet (قرص)",
-      category: r.description || "Egyptian Market",
-      isControlled: false,
-      sourceOrigin: "Egyptian Bank" as const,
-      isCrowdSourced: false,
-    }));
-
-    // Auto-sync live prices and new Egyptian drugs into the server's in-memory catalog!
-    updateDrugPricesFromCloud(mapped);
-    return mapped;
-  } catch {
-    return [];
-  }
-}
-
-// ── Source 4: OpenFDA NDC Directory (International & Imported Drugs) ──────────
+// ── Source 3: OpenFDA NDC Directory (International & Imported Drugs) ──────────
 async function fetchOpenFDA(query: string, limit: number): Promise<DrugRecord[]> {
   try {
     const cleanQ = query.replace(/[*%]/g, " ").trim();
@@ -136,7 +143,7 @@ async function fetchOpenFDA(query: string, limit: number): Promise<DrugRecord[]>
 
     for (const url of urls) {
       const res = await fetch(url, {
-        signal: AbortSignal.timeout(850),
+        signal: AbortSignal.timeout(950),
         headers: { Accept: "application/json" },
       });
       if (!res.ok) continue;
@@ -153,8 +160,8 @@ async function fetchOpenFDA(query: string, limit: number): Promise<DrugRecord[]>
           cleanQ,
         company: r.labeler_name || "International / FDA",
         price: undefined,
-        dosageForm: r.dosage_form || "Tablet (قرص)",
-        category: "International / Imported",
+        dosageForm: mapRouteToDosageForm(r.dosage_form || "", r.brand_name || ""),
+        category: "International / FDA",
         isControlled: false,
         sourceOrigin: "International / Imported" as const,
         isCrowdSourced: false,
@@ -164,7 +171,7 @@ async function fetchOpenFDA(query: string, limit: number): Promise<DrugRecord[]>
   return [];
 }
 
-// ── Source 5: RxNorm (National Library of Medicine) ───────────────────────────
+// ── Source 4: RxNorm (National Library of Medicine - Global Drugs) ───────────
 async function fetchRxNorm(query: string): Promise<DrugRecord[]> {
   try {
     const cleanQ = query.replace(/[*%]/g, " ").trim();
@@ -172,7 +179,7 @@ async function fetchRxNorm(query: string): Promise<DrugRecord[]> {
 
     const url = `https://rxnav.nlm.nih.gov/REST/drugs.json?name=${encodeURIComponent(cleanQ)}`;
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(850),
+      signal: AbortSignal.timeout(950),
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return [];
@@ -182,28 +189,28 @@ async function fetchRxNorm(query: string): Promise<DrugRecord[]> {
 
     for (const group of groups) {
       if (!group.conceptProperties) continue;
-      for (const c of group.conceptProperties.slice(0, 4)) {
+      for (const c of group.conceptProperties.slice(0, 6)) {
         results.push({
           id: `rxnorm-${c.rxcui}`,
           name: c.name,
           nameAr: c.name,
           activeIngredient: c.synonym || c.name,
-          company: "International / NLM",
-          dosageForm: "Tablet / Capsule",
-          category: "International / Imported",
+          company: "International / NLM RxNorm",
+          dosageForm: mapRouteToDosageForm("", c.name),
+          category: "International / Global",
           isControlled: false,
           sourceOrigin: "International / Imported" as const,
           isCrowdSourced: false,
         });
       }
     }
-    return results.slice(0, 5);
+    return results.slice(0, 8);
   } catch {
     return [];
   }
 }
 
-// ── Source 6: DailyMed NLM ────────────────────────────────────────────────────
+// ── Source 5: DailyMed NLM ────────────────────────────────────────────────────
 async function fetchDailyMed(query: string): Promise<DrugRecord[]> {
   try {
     const cleanQ = query.replace(/[*%]/g, " ").trim();
@@ -211,20 +218,20 @@ async function fetchDailyMed(query: string): Promise<DrugRecord[]> {
 
     const url = `https://dailymed.nlm.nih.gov/dailymed/services/v2/drugnames.json?drug_name=${encodeURIComponent(cleanQ)}`;
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(850),
+      signal: AbortSignal.timeout(950),
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return [];
     const data = await res.json();
     if (!data.data?.length) return [];
 
-    return data.data.slice(0, 4).map((d: any, i: number) => ({
+    return data.data.slice(0, 6).map((d: any, i: number) => ({
       id: `dailymed-${i}-${d.drug_name || cleanQ}`,
       name: d.drug_name || cleanQ,
       nameAr: d.drug_name || cleanQ,
       activeIngredient: cleanQ,
-      company: "DailyMed / NLM",
-      dosageForm: "Tablet / Capsule",
+      company: "DailyMed / NIH",
+      dosageForm: mapRouteToDosageForm("", d.drug_name || ""),
       category: "International / Imported",
       isControlled: false,
       sourceOrigin: "International / Imported" as const,
@@ -240,9 +247,7 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/drugs/search");
-
-  if (!checkRateLimit(request, { maxRequests: 300, windowMs: 60_000, prefix: "drugs-search" })) {
+  if (!checkRateLimit(request, { maxRequests: 350, windowMs: 60_000, prefix: "drugs-search" })) {
     return rateLimitExceededResponse(request, 10);
   }
 
@@ -252,6 +257,10 @@ export async function GET(request: Request) {
   const limit = Math.min(parseInt(searchParams.get("limit") || "30"), 60);
   const includeActiveIngredient = searchParams.get("includeActiveIngredient") === "true";
   const useAi = searchParams.get("useAi") === "true";
+
+  // Trigger non-blocking background sync with the 25,070-record Egyptian Drug Eye Database & Community DB
+  syncOfficialEgyptianDrugDatabaseInBackground().catch(() => {});
+  syncCommunityDrugsInBackground().catch(() => {});
 
   if (!query.trim()) {
     return NextResponse.json(
@@ -270,13 +279,10 @@ export async function GET(request: Request) {
   const normQ = cleanQuery.toLowerCase();
   const normQAr = normalizeArabic(cleanQuery);
 
-  // ── Layer 1: In-memory sub-millisecond search (43,500+ drugs, Alphabetical + Drug Eye *) ──
+  // ── Layer 1: In-memory sub-millisecond search (Verified Egyptian + Global Catalog) ──
   const memoryResults = searchComprehensiveDrugs(cleanQuery, limit, {
     searchActiveIngredient: includeActiveIngredient,
   });
-
-  // Trigger non-blocking background community sync
-  syncCommunityDrugsInBackground().catch(() => {});
 
   // ── Layer 2: Instant Community Cache Query in RAM ──────────────────────────
   const dbCommunityResults = COMMUNITY_CACHE.filter((d) => {
@@ -290,26 +296,23 @@ export async function GET(request: Request) {
     return nameMatch || activeMatch;
   }).slice(0, 15);
 
-  // ── Layer 3: Multi-Source External Databases (Egyptian Live API + OpenFDA + RxNorm + DailyMed) ──
+  // ── Layer 3: Multi-Source International Databases (OpenFDA + RxNorm + DailyMed) ──
   let externalResults: DrugRecord[] = [];
   const totalLocalResults = memoryResults.length + dbCommunityResults.length;
 
-  // Query external sources when local results are sparse (< 8) and query >= 3 chars
-  if (totalLocalResults < 8 && cleanQuery.replace(/[*]/g, "").trim().length >= 3) {
+  if (totalLocalResults < 10 && cleanQuery.replace(/[*]/g, "").trim().length >= 3) {
     const cacheKey = `${normQ}:${includeActiveIngredient}`;
     const cached = EXTERNAL_CACHE.get(cacheKey);
 
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       externalResults = cached.results;
     } else {
-      const [egApiRes, fdaRes, rxRes, dailyRes] = await Promise.allSettled([
-        fetchEgyptianDrugsLiveApi(cleanQuery, 12),
-        totalLocalResults === 0 ? fetchOpenFDA(cleanQuery, 5) : Promise.resolve([]),
-        totalLocalResults === 0 ? fetchRxNorm(cleanQuery) : Promise.resolve([]),
-        totalLocalResults === 0 ? fetchDailyMed(cleanQuery) : Promise.resolve([]),
+      const [fdaRes, rxRes, dailyRes] = await Promise.allSettled([
+        fetchOpenFDA(cleanQuery, 8),
+        fetchRxNorm(cleanQuery),
+        fetchDailyMed(cleanQuery),
       ]);
 
-      if (egApiRes.status === "fulfilled") externalResults.push(...egApiRes.value);
       if (fdaRes.status === "fulfilled") externalResults.push(...fdaRes.value);
       if (rxRes.status === "fulfilled") externalResults.push(...rxRes.value);
       if (dailyRes.status === "fulfilled") externalResults.push(...dailyRes.value);
@@ -358,13 +361,11 @@ export async function GET(request: Request) {
   // ── Layer 5: Strict Canonical Deduplication & Price Enrichment ────────────
   const mergedMap = new Map<string, DrugRecord>();
 
-  // 1. Add primary memory results
   for (const item of memoryResults) {
     const key = normalizeDrugCanonicalKey(item.name, item.dosageForm);
     mergedMap.set(key, { ...item });
   }
 
-  // 2. Overlay community & cloud price updates (never duplicates, updates prices)
   for (const dbItem of dbCommunityResults) {
     const key = normalizeDrugCanonicalKey(dbItem.name, dbItem.dosageForm);
     if (mergedMap.has(key)) {
@@ -378,7 +379,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // 3. Overlay live Egyptian API & International results (updates prices if existing, adds if novel)
   for (const extItem of externalResults) {
     const key = normalizeDrugCanonicalKey(extItem.name, extItem.dosageForm);
     if (mergedMap.has(key)) {
@@ -391,7 +391,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // 4. Add AI / Close Suggestions if not already present in the merged list
   for (const aiItem of aiResults) {
     const key = normalizeDrugCanonicalKey(aiItem.name, aiItem.dosageForm);
     if (!mergedMap.has(key)) {
@@ -401,7 +400,6 @@ export async function GET(request: Request) {
 
   const combined: DrugRecord[] = Array.from(mergedMap.values());
 
-  // ── Layer 6: Progressive Alphabetical & Relevance Sorting ──────────────────
   combined.sort((a, b) => {
     const aStarts = isAr
       ? normalizeArabic(a.nameAr || "").startsWith(normQAr) || a.name.toLowerCase().startsWith(normQ)
@@ -412,7 +410,6 @@ export async function GET(request: Request) {
 
     if (aStarts !== bStarts) return aStarts ? -1 : 1;
 
-    // Prioritize non-AI catalog items over synthesized AI items when prefix matches exist
     if (Boolean(a.isAiGenerated) !== Boolean(b.isAiGenerated)) {
       return a.isAiGenerated ? 1 : -1;
     }

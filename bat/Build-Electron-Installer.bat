@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title PenRX+ - Build Windows Installer
 color 0E
 
@@ -21,13 +22,23 @@ echo.
 echo [i] Project Directory: %CD%
 echo.
 
-if exist ".next" rmdir /s /q ".next" >nul 2>&1
+REM Close any running PenRX+.exe instance so dist-electron is not locked
+taskkill /F /IM "PenRX+.exe" /T >nul 2>&1
+
+if exist ".next\cache" rmdir /s /q ".next\cache" >nul 2>&1
 if exist "dist-electron" rmdir /s /q "dist-electron" >nul 2>&1
+
 call npm run electron:build
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Build failed with error code %errorlevel%.
+    pause
+    exit /b %errorlevel%
+)
 
 echo.
 echo ========================================================
-echo  Installer output is located in: %CD%\dist-electron\
+echo  [OK] Installer output is located in: %CD%\dist-electron\
 echo ========================================================
 echo.
 
@@ -36,3 +47,4 @@ if exist "%CD%\dist-electron" (
 )
 
 pause
+exit /b 0

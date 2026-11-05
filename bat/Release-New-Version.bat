@@ -36,6 +36,9 @@ if "%NOTES%"=="" (
     set "NOTES=PenRX+ Official Automated Release"
 )
 
+REM Ensure running desktop instances are closed so file locks do not block packaging
+taskkill /F /IM "PenRX+.exe" /T >nul 2>&1
+
 if exist "dist-electron" rd /s /q "dist-electron" 2>nul
 
 echo   [*] Starting automated build and direct GitHub release now...

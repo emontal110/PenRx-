@@ -4,19 +4,10 @@ import React, { useRef, useState, useEffect } from "react";
 import Image from "next/image";
 import {
   Printer,
-  Share2,
   Trash2,
-  CheckCircle2,
-  AlertCircle,
   FileText,
-  User,
-  Calendar,
   MessageCircle,
   HeartPulse,
-  Activity,
-  AlertTriangle,
-  Droplet,
-  FileSpreadsheet,
   Pencil,
   Check,
   X,
@@ -30,7 +21,6 @@ import {
   getTemplateContainerStyles,
 } from "./PrescriptionTemplateDecorations";
 import { calculateBmiInfo } from "@/lib/utils";
-import { InlineDrugPadInput } from "./InlineDrugPadInput";
 import { InteractionAlert } from "./AiInteractionModal";
 
 interface LivePrescriptionPreviewProps {
@@ -56,9 +46,7 @@ export function LivePrescriptionPreview({
   patient,
   diagnosis,
   notes,
-  setNotes,
   items,
-  onAddItem,
   onRemoveItem,
   onSaveAndPrint,
   onShareWhatsApp,
@@ -134,9 +122,9 @@ export function LivePrescriptionPreview({
           name: "A6 مصغر",
           widthMm: 105,
           heightMm: 148,
-          desc: "10.5 × 14.8 سم (1240 × 1748 px)",
+          desc: "10.5 × 14.8 سم",
           maxW: "w-full max-w-2xl",
-          minH: "min-h-[580px] sm:min-h-[640px]",
+          minH: "min-h-[560px] sm:min-h-[620px]",
           cssPage: "105mm 148mm",
         }
       : paperSize === "A4"
@@ -145,9 +133,9 @@ export function LivePrescriptionPreview({
           name: "A4 كامل",
           widthMm: 210,
           heightMm: 297,
-          desc: "21.0 × 29.7 سم (2480 × 3508 px)",
+          desc: "21.0 × 29.7 سم",
           maxW: "w-full max-w-4xl",
-          minH: "min-h-[900px] sm:min-h-[1050px]",
+          minH: "min-h-[820px] sm:min-h-[960px]",
           cssPage: "210mm 297mm",
         }
       : paperSize === "B5"
@@ -158,31 +146,22 @@ export function LivePrescriptionPreview({
           heightMm: 250,
           desc: "17.6 × 25.0 سم",
           maxW: "w-full max-w-3xl lg:max-w-4xl",
-          minH: "min-h-[760px] sm:min-h-[850px]",
+          minH: "min-h-[700px] sm:min-h-[780px]",
           cssPage: "176mm 250mm",
         }
       : {
           label: "A5",
-          name: "A5 قياسي (الافتراضي)",
+          name: "A5 قياسي",
           widthMm: 148,
           heightMm: 210,
-          desc: "14.8 × 21.0 سم (1748 × 2480 px)",
+          desc: "14.8 × 21.0 سم",
           maxW: "w-full max-w-3xl lg:max-w-4xl",
-          minH: "min-h-[700px] sm:min-h-[820px]",
+          minH: "min-h-[660px] sm:min-h-[740px]",
           cssPage: "148mm 210mm",
         };
 
-  // Check if any demographic / vitals are visible
-  const hasVisibleDemographics =
-    visibleFields.showAge ||
-    visibleFields.showGender ||
-    visibleFields.showHeight ||
-    visibleFields.showWeight ||
-    visibleFields.showBloodType;
-
   return (
-    <div className={readOnly ? "w-full m-0 p-0" : "space-y-4"}>
-      {/* Dynamic Print Styles for Exact Paper Size */}
+    <div className={readOnly ? "w-full m-0 p-0" : "space-y-3.5"}>
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -198,12 +177,12 @@ export function LivePrescriptionPreview({
 
       {/* Live Prescription Sheet Indicator Header */}
       {!readOnly && (
-        <div className="flex items-center justify-between px-3 py-1.5 text-xs font-bold text-slate-400 no-print">
+        <div className="flex items-center justify-between px-4 py-2.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs font-bold text-slate-400 no-print shadow-md">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-emerald-400" />
-            <span className="text-slate-200">ورقة الروشتة الطبية:</span>
-            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              {paperConfig.label}
+            <span className="text-slate-100 font-black">معاينة ورقة الروشتة الطبية</span>
+            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+              مقاس {paperConfig.label}
             </span>
           </div>
           <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-400">
@@ -215,7 +194,7 @@ export function LivePrescriptionPreview({
         </div>
       )}
 
-      {/* The Printable Prescription Sheet */}
+      {/* The Printable Prescription Sheet (Pure Paper Preview — No Duplicate Dark Input Boxes Inside!) */}
       <div
         ref={printAreaRef}
         id="prescription-print-sheet"
@@ -223,13 +202,12 @@ export function LivePrescriptionPreview({
           fontFamily,
           ...templateStyles.style,
         }}
-        className={`text-slate-900 rounded-2xl sm:rounded-3xl p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden transition-all ${templateStyles.className} ${paperConfig.maxW} ${readOnly ? "w-full mx-0" : "mx-auto"} ${paperConfig.minH}`}
+        className={`text-slate-900 rounded-2xl sm:rounded-3xl p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden transition-all shadow-2xl ${templateStyles.className} ${paperConfig.maxW} ${readOnly ? "w-full mx-0" : "mx-auto"} ${paperConfig.minH}`}
         dir="rtl"
       >
-        {/* Prescription Template Vector Decorations (Waves, Hexagons, Ornate Corners, etc.) */}
         <PrescriptionTemplateDecorations templateId={templateId} primaryColor={primaryColor} />
 
-        {/* Center Watermark: Same Logo as Header with High Transparency */}
+        {/* Center Watermark */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-0">
           <div className="w-64 h-64 sm:w-80 sm:h-80 relative opacity-[0.045] flex items-center justify-center">
             {clinic.logoUrl ? (
@@ -246,7 +224,7 @@ export function LivePrescriptionPreview({
           </div>
         </div>
 
-        {/* Clinic & Doctor Header (Respects showHeader & Adapts to Template) */}
+        {/* Clinic & Doctor Header */}
         {(() => {
           const isAcademic = templateId === "academic_crest";
           const isSoftCurves = templateId === "soft_curves";
@@ -426,7 +404,7 @@ export function LivePrescriptionPreview({
           );
         })()}
 
-        {/* Compact Patient Information Strip (Respects visibleFields & Adapts to Template) */}
+        {/* Compact Patient Information Strip */}
         {(() => {
           const isSoftCurves = templateId === "soft_curves";
           const isNordic = templateId === "nordic_pastel";
@@ -442,13 +420,11 @@ export function LivePrescriptionPreview({
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-3">
-                {/* Patient Name */}
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-slate-400 text-[9px] font-semibold">المريض:</span>
                   <span className="text-slate-900 font-bold text-[10.5px] truncate">{patient.name || "—"}</span>
                 </div>
 
-                {/* Age & Gender */}
                 {(visibleFields.showAge || visibleFields.showGender) && (
                   <div className="flex items-center gap-1 font-semibold">
                     <span className="text-slate-400 text-[9.5px] font-normal">السن/النوع:</span>
@@ -461,13 +437,11 @@ export function LivePrescriptionPreview({
                     >
                       {visibleFields.showAge && (patient.age ? `${patient.age} سنة` : "—")}
                       {visibleFields.showAge && visibleFields.showGender && " / "}
-                      {visibleFields.showGender &&
-                        (patient.gender === "FEMALE" ? "أنثى" : "ذكر")}
+                      {visibleFields.showGender && (patient.gender === "FEMALE" ? "أنثى" : "ذكر")}
                     </span>
                   </div>
                 )}
 
-                {/* Height & Weight with Smart Clinical BMI Badge */}
                 {(visibleFields.showHeight || visibleFields.showWeight) && (
                   <div className="flex items-center gap-1.5 text-slate-700 font-semibold flex-wrap">
                     <span className="text-slate-400 text-[9.5px] font-normal">القياسات:</span>
@@ -483,7 +457,6 @@ export function LivePrescriptionPreview({
                     {bmiInfo && (
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-black border transition-all ${bmiInfo.badgeClass} print:shadow-none`}
-                        title={`مؤشر كتلة الجسم (BMI): ${bmiInfo.bmiFormatted} kg/m² • الوزن المثالي: ${bmiInfo.idealWeightMin} - ${bmiInfo.idealWeightMax} كجم`}
                       >
                         <span>{bmiInfo.icon}</span>
                         <span>{bmiInfo.label}</span>
@@ -493,7 +466,6 @@ export function LivePrescriptionPreview({
                   </div>
                 )}
 
-                {/* Blood Type */}
                 {visibleFields.showBloodType && (
                   <div className="flex items-center gap-1 font-bold">
                     <span className="text-slate-400 text-[9.5px] font-normal">الفصيلة:</span>
@@ -501,7 +473,6 @@ export function LivePrescriptionPreview({
                   </div>
                 )}
 
-                {/* Date */}
                 <div className="flex items-center gap-1 font-medium">
                   <span className="text-slate-400 text-[9.5px]">التاريخ:</span>
                   <span
@@ -520,7 +491,7 @@ export function LivePrescriptionPreview({
           );
         })()}
 
-        {/* Diagnosis Note if enabled */}
+        {/* Diagnosis Note */}
         {visibleFields.showDiagnosis && (
           <div
             className="mb-2.5 text-xs font-bold p-2.5 rounded-xl border flex items-center justify-between gap-2"
@@ -536,15 +507,10 @@ export function LivePrescriptionPreview({
                 {diagnosis || "—"}
               </span>
             </div>
-            {!diagnosis && (
-              <span className="text-slate-300 font-mono tracking-widest hidden print:inline-block">
-                ............................................................
-              </span>
-            )}
           </div>
         )}
 
-        {/* Chronic History & Drug Allergies if enabled */}
+        {/* Chronic History & Drug Allergies */}
         {(visibleFields.showMedicalHistory || visibleFields.showAllergies) && (
           <div className="mb-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             {visibleFields.showMedicalHistory && (
@@ -563,22 +529,32 @@ export function LivePrescriptionPreview({
         )}
 
         {/* Rx Symbol & Medication Items List */}
-        <div className="flex-1 space-y-4 py-2 relative z-10">
+        <div className="flex-1 space-y-3.5 py-2 relative z-10">
           <div
-            className="flex items-center gap-2 border-b pb-2"
+            className="flex items-center justify-between border-b pb-2"
             style={{ borderColor: `${primaryColor}30`, color: primaryColor }}
           >
-            <span className="font-serif font-black text-3xl italic tracking-wider">℞</span>
-            <span className="text-xs font-extrabold text-slate-600">العلاج الدوائي والجرعات المحددة</span>
+            <div className="flex items-center gap-2">
+              <span className="font-serif font-black text-3xl italic tracking-wider">℞</span>
+              <span className="text-xs font-extrabold text-slate-600">العلاج الدوائي والجرعات المحددة</span>
+            </div>
+            {items.length > 0 && (
+              <span className="text-[10px] font-bold text-slate-500 no-print">
+                انقر على ✏️ لتعديل أي دواء يدوياً
+              </span>
+            )}
           </div>
 
           {items.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 text-xs font-bold space-y-2">
-              <HeartPulse className="w-8 h-8 text-slate-300 mx-auto" />
-              <p>لم يتم إضافة أي أدوية للروشتة بعد. استخدم محرك البحث لإدراج الأدوية.</p>
+            <div className="py-20 text-center text-slate-400 text-xs font-bold space-y-2.5">
+              <HeartPulse className="w-10 h-10 text-slate-300 mx-auto" />
+              <p>لم يتم إضافة أي أدوية للروشتة بعد.</p>
+              <p className="text-[11px] font-medium text-slate-400">
+                اختر الدواء من محرك البحث وحدد الجرعة والكمية ليظهر هنا فوراً جاهزاً للطباعة.
+              </p>
             </div>
           ) : (
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {items.map((item, idx) => {
                 const isEditing = editingId === item.id;
 
@@ -604,7 +580,7 @@ export function LivePrescriptionPreview({
                             type="text"
                             value={editForm.drugName || ""}
                             onChange={(e) => setEditForm((p) => ({ ...p, drugName: e.target.value }))}
-                            className="w-full px-2.5 py-1 rounded-lg border border-slate-300 font-bold text-slate-900 text-xs focus:outline-none focus:border-cyan-500"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-bold text-slate-900 text-xs focus:outline-none focus:border-cyan-500"
                           />
                         </div>
                         <div>
@@ -613,7 +589,7 @@ export function LivePrescriptionPreview({
                             type="text"
                             value={editForm.activeIngredient || ""}
                             onChange={(e) => setEditForm((p) => ({ ...p, activeIngredient: e.target.value }))}
-                            className="w-full px-2.5 py-1 rounded-lg border border-slate-300 text-slate-700 text-xs focus:outline-none focus:border-cyan-500"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-xs focus:outline-none focus:border-cyan-500"
                           />
                         </div>
                         <div>
@@ -623,14 +599,14 @@ export function LivePrescriptionPreview({
                               type="text"
                               value={editForm.doseQuantity || ""}
                               onChange={(e) => setEditForm((p) => ({ ...p, doseQuantity: e.target.value }))}
-                              className="w-full px-2 py-1 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-cyan-500"
+                              className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-cyan-500"
                               placeholder="الكمية"
                             />
                             <input
                               type="text"
                               value={editForm.doseForm || ""}
                               onChange={(e) => setEditForm((p) => ({ ...p, doseForm: e.target.value }))}
-                              className="w-full px-2 py-1 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-cyan-500"
+                              className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-cyan-500"
                               placeholder="الشكل"
                             />
                           </div>
@@ -641,7 +617,7 @@ export function LivePrescriptionPreview({
                             type="text"
                             value={editForm.duration || ""}
                             onChange={(e) => setEditForm((p) => ({ ...p, duration: e.target.value }))}
-                            className="w-full px-2.5 py-1 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-cyan-500"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-cyan-500"
                           />
                         </div>
                         <div className="sm:col-span-2">
@@ -650,7 +626,7 @@ export function LivePrescriptionPreview({
                             type="text"
                             value={editForm.frequency || ""}
                             onChange={(e) => setEditForm((p) => ({ ...p, frequency: e.target.value }))}
-                            className="w-full px-2.5 py-1 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-cyan-500"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-cyan-500"
                           />
                         </div>
                         <div className="sm:col-span-2">
@@ -659,7 +635,7 @@ export function LivePrescriptionPreview({
                             type="text"
                             value={editForm.instructions || ""}
                             onChange={(e) => setEditForm((p) => ({ ...p, instructions: e.target.value }))}
-                            className="w-full px-2.5 py-1 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-cyan-500"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-cyan-500"
                           />
                         </div>
                       </div>
@@ -689,7 +665,7 @@ export function LivePrescriptionPreview({
                 return (
                   <div
                     key={item.id}
-                    className="p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-xs hover:border-emerald-400 transition-all flex items-start justify-between gap-3 group"
+                    className="p-3 rounded-xl bg-white border border-slate-200/90 shadow-xs hover:border-emerald-400 transition-all flex items-start justify-between gap-3 group"
                   >
                     <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -699,7 +675,7 @@ export function LivePrescriptionPreview({
                         >
                           {idx + 1}
                         </span>
-                        <h4 className="font-black text-slate-900 text-xs sm:text-sm font-sans tracking-tight">
+                        <h4 className="font-black text-slate-900 text-xs sm:text-sm font-sans tracking-tight" dir="ltr">
                           {item.drugName}
                         </h4>
                         {item.activeIngredient && (
@@ -708,12 +684,13 @@ export function LivePrescriptionPreview({
                           </span>
                         )}
 
-                        {/* AI Interaction Pulsing Badge */}
+                        {/* Interaction Pulsing Badge */}
                         {(() => {
                           const itemAlert = aiAlerts?.find((a) =>
                             a.involvedDrugs?.some(
                               (d) =>
                                 item.drugName.toLowerCase().includes(d.toLowerCase()) ||
+                                d.toLowerCase().includes(item.drugName.toLowerCase()) ||
                                 (item.activeIngredient &&
                                   item.activeIngredient.toLowerCase().includes(d.toLowerCase()))
                             )
@@ -726,7 +703,7 @@ export function LivePrescriptionPreview({
                               type="button"
                               onClick={() => onOpenAiAlert?.(itemAlert)}
                               className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-500/15 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-300 text-[10px] font-black transition-all cursor-pointer shadow-xs no-print animate-pulse"
-                              title="انقر لعرض تفاصيل التعارض الدوائي بالذكاء الاصطناعي"
+                              title="انقر لعرض تفاصيل التعارض الدوائي"
                             >
                               <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping shrink-0" />
                               <span>⚠️ تعارض دوائي</span>
@@ -735,7 +712,8 @@ export function LivePrescriptionPreview({
                         })()}
                       </div>
 
-                      <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold pr-6"
+                      <div
+                        className="flex items-center gap-2 flex-wrap text-[11px] font-bold pr-6"
                         style={{ color: primaryColor }}
                       >
                         <span className="bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 text-slate-800 text-[10px]">
@@ -743,8 +721,12 @@ export function LivePrescriptionPreview({
                         </span>
                         <span>•</span>
                         <span>{item.frequency}</span>
-                        <span>•</span>
-                        <span className="text-slate-600 font-medium">{item.duration}</span>
+                        {item.duration && (
+                          <>
+                            <span>•</span>
+                            <span className="text-slate-600 font-medium">{item.duration}</span>
+                          </>
+                        )}
                       </div>
 
                       {item.instructions && (
@@ -755,12 +737,12 @@ export function LivePrescriptionPreview({
                     </div>
 
                     {!readOnly && (
-                      <div className="flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity no-print shrink-0">
+                      <div className="flex items-center gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity no-print shrink-0">
                         <button
                           type="button"
                           onClick={() => startEdit(item)}
                           className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:text-cyan-600 hover:bg-cyan-50 transition-colors cursor-pointer"
-                          title="تعديل هذا الدواء يدويًا بواسطة القلم ✏️"
+                          title="تعديل الجرعة أو الاسم يدوياً ✏️"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
@@ -780,36 +762,10 @@ export function LivePrescriptionPreview({
             </div>
           )}
 
-          {/* Embedded In-Place Drug Search & Manual Writing Pad (Hidden in Read-Only Print Preview) */}
-          {!readOnly && onAddItem && (
-            <InlineDrugPadInput
-              onAddItem={onAddItem}
-              primaryColor={primaryColor}
-              currentItems={items}
-            />
-          )}
-
-          {/* Patient Instructions & Notes Input (Hidden in Read-Only Print Preview) */}
-          {!readOnly && setNotes && (
-            <div className="pt-2 text-xs no-print space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 block">
-                تعليمات وإرشادات ختامية للمريض (تطبع بأسفل الروشتة):
-              </label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع للاطمئنان..."
-                className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 font-medium text-slate-800 text-xs focus:outline-none focus:border-emerald-500 shadow-inner"
-              />
-            </div>
-          )}
-
-          {/* Comfortable natural breathing margin between medications and footer */}
-          <div className="flex-1 min-h-[40px] sm:min-h-[60px]" aria-hidden="true" />
+          <div className="flex-1 min-h-[30px]" aria-hidden="true" />
         </div>
 
-        {/* Footer: Branches & Clinic Contact & Greeting (Respects showFooter) */}
+        {/* Footer: Branches & Clinic Contact & Greeting */}
         {clinic.showFooter !== false && (() => {
           const isAcademic = templateId === "academic_crest";
           const isSoftCurves = templateId === "soft_curves";
@@ -830,20 +786,18 @@ export function LivePrescriptionPreview({
                   : "pt-2 space-y-1.5"
               }`}
             >
-              {/* Notes if any */}
               {notes && (
                 <p
-                  className={`text-[10px] font-medium leading-relaxed p-1.5 rounded-lg border mb-1 ${
+                  className={`text-[10px] font-medium leading-relaxed p-2 rounded-lg border mb-1.5 ${
                     isAcademic
                       ? "bg-slate-800/90 border-slate-700 text-slate-200"
                       : "bg-slate-50 border-slate-200/70 text-slate-700"
                   }`}
                 >
-                  <strong className={isAcademic ? "text-white" : "text-slate-900"}>ملاحظات وتعليمات:</strong> {notes}
+                  <strong className={isAcademic ? "text-white" : "text-slate-900"}>تعليمات وإرشادات:</strong> {notes}
                 </p>
               )}
 
-              {/* Branches & Clinic Phone Numbers & Working Hours (No Doctor Signature, No 'الفرع الرئيسي') */}
               <div
                 className={`pt-1.5 flex flex-wrap items-center justify-center gap-x-6 gap-y-1.5 text-[9.5px] sm:text-[10px] font-semibold w-full ${
                   !isGeometric && !isAcademic && !isSoftCurves && !isNordic ? "border-t border-slate-200/90" : ""
@@ -906,7 +860,6 @@ export function LivePrescriptionPreview({
                 )}
               </div>
 
-              {/* Sentence: نتمنى لكم الشفاء العاجل (directly above the bottom border line) */}
               <div className="text-center w-full pt-0.5 pb-0.5">
                 <p
                   className={`text-[10px] sm:text-[11px] font-bold ${
@@ -927,38 +880,30 @@ export function LivePrescriptionPreview({
         })()}
       </div>
 
-      {/* Primary Action Buttons Bar (Responsive Grid on Mobile, Sleek Bar on Desktop) */}
+      {/* Quick Action Bar Under Preview Sheet */}
       {!readOnly && (
-        <div className="p-3 sm:p-4 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl no-print w-full transition-all" dir="rtl">
+        <div className="p-3 sm:p-4 rounded-2xl bg-slate-900/95 border border-slate-800 shadow-xl no-print w-full" dir="rtl">
           <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-between gap-2.5">
-            {/* New Prescription (Desktop: Start side / Mobile: Cell 4) */}
             {onRequestNewPrescription && (
               <button
                 type="button"
                 onClick={onRequestNewPrescription}
-                className="order-4 sm:order-1 w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-950/80 hover:bg-slate-900 text-slate-200 hover:text-white font-bold text-xs border-2 border-slate-800 hover:border-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-slate-950/50"
-                title="تفريغ وبدء روشتة جديدة للمريض التالي"
+                className="order-4 sm:order-1 w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-200 font-bold text-xs border border-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <div className="w-5 h-5 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0">
-                  <Plus className="w-3.5 h-3.5 text-cyan-400 stroke-[2.5]" />
-                </div>
-                <span className="truncate">روشتة جديدة</span>
+                <Plus className="w-3.5 h-3.5 text-cyan-400 stroke-[2.5]" />
+                <span>روشتة جديدة</span>
               </button>
             )}
 
-            {/* Action Group: Save, WhatsApp, Print */}
-            <div className="contents sm:flex sm:items-center sm:gap-2.5 sm:order-2">
+            <div className="contents sm:flex sm:items-center sm:gap-2 sm:order-2">
               {onSaveOnly && (
                 <button
                   type="button"
                   onClick={onSaveOnly}
-                  className="order-3 sm:order-1 w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-950/80 hover:bg-slate-900 text-emerald-300 hover:text-emerald-200 border-2 border-emerald-500/40 hover:border-emerald-400 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md shadow-emerald-950/40"
-                  title="حفظ الروشتة في سجل العيادة"
+                  className="order-3 sm:order-1 w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-emerald-300 border border-emerald-500/40 font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <div className="w-5 h-5 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
-                    <Save className="w-3.5 h-3.5 text-emerald-400" />
-                  </div>
-                  <span className="truncate">حفظ بالسجل</span>
+                  <Save className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>حفظ بالسجل</span>
                 </button>
               )}
 
@@ -966,11 +911,10 @@ export function LivePrescriptionPreview({
                 <button
                   type="button"
                   onClick={onShareWhatsApp}
-                  className="order-2 sm:order-2 w-full sm:w-auto px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs border border-emerald-400/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-lg shadow-emerald-950/50"
-                  title="إرسال الروشتة للمريض عبر واتساب مباشرة"
+                  className="order-2 sm:order-2 w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
                 >
-                  <MessageCircle className="w-4 h-4 stroke-[2.2] shrink-0" />
-                  <span className="truncate">إرسال واتساب</span>
+                  <MessageCircle className="w-4 h-4 shrink-0" />
+                  <span>إرسال واتساب</span>
                 </button>
               )}
 
@@ -978,11 +922,10 @@ export function LivePrescriptionPreview({
                 <button
                   type="button"
                   onClick={onSaveAndPrint}
-                  className="order-1 sm:order-3 w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-xl shadow-emerald-950/60"
-                  title="حفظ وطباعة الروشتة فوراً"
+                  className="order-1 sm:order-3 w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:brightness-110 text-slate-950 font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg"
                 >
                   <Printer className="w-4 h-4 stroke-[2.5] shrink-0" />
-                  <span className="truncate">طباعة الروشتة</span>
+                  <span>طباعة الروشتة</span>
                 </button>
               )}
             </div>

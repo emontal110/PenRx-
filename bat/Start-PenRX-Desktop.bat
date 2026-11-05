@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title PenRX+ - Desktop Application
 color 0B
 
@@ -28,3 +29,4 @@ if %errorlevel% neq 0 (
     echo [ERROR] Desktop app stopped with exit code %errorlevel%
 )
 pause
+exit /b 0

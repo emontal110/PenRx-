@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title PenRX+ - Medical Web Suite
 color 0A
 
@@ -30,3 +31,4 @@ if %errorlevel% neq 0 (
     echo [ERROR] Web Server stopped with exit code %errorlevel%
 )
 pause
+exit /b 0

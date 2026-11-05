@@ -10,7 +10,6 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
   Loader2,
   Check,
 } from "lucide-react";
@@ -81,9 +80,9 @@ export function AutoUpdateModal() {
     const w = typeof window !== "undefined" ? (window as any) : null;
     const isElectronDesktop = Boolean(w?.penrxDesktop?.isElectron);
 
-    // 1. Native Electron AutoUpdater Listener (Primary channel for Desktop EXE)
+    // 1. Native Electron AutoUpdater Listener (Single Authoritative Channel on Desktop)
     let unsubAvailable: (() => void) | undefined;
-    if (typeof w?.penrxDesktop?.onUpdateAvailable === "function") {
+    if (isElectronDesktop && typeof w?.penrxDesktop?.onUpdateAvailable === "function") {
       unsubAvailable = w.penrxDesktop.onUpdateAvailable(async (info: any) => {
         if (info && info.version) {
           let currentAppVer = "";
@@ -96,6 +95,9 @@ export function AutoUpdateModal() {
             return;
           }
           const cleanVer = String(info.version).replace(/\.0$/, "");
+          if (notifiedVersionRef.current === cleanVer) {
+            return;
+          }
           const dismissedVersion = localStorage.getItem("penrx_dismissed_update_version");
           if (dismissedVersion !== info.version && dismissedVersion !== cleanVer) {
             notifiedVersionRef.current = cleanVer;
@@ -110,9 +112,18 @@ export function AutoUpdateModal() {
           }
         }
       });
+
+      return () => {
+        unsubAvailable?.();
+        if (progressUnsubRef.current) {
+          progressUnsubRef.current();
+          progressUnsubRef.current = null;
+        }
+      };
     }
 
-    async function checkForUpdates() {
+    // 2. Web Browser Only Check (Not executed inside packaged Electron to prevent duplicate checks)
+    async function checkForWebUpdates() {
       try {
         const isNativeCapacitor = Boolean(
           w?.Capacitor?.isNativePlatform?.() ||
@@ -123,64 +134,38 @@ export function AutoUpdateModal() {
         );
 
         if (isNativeCapacitor) {
-          // Mobile APK receives live updates automatically
           return;
         }
 
-        let currentAppVer = "";
-        if (w?.penrxDesktop?.getAppVersion) {
-          try {
-            currentAppVer = await w.penrxDesktop.getAppVersion();
-          } catch {}
-        }
-
-        // If running in Electron and native update_available already notified us, skip duplicate API check
-        if (isElectronDesktop && notifiedVersionRef.current) {
-          return;
-        }
-
-        const url = currentAppVer
-          ? `/api/version/check?currentVersion=${encodeURIComponent(currentAppVer)}`
-          : "/api/version/check";
-
-        const res = await fetch(url, {
+        const res = await fetch("/api/version/check", {
           cache: "no-store",
           signal: AbortSignal.timeout(4000),
         });
         if (!res.ok) return;
         const data: UpdateInfo = await res.json();
 
-        if (!data || !data.latestVersion) return;
-
-        if (currentAppVer && !compareSemver(currentAppVer, data.latestVersion)) {
-          return;
-        }
+        if (!data || !data.latestVersion || !data.hasUpdate) return;
 
         const cleanLatest = String(data.latestVersion).replace(/\.0$/, "");
         if (notifiedVersionRef.current === cleanLatest) {
           return;
         }
 
-        if (data.hasUpdate) {
-          const dismissedVersion = localStorage.getItem("penrx_dismissed_update_version");
-          if (dismissedVersion !== data.latestVersion && dismissedVersion !== cleanLatest) {
-            notifiedVersionRef.current = cleanLatest;
-            setUpdateInfo({
-              ...data,
-              currentVersion: (currentAppVer || data.currentVersion || "").replace(/\.0$/, ""),
-              latestVersion: cleanLatest,
-            });
-            setIsOpen(true);
-          }
+        const dismissedVersion = localStorage.getItem("penrx_dismissed_update_version");
+        if (dismissedVersion !== data.latestVersion && dismissedVersion !== cleanLatest) {
+          notifiedVersionRef.current = cleanLatest;
+          setUpdateInfo({
+            ...data,
+            currentVersion: (data.currentVersion || "").replace(/\.0$/, ""),
+            latestVersion: cleanLatest,
+          });
+          setIsOpen(true);
         }
-      } catch {
-        // Silent catch in offline / timeout mode
-      }
+      } catch {}
     }
 
-    // Run fallback API check after 4.5s (giving Electron native checkForUpdates priority at 2.5s)
-    const timer = setTimeout(checkForUpdates, isElectronDesktop ? 4500 : 1800);
-    const interval = setInterval(checkForUpdates, 15 * 60 * 1000);
+    const timer = setTimeout(checkForWebUpdates, 2500);
+    const interval = setInterval(checkForWebUpdates, 15 * 60 * 1000);
 
     return () => {
       clearTimeout(timer);
@@ -232,7 +217,7 @@ export function AutoUpdateModal() {
     const targetType = selectedType || platform;
     const w = typeof window !== "undefined" ? (window as any) : null;
 
-    // 1. ELECTRON NATIVE UPDATER (Automatic differential delta download + silent install & restart)
+    // 1. ELECTRON NATIVE DIFFERENTIAL UPDATER (Delta download + automatic silent install & restart)
     if (isElectron && targetType === "desktop") {
       if (isDownloading || downloadStatus === "completed" || downloadStatus === "installing") return;
       setIsDownloading(true);
@@ -266,10 +251,10 @@ export function AutoUpdateModal() {
               setTotalMB(Number(progress.totalMB));
             }
 
-            if (progress?.installing || progress?.status === "installing") {
+            if (progress?.installing || progress?.status === "installing" || progress?.completed || progress?.status === "completed") {
               hasCompleted = true;
               setDownloadProgress(100);
-              setDownloadStatus("installing");
+              setDownloadStatus(progress?.installing ? "installing" : "completed");
               setIsDownloading(false);
               if (progressUnsubRef.current) {
                 progressUnsubRef.current();
@@ -278,23 +263,7 @@ export function AutoUpdateModal() {
               return;
             }
 
-            if (progress?.completed || progress?.status === "completed") {
-              hasCompleted = true;
-              setDownloadProgress(100);
-              setDownloadStatus("completed");
-              setIsDownloading(false);
-              if (progressUnsubRef.current) {
-                progressUnsubRef.current();
-                progressUnsubRef.current = null;
-              }
-              // electron/main.js automatically triggers performQuitAndInstall after 1.2s;
-              // send a backup invocation at 1.6s just in case
-              setTimeout(() => {
-                if (typeof w?.penrxDesktop?.quitAndInstallUpdate === "function") {
-                  w.penrxDesktop.quitAndInstallUpdate();
-                }
-              }, 1600);
-            } else if (progress?.status === "error") {
+            if (progress?.status === "error") {
               setDownloadStatus("error");
               setIsDownloading(false);
               setDownloadError(progress.error || "فشل تنزيل ملف التحديث");
@@ -309,24 +278,42 @@ export function AutoUpdateModal() {
         });
       }
 
-      // Download differential delta update (fetching only changed blocks)
       if (typeof w?.penrxDesktop?.downloadDifferentialUpdate === "function") {
         try {
           const diffRes = await w.penrxDesktop.downloadDifferentialUpdate();
           if (diffRes?.success || diffRes?.alreadyDownloaded) {
             return;
           }
+          // Only fall back to standalone full download if AutoUpdater is not available (e.g. unpackaged dev mode)
           if (diffRes?.error && diffRes.error !== "AutoUpdater not available") {
-            console.warn("[AutoUpdateModal] Differential updater notice:", diffRes.error);
+            if (!hasCompleted) {
+              if (progressUnsubRef.current) {
+                progressUnsubRef.current();
+                progressUnsubRef.current = null;
+              }
+              setIsDownloading(false);
+              setDownloadStatus("error");
+              setDownloadError(diffRes.error || "تعذر إكمال التحديث التفاضلي السريع");
+            }
+            return;
           }
         } catch (e: any) {
-          console.warn("[AutoUpdateModal] Differential update exception:", e?.message);
+          if (!hasCompleted) {
+            if (progressUnsubRef.current) {
+              progressUnsubRef.current();
+              progressUnsubRef.current = null;
+            }
+            setIsDownloading(false);
+            setDownloadStatus("error");
+            setDownloadError(e?.message || "حدث خطأ أثناء تنزيل فرق التحديث");
+          }
+          return;
         }
       }
 
       if (hasCompleted) return;
 
-      // Standalone direct installer fallback (if differential updater is not active)
+      // Fallback ONLY when AutoUpdater is unavailable (unpackaged mode)
       const targetUrl =
         updateInfo?.desktopDownloadUrl ||
         "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
@@ -358,18 +345,15 @@ export function AutoUpdateModal() {
       return;
     }
 
-    // 2. MOBILE (Android APK)
-    if (targetType === "mobile") {
-      const apkUrl =
-        updateInfo?.androidDownloadUrl ||
-        "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk";
-      handleManualDownload(apkUrl);
-      setDownloadStatus("completed");
-      return;
-    }
+    // 2. MOBILE (Android APK) OR WEB BROWSER
+    const downloadUrl =
+      targetType === "mobile"
+        ? updateInfo?.androidDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+.apk"
+        : updateInfo?.desktopDownloadUrl || "https://github.com/emontal110/PenRx-/releases/latest/download/PenRX+-Setup.exe";
+    handleManualDownload(downloadUrl);
+    setDownloadStatus("completed");
   };
 
-  // Single valid conditional return AFTER all hooks have executed
   if (!isClient || !isOpen || !updateInfo) {
     return null;
   }
@@ -423,7 +407,7 @@ export function AutoUpdateModal() {
                   ? "اكتمل التنزيل! جارٍ التثبيت التلقائي وإعادة التشغيل..."
                   : "تم تجهيز التحديث بنجاح!"
                 : downloadStatus === "installing"
-                ? "جارٍ تثبيت التحديث الآن..."
+                ? "جارٍ تثبيت التحديث وإعادة التشغيل الآن..."
                 : downloadStatus === "downloading"
                 ? "جارٍ تنزيل فرق التحديث السريع..."
                 : "تحديث جديد متوفر لمنظومة PenRX+"}
@@ -435,7 +419,7 @@ export function AutoUpdateModal() {
                   : "تم تجهيز ملف التحديث بنجاح."
                 : downloadStatus === "installing"
                 ? isElectron
-                  ? "يتم الآن تثبيت التحديث على جهازك، وسيظهر شريط تقدم التثبيت الحقيقي الخاص بالنظام ثم يفتح التطبيق تلقائياً."
+                  ? "يتم الآن تطبيق فرق التحديث بصمت وسرعة، وسيتم فتح البرنامج تلقائياً خلال ثوانٍ."
                   : "جارٍ تثبيت التحديث..."
                 : downloadStatus === "downloading"
                 ? isElectron
@@ -489,7 +473,7 @@ export function AutoUpdateModal() {
               </span>
               <span className="text-slate-400 font-mono text-[11px]">
                 {downloadStatus === "installing"
-                  ? "تثبيت"
+                  ? "تثبيت تلقائي"
                   : downloadedMB > 0 && totalMB > 0
                   ? `${downloadedMB} MB / ${totalMB} MB`
                   : downloadedMB > 0
@@ -506,22 +490,6 @@ export function AutoUpdateModal() {
                 <div className="absolute inset-0 bg-white/20 animate-pulse" />
               </div>
             </div>
-
-            {downloadStatus === "completed" && (
-              <p className="text-[11px] text-emerald-300 font-bold text-center pt-1 animate-in fade-in">
-                {isElectron
-                  ? "✨ تم استلام فرق التحديث، سيتم إغلاق البرنامج والتثبيت التلقائي السريع وإعادة التشغيل فوراً..."
-                  : "✨ اكتمل التجهيز بنجاح!"}
-              </p>
-            )}
-
-            {downloadStatus === "installing" && (
-              <p className="text-[11px] text-emerald-300 font-bold text-center pt-1 animate-in fade-in">
-                {isElectron
-                  ? "🛠️ سيتم الآن فتح مثبت Windows الرسمي لعرض شريط تقدم التثبيت الحقيقي ثم إعادة فتح PenRX+ تلقائياً..."
-                  : "🛠️ جاري تثبيت التحديث..."}
-              </p>
-            )}
           </div>
         )}
 
@@ -548,9 +516,7 @@ export function AutoUpdateModal() {
                 <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center gap-3 animate-in fade-in">
                   <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
                   <span className="text-emerald-300 font-bold text-xs sm:text-sm">
-                    {downloadStatus === "installing"
-                      ? "جارٍ تثبيت التحديث الآن عبر مثبت Windows الرسمي، ثم يتم فتح التطبيق تلقائياً..."
-                      : "جارٍ إغلاق البرنامج وتطبيق فرق التحديث وإعادة التشغيل تلقائياً..."}
+                    جارٍ إغلاق البرنامج وتطبيق فرق التحديث وإعادة التشغيل تلقائياً...
                   </span>
                 </div>
               ) : (

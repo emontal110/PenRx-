@@ -7,10 +7,8 @@ const http = require("http");
 const { execSync, fork, spawn } = require("child_process");
 
 if (process.platform === "win32") {
-  app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch("disable-gpu");
-  app.commandLine.appendSwitch("disable-gpu-compositing");
-  app.commandLine.appendSwitch("disable-software-rasterizer");
+  app.setAppUserModelId("com.penrxplus.app");
+  app.commandLine.appendSwitch("enable-features", "CalculateNativeWinOcclusion");
 }
 
 const EXTERNAL_HOST_ALLOWLIST = new Set([
@@ -138,7 +136,7 @@ try {
   const electronUpdater = require("electron-updater");
   autoUpdater = electronUpdater.autoUpdater;
   autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.disableDifferentialDownload = false;
   autoUpdater.disableWebInstaller = true;
   autoUpdater.allowDowngrade = false;
@@ -153,35 +151,6 @@ try {
   }
 
   try {
-    const { Provider } = require("electron-updater/out/providers/Provider");
-    const { newUrlFromBase } = require("electron-updater/out/util");
-    const escapeRx = (s) => String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    if (Provider && Provider.prototype && typeof Provider.prototype.getBlockMapFiles === "function") {
-      Provider.prototype.getBlockMapFiles = function (baseUrl, oldVersion, newVersion, oldBlockMapFileBaseUrl = null) {
-        const newBlockMapUrl = newUrlFromBase(`${baseUrl.pathname}.blockmap`, baseUrl);
-
-        const oldVShort = String(oldVersion || "").replace(/\.0$/, "");
-        const newVShort = String(newVersion || "").replace(/\.0$/, "");
-
-        let oldPath = baseUrl.pathname;
-        if (newVersion && oldPath.includes(`/v${newVersion}/`)) {
-          oldPath = oldPath.replace(`/v${newVersion}/`, `/v${oldVShort}/`);
-        } else if (newVShort && oldPath.includes(`/v${newVShort}/`)) {
-          oldPath = oldPath.replace(`/v${newVShort}/`, `/v${oldVShort}/`);
-        } else if (newVersion && oldPath.includes(newVersion)) {
-          oldPath = oldPath.replace(new RegExp(escapeRx(newVersion), "g"), oldVShort);
-        } else if (newVShort && oldPath.includes(newVShort)) {
-          oldPath = oldPath.replace(new RegExp(escapeRx(newVShort), "g"), oldVShort);
-        }
-
-        const oldBlockMapUrl = newUrlFromBase(
-          `${oldPath}.blockmap`,
-          oldBlockMapFileBaseUrl ? new URL(oldBlockMapFileBaseUrl) : baseUrl
-        );
-        return [oldBlockMapUrl, newBlockMapUrl];
-      };
-    }
-
     if (typeof autoUpdater.downloadBlockMap === "function") {
       const origDownloadBlockMap = autoUpdater.downloadBlockMap.bind(autoUpdater);
       autoUpdater.downloadBlockMap = async function (url) {
@@ -190,10 +159,15 @@ try {
         } catch (err) {
           const href = url && url.href ? url.href : String(url);
           const candidates = [];
-          if (/\/releases\/download\/v(\d+\.\d+)\//.test(href)) {
-            candidates.push(href.replace(/\/releases\/download\/v(\d+\.\d+)\//, "/releases/download/v$1.0/"));
-          } else if (/\/releases\/download\/v(\d+\.\d+)\.0\//.test(href)) {
+          if (/\/releases\/download\/v(\d+\.\d+)\.0\//.test(href)) {
             candidates.push(href.replace(/\/releases\/download\/v(\d+\.\d+)\.0\//, "/releases/download/v$1/"));
+          } else if (/\/releases\/download\/v(\d+\.\d+)\//.test(href)) {
+            candidates.push(href.replace(/\/releases\/download\/v(\d+\.\d+)\//, "/releases/download/v$1.0/"));
+          }
+          for (const baseHref of [href, ...candidates]) {
+            if (/PenRX\+-Setup-[0-9.]+\.exe\.blockmap/.test(baseHref)) {
+              candidates.push(baseHref.replace(/PenRX\+-Setup-[0-9.]+\.exe\.blockmap/, "PenRX+-Setup.exe.blockmap"));
+            }
           }
           for (const altHref of candidates) {
             if (altHref && altHref !== href) {
@@ -217,7 +191,10 @@ function performQuitAndInstall(customInstallerPath = null) {
   if (isQuittingForInstall) return;
   isQuittingForInstall = true;
 
-  console.log("[PenRX+ AutoUpdater] Executing fast update installation & automatic restart...");
+  console.log("[PenRX+ AutoUpdater] Executing silent update installation & automatic restart...");
+
+  // 1. Stop the child Next.js server first so no file handles inside resources/ remain locked
+  killServerProcessSync();
 
   try {
     if (splashWindow && !splashWindow.isDestroyed()) {
@@ -226,23 +203,21 @@ function performQuitAndInstall(customInstallerPath = null) {
     }
   } catch {}
 
+  // Remove any close interceptors on mainWindow, but DO NOT call mainWindow.destroy() before
+  // autoUpdater.quitAndInstall(), because destroying all windows triggers window-all-closed -> app.quit()
+  // prematurely before NsisUpdater attaches its installation hook.
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.removeAllListeners("close");
-      mainWindow.destroy();
-      mainWindow = null;
     }
   } catch {}
 
-  killServerProcessSync();
-
-  // Prefer native electronUpdater.quitAndInstall when differential update is ready (fastest delta patch)
+  // Prefer native electronUpdater.quitAndInstall (isSilent = true, isForceRunAfter = true)
   if (autoUpdater && updateDownloadedSuccessfully && !customInstallerPath) {
     try {
-      autoUpdater.quitAndInstall(false, true);
-      setTimeout(() => {
-        try { app.exit(0); } catch {}
-      }, 1200);
+      setImmediate(() => {
+        autoUpdater.quitAndInstall(true, true);
+      });
       return;
     } catch (err) {
       console.warn("[PenRX+ AutoUpdater] Native quitAndInstall notice, falling back to PS runner:", err.message);
@@ -258,10 +233,10 @@ function performQuitAndInstall(customInstallerPath = null) {
       const escapedAppExe = appExePath.replace(/'/g, "''");
 
       const psScript = [
-        `try { Wait-Process -Id ${currentPid} -Timeout 8 -ErrorAction SilentlyContinue } catch {}`,
-        `Start-Sleep -Milliseconds 400`,
-        `$installer = Start-Process -FilePath '${escapedInstaller}' -ArgumentList '--updated' -Wait -PassThru`,
-        `Start-Sleep -Milliseconds 800`,
+        `try { Wait-Process -Id ${currentPid} -Timeout 10 -ErrorAction SilentlyContinue } catch {}`,
+        `Start-Sleep -Milliseconds 300`,
+        `$installer = Start-Process -FilePath '${escapedInstaller}' -ArgumentList '/S','--updated','--force-run' -Wait -PassThru`,
+        `Start-Sleep -Milliseconds 500`,
         `if (-not (Get-Process -Name 'PenRX+' -ErrorAction SilentlyContinue)) { if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' } }`,
       ].join("; ");
 
@@ -275,14 +250,14 @@ function performQuitAndInstall(customInstallerPath = null) {
         }
       );
       runner.unref();
-      app.exit(0);
+      app.quit();
       return;
     } catch (spawnErr) {
       console.warn("[PenRX+ AutoUpdater] Installer runner notice:", spawnErr.message);
     }
   }
 
-  app.exit(0);
+  app.quit();
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -301,26 +276,14 @@ app.on("second-instance", () => {
 });
 
 const processCwd = app.isPackaged
-  ? (fs.existsSync(path.join(process.resourcesPath, "app.asar.unpacked"))
+  ? (fs.existsSync(path.join(process.resourcesPath, "app.asar"))
+      ? path.join(process.resourcesPath, "app.asar")
+      : fs.existsSync(path.join(process.resourcesPath, "app.asar.unpacked"))
       ? path.join(process.resourcesPath, "app.asar.unpacked")
       : fs.existsSync(path.join(process.resourcesPath, "app"))
       ? path.join(process.resourcesPath, "app")
       : process.resourcesPath)
   : path.resolve(__dirname, "..");
-
-function sanitizeHardwareToken(raw) {
-  if (!raw) return "";
-  const clean = String(raw).replace(/SerialNumber/i, "").trim();
-  const lower = clean.toLowerCase();
-  const isGeneric =
-    lower.includes("o.e.m") ||
-    lower.includes("fill") ||
-    lower.includes("none") ||
-    lower.includes("default") ||
-    lower.replace(/[^a-z0-9]/g, "").length < 4 ||
-    /^0+$/.test(lower.replace(/[^0-9]/g, ""));
-  return isGeneric ? "" : clean;
-}
 
 function getPersistentHardwareIdFilePath() {
   try {
@@ -350,7 +313,7 @@ function readPersistedHardwareId() {
       const regOut = execSync("reg query HKCU\\Software\\PenRXPlus /v MachineId", {
         windowsHide: true,
         stdio: ["ignore", "pipe", "ignore"],
-        timeout: 1500,
+        timeout: 800,
       }).toString();
       const match = regOut.match(/MachineId\s+REG_SZ\s+(\S+)/i);
       if (match && match[1]) {
@@ -375,11 +338,10 @@ function savePersistedHardwareId(hwId) {
   }
   if (process.platform === "win32") {
     try {
-      execSync(`reg add HKCU\\Software\\PenRXPlus /v MachineId /t REG_SZ /d "${hwId}" /f`, {
+      spawn("reg.exe", ["add", "HKCU\\Software\\PenRXPlus", "/v", "MachineId", "/t", "REG_SZ", "/d", hwId, "/f"], {
         windowsHide: true,
         stdio: "ignore",
-        timeout: 1500,
-      });
+      }).unref();
     } catch {}
   }
 }
@@ -390,52 +352,27 @@ function getHardwareMachineIdSync() {
   const persisted = readPersistedHardwareId();
   if (persisted) {
     CACHED_HARDWARE_ID = persisted;
-    savePersistedHardwareId(persisted);
     return CACHED_HARDWARE_ID;
   }
 
   let idSource = "";
 
+  // Fast Windows Registry MachineGuid lookup (<10ms, works on Windows 7/8/10/11 without deprecated WMIC)
   if (process.platform === "win32") {
     try {
-      const out = execSync("wmic baseboard get serialnumber", {
-        windowsHide: true,
-        stdio: ["ignore", "pipe", "ignore"],
-        timeout: 2000,
-      }).toString();
-      idSource = sanitizeHardwareToken(out);
-    } catch {}
-
-    if (!idSource) {
-      try {
-        const out2 = execSync(
-          'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "(Get-CimInstance Win32_BaseBoard).SerialNumber"',
-          {
-            windowsHide: true,
-            stdio: ["ignore", "pipe", "ignore"],
-            timeout: 3000,
-          }
-        ).toString();
-        idSource = sanitizeHardwareToken(out2);
-      } catch {}
-    }
-
-    if (!idSource) {
-      try {
-        const guidOut = execSync(
-          "reg query HKLM\\Software\\Microsoft\\Cryptography /v MachineGuid /reg:64",
-          {
-            windowsHide: true,
-            stdio: ["ignore", "pipe", "ignore"],
-            timeout: 2000,
-          }
-        ).toString();
-        const match = guidOut.match(/MachineGuid\s+REG_SZ\s+(\S+)/i);
-        if (match && match[1]) {
-          idSource = match[1].trim();
+      const guidOut = execSync(
+        "reg query HKLM\\Software\\Microsoft\\Cryptography /v MachineGuid /reg:64",
+        {
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "ignore"],
+          timeout: 1000,
         }
-      } catch {}
-    }
+      ).toString();
+      const match = guidOut.match(/MachineGuid\s+REG_SZ\s+(\S+)/i);
+      if (match && match[1]) {
+        idSource = match[1].trim();
+      }
+    } catch {}
   }
 
   if (!idSource) {
@@ -467,10 +404,6 @@ function getHardwareMachineIdSync() {
   return CACHED_HARDWARE_ID;
 }
 
-try {
-  getHardwareMachineIdSync();
-} catch {}
-
 ipcMain.handle("get-hardware-machine-id", async () => {
   return getHardwareMachineIdSync();
 });
@@ -500,8 +433,6 @@ function normalizeEgyptWhatsAppDigits(rawPhone) {
 }
 
 // IPC handler: Native Desktop WhatsApp Direct File Share (Image PNG or PDF)
-// Opens the patient's conversation in the native WhatsApp Desktop App (NOT web),
-// verifies WhatsApp window focus, attaches the Image/PDF from clipboard, and presses Enter to send automatically!
 ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
   try {
     const { base64Data, fileName, mimeType, cleanPhone } = payload || {};
@@ -541,7 +472,6 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
     const isPdf = mimeType === "application/pdf" || safeName.endsWith(".pdf");
 
     if (!isPdf) {
-      // Put both nativeImage AND file drop list if possible so WhatsApp Desktop accepts Ctrl+V in all builds
       const img = nativeImage.createFromBuffer(buffer);
       if (!img.isEmpty()) {
         clipboard.writeImage(img);
@@ -563,7 +493,6 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
       }
     }
 
-    // Launch native WhatsApp Desktop directly to the patient's phone number via whatsapp:// protocol
     const whatsappNativeUrl = `whatsapp://send?phone=${digitsOnly}&text=`;
     let openedNative = false;
 
@@ -584,12 +513,10 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
       openedNative = openExternalSafely(whatsappNativeUrl);
     }
 
-    // Smart Focus-Aware Auto-Paste & Auto-Send in Native WhatsApp Desktop App
     if (process.platform === "win32") {
       const autoPasteAndSendScript = [
         "Add-Type -AssemblyName System.Windows.Forms",
         "$wshell = New-Object -ComObject WScript.Shell",
-        // Poll up to 5 seconds until WhatsApp window exists and bring it to foreground
         "$focused = $false",
         "for ($i = 0; $i -lt 12; $i++) {",
         "  Start-Sleep -Milliseconds 400",
@@ -598,17 +525,13 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
         "    break",
         "  }",
         "}",
-        // Wait for WhatsApp chat conversation view for the target phone number to finish mounting
         "Start-Sleep -Milliseconds 1800",
         "$null = $wshell.AppActivate('WhatsApp')",
         "Start-Sleep -Milliseconds 250",
-        // Paste the Prescription Image or PDF into the patient's chat
         "[System.Windows.Forms.SendKeys]::SendWait('^v')",
-        // Wait for WhatsApp Desktop's attachment preview overlay to open and focus its Send button
         "Start-Sleep -Milliseconds 1900",
         "$null = $wshell.AppActivate('WhatsApp')",
         "Start-Sleep -Milliseconds 200",
-        // Send the attached prescription automatically
         "[System.Windows.Forms.SendKeys]::SendWait('{ENTER}')",
       ].join("; ");
 
@@ -695,7 +618,6 @@ if (autoUpdater) {
   autoUpdater.on("download-progress", (progressObj) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       const pct = Math.min(99, Math.max(1, Math.round(progressObj.percent || 0)));
-      mainWindow.webContents.send("download_progress", pct);
       mainWindow.webContents.send("update-download-progress", {
         progress: pct,
         percent: pct,
@@ -720,14 +642,15 @@ if (autoUpdater) {
         completed: true,
         status: "completed",
         installing: true,
-        message: "جارٍ تثبيت التحديث الآن...",
+        message: "جارٍ تثبيت التحديث وإعادة التشغيل تلقائياً...",
       });
     }
+    // Single authoritative trigger for quitAndInstall after brief UI feedback
     setTimeout(() => {
       if (!isQuittingForInstall) {
         performQuitAndInstall();
       }
-    }, 1000);
+    }, 650);
   });
 
   autoUpdater.on("error", (err) => {
@@ -754,7 +677,7 @@ ipcMain.handle("check-differential-update", async () => {
 
 ipcMain.handle("download-differential-update", async () => {
   if (updateDownloadedSuccessfully) {
-    setTimeout(() => performQuitAndInstall(), 300);
+    setTimeout(() => performQuitAndInstall(), 250);
     return { success: true, alreadyDownloaded: true };
   }
   if (isUpdateDownloading) {
@@ -778,13 +701,7 @@ ipcMain.handle("download-differential-update", async () => {
       }
       updateDownloadedSuccessfully = true;
       isUpdateDownloading = false;
-
-      setTimeout(() => {
-        if (!isQuittingForInstall) {
-          performQuitAndInstall();
-        }
-      }, 900);
-
+      // Note: autoUpdater.on("update-downloaded") handles performQuitAndInstall() automatically
       return { success: true, updateInfo: cachedUpdateInfo };
     } catch (err) {
       isUpdateDownloading = false;
@@ -983,7 +900,7 @@ function pingPenrxHealth(url) {
       resolve(res.statusCode === 200);
     });
     req.on("error", () => resolve(false));
-    req.setTimeout(1000, () => {
+    req.setTimeout(600, () => {
       req.destroy();
       resolve(false);
     });
@@ -996,12 +913,10 @@ async function ensureServerRunning() {
     return activeServerUrl;
   }
 
-  if (!app.isPackaged) {
-    const is3000Up = await pingPenrxHealth("http://localhost:3000");
-    if (is3000Up) {
-      activeServerUrl = "http://localhost:3000";
-      return activeServerUrl;
-    }
+  const is3000Up = await pingPenrxHealth("http://localhost:3000");
+  if (is3000Up) {
+    activeServerUrl = "http://localhost:3000";
+    return activeServerUrl;
   }
 
   return new Promise((resolve) => {
@@ -1064,14 +979,15 @@ async function ensureServerRunning() {
         clearInterval(pollInterval);
         finish(`http://localhost:${targetPort}`);
       }
-    }, 150);
+    }, 60);
 
+    // Allow up to 12 seconds for cold disk startup before falling back to cloud URL
     setTimeout(() => {
       clearInterval(pollInterval);
       if (!resolved) {
         finish(fallbackCloudUrl);
       }
-    }, 4500);
+    }, 12000);
   });
 }
 
@@ -1092,7 +1008,6 @@ function getLogoBase64() {
     path.join(__dirname, "../public/logo-penrx.jpg"),
     path.join(processCwd, "public/logo-penrx.jpg"),
     path.join(__dirname, "../public/icon-512.png"),
-    path.join(process.resourcesPath, "public/logo-penrx.jpg"),
   ];
   for (const c of candidates) {
     try {
@@ -1149,7 +1064,7 @@ function buildSplashHtml(logoBase64) {
     }
     .progress-bar {
       height: 100%; width: 45%; background: linear-gradient(90deg, #10b981, #06b6d4);
-      border-radius: 999px; position: absolute; animation: sweep 1.3s ease-in-out infinite;
+      border-radius: 999px; position: absolute; animation: sweep 1.1s ease-in-out infinite;
     }
     @keyframes sweep { 0% { left: -45%; } 100% { left: 100%; } }
     .status-text { font-size: 11px; font-weight: 600; color: #cbd5e1; }
@@ -1255,20 +1170,16 @@ function createMainWindow(targetUrl) {
       mainWindow.focus();
     }
 
-    setTimeout(() => {
-      if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.close();
-        splashWindow = null;
-      }
-    }, 180);
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+      splashWindow = null;
+    }
   };
 
-  mainWindow.webContents.once("did-finish-load", revealMainWindow);
-  mainWindow.webContents.once("dom-ready", () => {
-    setTimeout(revealMainWindow, 400);
-  });
+  mainWindow.once("ready-to-show", revealMainWindow);
+  mainWindow.webContents.once("dom-ready", revealMainWindow);
   ipcMain.once("app-ready", revealMainWindow);
-  setTimeout(revealMainWindow, 4000);
+  setTimeout(revealMainWindow, 2500);
 
   mainWindow.webContents.on("before-input-event", (event, input) => {
     if (input.type === "keyDown") {
@@ -1310,7 +1221,7 @@ function createMainWindow(targetUrl) {
           if (mainWindow && !mainWindow.isDestroyed() && activeServerUrl) {
             mainWindow.loadURL(`${activeServerUrl}/`);
           }
-        }, 1000);
+        }, 600);
       } else {
         const cloudFallback = process.env.PENRX_CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://pen-rx.vercel.app";
         mainWindow.loadURL(`${cloudFallback}/`);
@@ -1333,6 +1244,9 @@ app.whenReady().then(() => {
   if (nativeTheme) {
     nativeTheme.themeSource = "dark";
   }
+
+  // Show splash window immediately before any disk or server work
+  createSplashWindow();
 
   const GRANTED_PERMISSIONS = new Set(["notifications", "clipboard-sanitized-write"]);
   try {
@@ -1361,8 +1275,6 @@ app.whenReady().then(() => {
     fs.writeFileSync(lastVersionFile, currentVersion, "utf8");
   } catch {}
 
-  createSplashWindow();
-
   ensureServerRunning().then((baseUrl) => {
     const targetUrl = `${baseUrl}/`;
     createMainWindow(targetUrl);
@@ -1370,10 +1282,10 @@ app.whenReady().then(() => {
     if (autoUpdater && app.isPackaged) {
       setTimeout(() => {
         autoUpdater.checkForUpdates().catch(() => {});
-      }, 2500);
+      }, 2000);
 
       setInterval(() => {
-        if (mainWindow && !mainWindow.isDestroyed() && !isUpdateDownloading) {
+        if (mainWindow && !mainWindow.isDestroyed() && !isUpdateDownloading && !updateDownloadedSuccessfully) {
           autoUpdater.checkForUpdates().catch(() => {});
         }
       }, 15 * 60 * 1000);
@@ -1386,7 +1298,7 @@ app.on("before-quit", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" && !isQuittingForInstall) {
     app.quit();
   }
 });

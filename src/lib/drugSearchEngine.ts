@@ -28,7 +28,7 @@ export function normalizeArabic(text: string): string {
     .replace(/[ىي]/g, "ي")
     .replace(/ؤ/g, "و")
     .replace(/ئ/g, "ي")
-    .replace(/[\u064B-\u065F\u0670\u0640]/g, "") // remove Tashkeel & Tatweel
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
     .replace(/[^\w\s\u0600-\u06FF*]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -52,7 +52,6 @@ export function normalizeDrugCanonicalKey(name: string, dosageForm?: string): st
 
 /**
  * Transliterates Arabic phonetic search queries into an English regex pattern
- * so searching "كونكور" or "أوجمنتين" or "بانادول" also matches English trade names if Arabic alias is absent.
  */
 export function arabicToEnglishPhoneticRegex(arQuery: string): RegExp | null {
   const norm = normalizeArabic(arQuery).replace(/[*]/g, "");
@@ -168,52 +167,44 @@ export function cleanArabicDrugName(nameAr?: string): string {
     .trim();
 }
 
-// ── Essential Popular Regional Brand Medications ─────────────────────────────
+// ── Updated 2026 Essential Egyptian & International Medications ──────────────
 const ESSENTIAL_POPULAR_DRUGS: DrugRecord[] = [
-  { id: "pan-adv-500", name: "Panadol Advance 500mg Tablets", nameAr: "بنادول أدفانس 500 مجم أقراص", activeIngredient: "Paracetamol 500mg", activeIngredientAr: "باراسيتامول 500 مجم", company: "GSK", dosageForm: "Tablet", category: "Analgesic / Antipyretic", price: 45, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "pan-ext-tab", name: "Panadol Extra Tablets", nameAr: "بنادول إكسترا أقراص مسكن للصداع", activeIngredient: "Paracetamol 500mg + Caffeine 65mg", activeIngredientAr: "باراسيتامول + كافيين", company: "GSK", dosageForm: "Tablet", category: "Analgesic / Antipyretic", price: 52, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "pan-jnt-tab", name: "Panadol Joint 665mg Tablets", nameAr: "بنادول جوينت للمفاصل 665 مجم", activeIngredient: "Paracetamol 665mg", activeIngredientAr: "باراسيتامول 665 مجم ممتد المفعول", company: "GSK", dosageForm: "Tablet", category: "Analgesic / Antipyretic", price: 65, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "pan-nig-tab", name: "Panadol Night Tablets", nameAr: "بنادول نايت أقراص للنوم والألم", activeIngredient: "Paracetamol 500mg + Diphenhydramine 25mg", activeIngredientAr: "باراسيتامول + ديفينهيدرامين", company: "GSK", dosageForm: "Tablet", category: "Analgesic / Antipyretic", price: 55, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "pan-cold-day", name: "Panadol Cold & Flu Day Tablets", nameAr: "بنادول كولد أند فلو داي (أصفر)", activeIngredient: "Paracetamol + Phenylephrine + Caffeine", activeIngredientAr: "باراسيتامول + فينيل إفرين", company: "GSK", dosageForm: "Tablet", category: "Cold & Flu", price: 58, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "pan-cold-all", name: "Panadol Cold & Flu All in One", nameAr: "بنادول كولد أند فلو الكل في واحد", activeIngredient: "Paracetamol + Phenylephrine + Guaifenesin", activeIngredientAr: "باراسيتامول + طارد للبلغم", company: "GSK", dosageForm: "Tablet", category: "Cold & Flu", price: 62, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "pan-baby-syr", name: "Panadol Baby & Infant 100ml Syrup", nameAr: "بنادول شراب للأطفال والرضع", activeIngredient: "Paracetamol 120mg/5ml", activeIngredientAr: "باراسيتامول شراب للأطفال", company: "GSK", dosageForm: "Syrup", category: "Analgesic / Antipyretic", price: 38, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "bruf-200-tab", name: "Brufen 200mg Tablets", nameAr: "بروفين 200 مجم أقراص مسكن للألم", activeIngredient: "Ibuprofen 200mg", activeIngredientAr: "إيبوبروفين 200 مجم", company: "Abbott", dosageForm: "Tablet", category: "NSAID / Analgesic", price: 36, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "bruf-400-tab", name: "Brufen 400mg Tablets", nameAr: "بروفين 400 مجم أقراص مسكن ومضاد للالتهاب", activeIngredient: "Ibuprofen 400mg", activeIngredientAr: "إيبوبروفين 400 مجم", company: "Abbott", dosageForm: "Tablet", category: "NSAID / Analgesic", price: 52, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "bruf-600-tab", name: "Brufen 600mg Tablets", nameAr: "بروفين 600 مجم أقراص مسكن قوي ومضاد للروماتيزم", activeIngredient: "Ibuprofen 600mg", activeIngredientAr: "إيبوبروفين 600 مجم", company: "Abbott", dosageForm: "Tablet", category: "NSAID / Analgesic", price: 68, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "bruf-800-ret", name: "Brufen Retard 800mg Tablets", nameAr: "بروفين ريتارد 800 مجم ممتد المفعول", activeIngredient: "Ibuprofen 800mg SR", activeIngredientAr: "إيبوبروفين 800 مجم", company: "Abbott", dosageForm: "Tablet", category: "NSAID / Analgesic", price: 75, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "bruf-syr-100", name: "Brufen 100mg/5ml Syrup", nameAr: "بروفين شراب للأطفال خافض حرارة ومسكن", activeIngredient: "Ibuprofen 100mg/5ml", activeIngredientAr: "إيبوبروفين شراب", company: "Abbott", dosageForm: "Syrup", category: "Analgesic / Antipyretic", price: 32, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "busc-10-tab", name: "Buscopan 10mg Tablets", nameAr: "بوسكوبان 10 مجم أقراص للتقلصات والمغص", activeIngredient: "Hyoscine Butylbromide 10mg", activeIngredientAr: "هيوسين بيوتيل بروميد", company: "Sanofi", dosageForm: "Tablet", category: "Antispasmodic", price: 34, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "busc-pls-tab", name: "Buscopan Plus Tablets", nameAr: "بوسكوبان بلس أقراص للمغص والمسكن", activeIngredient: "Hyoscine Butylbromide 10mg + Paracetamol 500mg", activeIngredientAr: "هيوسين + باراسيتامول", company: "Sanofi", dosageForm: "Tablet", category: "Antispasmodic", price: 42, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "panto-20-tab", name: "Pantoloc 20mg Tablets", nameAr: "بانتولوك 20 مجم أقراص للمعدة والحموضة", activeIngredient: "Pantoprazole 20mg", activeIngredientAr: "بانتوبرازول 20 مجم", company: "Takeda", dosageForm: "Tablet", category: "Gastrointestinal / PPI", price: 68, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "panto-40-tab", name: "Pantoloc 40mg Tablets", nameAr: "بانتولوك 40 مجم أقراص لعلاج قرحة المعدة", activeIngredient: "Pantoprazole 40mg", activeIngredientAr: "بانتوبرازول 40 مجم", company: "Takeda", dosageForm: "Tablet", category: "Gastrointestinal / PPI", price: 95, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "aug-1g-tab", name: "Augmentin 1g Tablets", nameAr: "أوجمنتين 1 جم أقراص مضاد حيوي واسع المجال", activeIngredient: "Amoxicillin 875mg + Clavulanic Acid 125mg", activeIngredientAr: "أموكسيسيلين + كلافولانات 1 جم", company: "GSK", dosageForm: "Tablet", category: "Antibiotic", price: 145, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "aug-625-tab", name: "Augmentin 625mg Tablets", nameAr: "أوجمنتين 625 مجم أقراص مضاد حيوي", activeIngredient: "Amoxicillin 500mg + Clavulanic Acid 125mg", activeIngredientAr: "أموكسيسيلين + كلافولانات 625 مجم", company: "GSK", dosageForm: "Tablet", category: "Antibiotic", price: 110, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "aug-es-600", name: "Augmentin ES 600mg Suspension", nameAr: "أوجمنتين إي إس 600 مجم معلق للأطفال", activeIngredient: "Amoxicillin 600mg + Clavulanic Acid 42.9mg/5ml", activeIngredientAr: "أموكسيسيلين معلق 600 مجم", company: "GSK", dosageForm: "Suspension", category: "Antibiotic", price: 98, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "antin-cap-200", name: "Antinal 200mg Capsules", nameAr: "أنتينال 200 مجم كبسولات مطهر معوي للإسهال", activeIngredient: "Nifuroxazide 200mg", activeIngredientAr: "نيفوروكسازيد 200 مجم", company: "Amoun", dosageForm: "Capsule", category: "Gastrointestinal", price: 42, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "alphin-tab", name: "Alphintern Tablets", nameAr: "ألفانترن أقراص مضاد للالتهاب والتورم", activeIngredient: "Chymotrypsin + Trypsin", activeIngredientAr: "كيموتربسين + تربسين", company: "Amoun", dosageForm: "Tablet", category: "Anti-inflammatory", price: 65, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "cataf-50-tab", name: "Cataflam 50mg Tablets", nameAr: "كتافلام 50 مجم أقراص مسكن سريع ومضاد للالتهاب", activeIngredient: "Diclofenac Potassium 50mg", activeIngredientAr: "ديكلوفيناك بوتاسيوم 50 مجم", company: "Novartis", dosageForm: "Tablet", category: "Analgesic / NSAID", price: 78, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "concor-5-tab", name: "Concor 5mg Tablets", nameAr: "كونكور 5 مجم أقراص لعلاج ضغط الدم والقلب", activeIngredient: "Bisoprolol Fumarate 5mg", activeIngredientAr: "بيسوبرولول 5 مجم", company: "Merck", dosageForm: "Tablet", category: "Cardiovascular / Beta Blocker", price: 75, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "concor-10-tab", name: "Concor 10mg Tablets", nameAr: "كونكور 10 مجم أقراص لارتفاع ضغط الدم", activeIngredient: "Bisoprolol Fumarate 10mg", activeIngredientAr: "بيسوبرولول 10 مجم", company: "Merck", dosageForm: "Tablet", category: "Cardiovascular / Beta Blocker", price: 99, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "concor-pls-5", name: "Concor 5 Plus Tablets", nameAr: "كونكور 5 بلس أقراص ضغط الدم مع مدر بول", activeIngredient: "Bisoprolol 5mg + Hydrochlorothiazide 12.5mg", activeIngredientAr: "بيسوبرولول + هيدروكلوروثيازيد", company: "Merck", dosageForm: "Tablet", category: "Cardiovascular", price: 85, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "curam-1g-tab", name: "Curam 1g Tablets", nameAr: "كيورام 1 جم أقراص مضاد حيوي واسع المدى", activeIngredient: "Amoxicillin 875mg + Clavulanic Acid 125mg", activeIngredientAr: "أموكسيسيلين + كلافولانات 1 جم", company: "Sandoz", dosageForm: "Tablet", category: "Antibiotic", price: 126, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "flag-500-tab", name: "Flagyl 500mg Tablets", nameAr: "فلاجيل 500 مجم أقراص مطهر ومضاد للطفيليات", activeIngredient: "Metronidazole 500mg", activeIngredientAr: "ميترونيدازول 500 مجم", company: "Sanofi", dosageForm: "Tablet", category: "Antiparasitic / Antibacterial", price: 42, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "volt-50-tab", name: "Voltaren 50mg Tablets", nameAr: "فولتارين 50 مجم أقراص مغلفة مسكن ومضاد للروماتيزم", activeIngredient: "Diclofenac Sodium 50mg", activeIngredientAr: "ديكلوفيناك صوديوم 50 مجم", company: "Novartis", dosageForm: "Tablet", category: "Analgesic / NSAID", price: 72, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "zith-500-cap", name: "Zithromax 500mg Capsules", nameAr: "زيثروماكس 500 مجم كبسولات مضاد حيوي 3 أيام", activeIngredient: "Azithromycin 500mg", activeIngredientAr: "أزيثروميسين 500 مجم", company: "Pfizer", dosageForm: "Capsule", category: "Antibiotic", price: 115, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "nex-40-tab", name: "Nexium 40mg Tablets", nameAr: "نيكسيوم 40 مجم أقراص لعلاج قرحة المعدة والارتجاع الشديد", activeIngredient: "Esomeprazole 40mg", activeIngredientAr: "إيزوميبرازول 40 مجم", company: "AstraZeneca", dosageForm: "Tablet", category: "Gastrointestinal / PPI", price: 165, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "gluc-1000-tab", name: "Glucophage 1000mg Tablets", nameAr: "جلوكوفاج 1000 مجم أقراص لعلاج مرض السكر", activeIngredient: "Metformin Hydrochloride 1000mg", activeIngredientAr: "ميتفورمين 1000 مجم", company: "Merck", dosageForm: "Tablet", category: "Antidiabetic", price: 68, sourceOrigin: "Egyptian Bank", isEssential: true },
-  { id: "hibio-1g-tab", name: "Hibiotic 1g Tablets", nameAr: "هاي بيوتك 1 جم أقراص مضاد حيوي واسع المجال", activeIngredient: "Amoxicillin 875mg + Clavulanic Acid 125mg", activeIngredientAr: "أموكسيسيلين + كلافولانات 1 جم", company: "Amoun", dosageForm: "Tablet", category: "Antibiotic", price: 120, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "pan-adv-500", name: "Panadol Advance 500mg 24 Tablets", nameAr: "بنادول أدفانس 500 مجم 24 قرص", activeIngredient: "Paracetamol 500mg", activeIngredientAr: "باراسيتامول 500 مجم", company: "GSK / Haleon", dosageForm: "Tablet (قرص)", category: "Analgesic / Antipyretic", price: 60, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "pan-ext-tab", name: "Panadol Extra 24 Tablets", nameAr: "بنادول إكسترا 24 قرص مسكن للصداع والألم", activeIngredient: "Paracetamol 500mg + Caffeine 65mg", activeIngredientAr: "باراسيتامول + كافيين", company: "GSK / Haleon", dosageForm: "Tablet (قرص)", category: "Analgesic / Antipyretic", price: 70, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "pan-jnt-tab", name: "Panadol Joint 665mg 24 Tablets", nameAr: "بنادول جوينت للمفاصل 665 مجم 24 قرص", activeIngredient: "Paracetamol 665mg SR", activeIngredientAr: "باراسيتامول 665 مجم ممتد المفعول", company: "GSK / Haleon", dosageForm: "Tablet (قرص)", category: "Analgesic / Antipyretic", price: 95, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "pan-nig-tab", name: "Panadol Night 20 Tablets", nameAr: "بنادول نايت 20 قرص للنوم والألم", activeIngredient: "Paracetamol 500mg + Diphenhydramine 25mg", activeIngredientAr: "باراسيتامول + ديفينهيدرامين", company: "GSK / Haleon", dosageForm: "Tablet (قرص)", category: "Analgesic / Antipyretic", price: 72, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "pan-cold-day", name: "Panadol Cold & Flu Day 24 Tablets", nameAr: "بنادول كولد أند فلو داي 24 قرص (أصفر)", activeIngredient: "Paracetamol + Phenylephrine + Caffeine", activeIngredientAr: "باراسيتامول + فينيل إفرين", company: "GSK / Haleon", dosageForm: "Tablet (قرص)", category: "Cold & Flu", price: 76, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "pan-cold-all", name: "Panadol Cold & Flu All in One 24 Tablets", nameAr: "بنادول كولد أند فلو الكل في واحد 24 قرص", activeIngredient: "Paracetamol + Phenylephrine + Guaifenesin", activeIngredientAr: "باراسيتامول + طارد للبلغم", company: "GSK / Haleon", dosageForm: "Tablet (قرص)", category: "Cold & Flu", price: 85, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "pan-baby-syr", name: "Panadol Baby & Infant 100ml Suspension", nameAr: "بنادول بيبي شراب معلق للأطفال والرضع", activeIngredient: "Paracetamol 120mg/5ml", activeIngredientAr: "باراسيتامول شراب للأطفال", company: "GSK / Haleon", dosageForm: "Suspension (معلق)", category: "Analgesic / Antipyretic", price: 58, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "bruf-400-tab", name: "Brufen 400mg 30 Tablets", nameAr: "بروفين 400 مجم 30 قرص مسكن ومضاد للالتهاب", activeIngredient: "Ibuprofen 400mg", activeIngredientAr: "إيبوبروفين 400 مجم", company: "Abbott / Kahira", dosageForm: "Tablet (قرص)", category: "NSAID / Analgesic", price: 78, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "bruf-600-tab", name: "Brufen 600mg 30 Tablets", nameAr: "بروفين 600 مجم 30 قرص مسكن قوي ومضاد للروماتيزم", activeIngredient: "Ibuprofen 600mg", activeIngredientAr: "إيبوبروفين 600 مجم", company: "Abbott / Kahira", dosageForm: "Tablet (قرص)", category: "NSAID / Analgesic", price: 99, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "cataf-50-tab", name: "Cataflam 50mg 20 Tablets", nameAr: "كتافلام 50 مجم 20 قرص مسكن سريع ومضاد للالتهاب", activeIngredient: "Diclofenac Potassium 50mg", activeIngredientAr: "ديكلوفيناك بوتاسيوم 50 مجم", company: "Novartis", dosageForm: "Tablet (قرص)", category: "Analgesic / NSAID", price: 86, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "aug-1g-tab", name: "Augmentin 1g 14 Tablets", nameAr: "أوجمنتين 1 جم 14 قرص مضاد حيوي واسع المجال", activeIngredient: "Amoxicillin 875mg + Clavulanic Acid 125mg", activeIngredientAr: "أموكسيسيلين + كلافولانات 1 جم", company: "GSK", dosageForm: "Tablet (قرص)", category: "Antibiotic", price: 172, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "aug-es-600", name: "Augmentin ES 600mg Suspension", nameAr: "أوجمنتين إي إس 600 مجم معلق للأطفال", activeIngredient: "Amoxicillin 600mg + Clavulanic Acid 42.9mg/5ml", activeIngredientAr: "أموكسيسيلين معلق 600 مجم", company: "GSK", dosageForm: "Suspension (معلق)", category: "Antibiotic", price: 132, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "hibio-1g-tab", name: "Hibiotic 1g 16 Tablets", nameAr: "هاي بيوتك 1 جم 16 قرص مضاد حيوي واسع المجال", activeIngredient: "Amoxicillin 875mg + Clavulanic Acid 125mg", activeIngredientAr: "أموكسيسيلين + كلافولانات 1 جم", company: "Amoun", dosageForm: "Tablet (قرص)", category: "Antibiotic", price: 148, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "curam-1g-tab", name: "Curam 1g 14 Tablets", nameAr: "كيورام 1 جم 14 قرص مضاد حيوي واسع المدى", activeIngredient: "Amoxicillin 875mg + Clavulanic Acid 125mg", activeIngredientAr: "أموكسيسيلين + كلافولانات 1 جم", company: "Sandoz", dosageForm: "Tablet (قرص)", category: "Antibiotic", price: 146, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "antin-cap-200", name: "Antinal 200mg 24 Capsules", nameAr: "أنتينال 200 مجم 24 كبسولة مطهر معوي للإسهال", activeIngredient: "Nifuroxazide 200mg", activeIngredientAr: "نيفوروكسازيد 200 مجم", company: "Amoun", dosageForm: "Capsule (كبسولة)", category: "Gastrointestinal", price: 52, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "alphin-tab", name: "Alphintern 30 Tablets", nameAr: "ألفينترن 30 قرص مضاد للالتهاب والتورم", activeIngredient: "Chymotrypsin + Trypsin", activeIngredientAr: "كيموتربسين + تربسين", company: "Amoun", dosageForm: "Tablet (قرص)", category: "Anti-inflammatory", price: 75, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "concor-5-tab", name: "Concor 5mg 30 Tablets", nameAr: "كونكور 5 مجم 30 قرص لعلاج ضغط الدم والقلب", activeIngredient: "Bisoprolol Fumarate 5mg", activeIngredientAr: "بيسوبرولول 5 مجم", company: "Merck", dosageForm: "Tablet (قرص)", category: "Cardiovascular / Beta Blocker", price: 84, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "concor-10-tab", name: "Concor 10mg 30 Tablets", nameAr: "كونكور 10 مجم 30 قرص لارتفاع ضغط الدم", activeIngredient: "Bisoprolol Fumarate 10mg", activeIngredientAr: "بيسوبرولول 10 مجم", company: "Merck", dosageForm: "Tablet (قرص)", category: "Cardiovascular / Beta Blocker", price: 117, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "flag-500-tab", name: "Flagyl 500mg 20 Tablets", nameAr: "فلاجيل 500 مجم 20 قرص مطهر ومضاد للطفيليات", activeIngredient: "Metronidazole 500mg", activeIngredientAr: "ميترونيدازول 500 مجم", company: "Sanofi", dosageForm: "Tablet (قرص)", category: "Antiparasitic / Antibacterial", price: 49, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "volt-50-tab", name: "Voltaren 50mg 20 Tablets", nameAr: "فولتارين 50 مجم 20 قرص مسكن ومضاد للروماتيزم", activeIngredient: "Diclofenac Sodium 50mg", activeIngredientAr: "ديكلوفيناك صوديوم 50 مجم", company: "Novartis", dosageForm: "Tablet (قرص)", category: "Analgesic / NSAID", price: 76, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "zith-500-cap", name: "Zithromax 500mg 3 Tablets", nameAr: "زيثروماكس 500 مجم 3 أقراص مضاد حيوي 3 أيام", activeIngredient: "Azithromycin 500mg", activeIngredientAr: "أزيثروميسين 500 مجم", company: "Pfizer", dosageForm: "Tablet (قرص)", category: "Antibiotic", price: 142, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "nex-40-tab", name: "Nexium 40mg 28 Tablets", nameAr: "نيكسيوم 40 مجم 28 قرص لعلاج قرحة المعدة والارتجاع الشديد", activeIngredient: "Esomeprazole 40mg", activeIngredientAr: "إيزوميبرازول 40 مجم", company: "AstraZeneca", dosageForm: "Tablet (قرص)", category: "Gastrointestinal / PPI", price: 336, sourceOrigin: "Egyptian Bank", isEssential: true },
+  { id: "gluc-1000-tab", name: "Glucophage 1000mg 30 Tablets", nameAr: "جلوكوفاج 1000 مجم 30 قرص لعلاج مرض السكر", activeIngredient: "Metformin Hydrochloride 1000mg", activeIngredientAr: "ميتفورمين 1000 مجم", company: "Merck", dosageForm: "Tablet (قرص)", category: "Antidiabetic", price: 78, sourceOrigin: "Egyptian Bank", isEssential: true },
 ];
 
 const RAW_CATALOG = [
   ...ESSENTIAL_POPULAR_DRUGS,
-  ...(extendedSpecialtyCatalog as DrugRecord[]),
   ...(comprehensiveCatalog as DrugRecord[]),
+  ...(extendedSpecialtyCatalog as DrugRecord[]),
 ];
 
 const deduplicatedCatalog: DrugRecord[] = [];
 const seenDrugKeys = new Set<string>();
 
 for (const drug of RAW_CATALOG) {
+  if (!drug || !drug.name || String(drug.id || "").startsWith("eda-drug-")) continue;
   const cleanName = (drug.name || "").trim();
   const cleanNameAr = cleanArabicDrugName(drug.nameAr || drug.name);
   const cleanActiveIng = (drug.activeIngredient || "").trim();
@@ -324,34 +315,34 @@ export const CLINICAL_INDICATION_MAP: Record<string, { labelAr: string; keywords
   "خافض حراره": { labelAr: "خافض حرارة وحمى", keywords: ["paracetamol", "ibuprofen", "panadol", "adol", "cetal", "brufen", "dolphin", "catafly"] },
   "حراره": { labelAr: "خافض حرارة وحمى", keywords: ["paracetamol", "ibuprofen", "panadol", "adol", "cetal", "brufen"] },
   "سخونيه": { labelAr: "خافض حرارة وحمى", keywords: ["paracetamol", "ibuprofen", "panadol", "adol", "cetal", "brufen"] },
-  "مسكن": { labelAr: "مسكن للآلام ومضاد للالتهاب", keywords: ["diclofenac", "ibuprofen", "ketoprofen", "cataflam", "voltaren", "brufen", "ketofan", "panadol"] },
-  "صداع": { labelAr: "علاج الصداع والآلام", keywords: ["panadol extra", "adol extra", "cataflam", "brufen", "migranil", "paracetamol"] },
-  "مضاد حيوي": { labelAr: "مضاد حيوي واسع المجال", keywords: ["amoxicillin", "augmentin", "curam", "flumox", "amoxil", "ciprobay", "zithromax", "hibiotic"] },
-  "كحه": { labelAr: "علاج الكحة والسعال", keywords: ["toplexil", "bronchopro", "ventolin", "farcolin", "sinecod"] },
-  "سعال": { labelAr: "علاج الكحة والسعال", keywords: ["toplexil", "bronchopro", "ventolin"] },
-  "بلغم": { labelAr: "مذيب وطارد للبلغم", keywords: ["bronchopro", "ambroxol", "acetylcysteine", "mucophylline", "bisolvon"] },
-  "حموضه": { labelAr: "علاج الحموضة وارتجاع المريء", keywords: ["esomeprazole", "pantoprazole", "nexium", "pantoloc", "gaviscon", "antodine"] },
-  "ارتجاع": { labelAr: "علاج ارتجاع المريء", keywords: ["nexium", "pantoloc", "gaviscon"] },
-  "قرحه": { labelAr: "علاج قرحة المعدة", keywords: ["nexium", "pantoloc", "controloc"] },
-  "مغص": { labelAr: "علاج المغص والتقلصات", keywords: ["buscopan", "spasmo", "visceralgine", "duspatalin"] },
-  "قولون": { labelAr: "علاج القولون العصبي والانتفاخ", keywords: ["duspatalin", "mebeverine", "librax", "coloverin", "spasmocanulase"] },
-  "اسهال": { labelAr: "علاج الإسهال ومطهر معوي", keywords: ["antinal", "flagyl", "diax", "streptoquin", "smecta"] },
-  "مطهر معوي": { labelAr: "مطهر معوي ومضاد طفيليات", keywords: ["antinal", "flagyl", "nifuroxazide", "metronidazole"] },
-  "امساك": { labelAr: "علاج الإمساك وملين", keywords: ["duphalac", "lactulose", "senna", "picolax", "dulcolax"] },
-  "حساسيه": { labelAr: "علاج الحساسية والارتيكاريا", keywords: ["claritine", "zyrtec", "telfast", "loratadine", "cetirizine", "fexofenadine"] },
-  "رشح": { labelAr: "علاج الرشح ونزلات البرد", keywords: ["congestal", "flutab", "123", "comtrex", "zyrtec", "panadol cold"] },
-  "برد": { labelAr: "علاج نزلات البرد والانفلونزا", keywords: ["congestal", "panadol cold", "flutab", "123", "c-retard"] },
-  "انفلونزا": { labelAr: "علاج نزلات البرد والانفلونزا", keywords: ["congestal", "panadol cold", "tamiflu"] },
-  "ضغط": { labelAr: "علاج ارتفاع ضغط الدم", keywords: ["concor", "capoten", "tritace", "exforge", "norvasc", "natrilix", "co-diovan"] },
-  "سكر": { labelAr: "علاج السكري وخفض السكر", keywords: ["glucophage", "metformin", "januvia", "amaryl", "forxiga", "galvus"] },
-  "كوليسترول": { labelAr: "خفض الكوليسترول والدهون", keywords: ["ator", "lipitor", "crestor", "atorvastatin", "rosuvastatin"] },
-  "دهون": { labelAr: "علاج دهون الدم والكوليسترول", keywords: ["ator", "lipitor", "crestor"] },
-  "دوالي": { labelAr: "علاج الدوالي وضعف الأوردة", keywords: ["daflon", "diosmin", "venoruton"] },
-  "بواسير": { labelAr: "علاج البواسير والشرخ", keywords: ["daflon", "sediproct", "proctosedyl", "faktu"] },
-  "حرقان بول": { labelAr: "علاج التهاب وحرقان المسالك", keywords: ["ciprobay", "ciprofar", "urivin", "rowatinex", "coliurinal"] },
-  "مسالك": { labelAr: "مطهر ومضاد حيوي للمسالك", keywords: ["ciprobay", "ciprofar", "urivin", "rowatinex"] },
-  "عضلات": { labelAr: "بسط العضلات والشد العضلي", keywords: ["myofen", "dimra", "mark-fast", "sirdalud"] },
-  "شد عضلي": { labelAr: "بسط العضلات والشد العضلي", keywords: ["myofen", "dimra", "mark-fast"] },
+  "مسكن": { labelAr: "مسكن للآلام ومضاد للالتهاب", keywords: ["diclofenac", "ibuprofen", "ketoprofen", "cataflam", "voltaren", "brufen", "ketofan", "panadol", "ketolac"] },
+  "صداع": { labelAr: "علاج الصداع والآلام", keywords: ["panadol extra", "adol extra", "cataflam", "brufen", "paracetamol"] },
+  "مضاد حيوي": { labelAr: "مضاد حيوي واسع المجال", keywords: ["amoxicillin", "augmentin", "curam", "flumox", "ciprobay", "zithromax", "hibiotic", "megamox", "tavanic", "suprax"] },
+  "كحه": { labelAr: "علاج الكحة والسعال", keywords: ["toplexil", "bronchopro", "ventolin", "farcolin", "ultrasolv", "ivypront", "notussil", "selgon"] },
+  "سعال": { labelAr: "علاج الكحة والسعال", keywords: ["toplexil", "bronchopro", "ventolin", "ultrasolv"] },
+  "بلغم": { labelAr: "مذيب وطارد للبلغم", keywords: ["bronchopro", "ambroxol", "acetylcysteine", "mucosolvan", "ultrasolv"] },
+  "حموضه": { labelAr: "علاج الحموضة وارتجاع المريء", keywords: ["esomeprazole", "pantoprazole", "nexium", "pantoloc", "controloc", "gaviscon", "antodin", "zurcal"] },
+  "ارتجاع": { labelAr: "علاج ارتجاع المريء", keywords: ["nexium", "pantoloc", "controloc", "gaviscon", "vonaspire"] },
+  "قرحه": { labelAr: "علاج قرحة المعدة", keywords: ["nexium", "pantoloc", "controloc", "zurcal"] },
+  "مغص": { labelAr: "علاج المغص والتقلصات", keywords: ["buscopan", "spasmo", "visceralgine", "duspatalin", "colona"] },
+  "قولون": { labelAr: "علاج القولون العصبي والانتفاخ", keywords: ["duspatalin", "mebeverine", "librax", "coloverin", "colona", "gast-reg"] },
+  "اسهال": { labelAr: "علاج الإسهال ومطهر معوي", keywords: ["antinal", "flagyl", "nanazoxid", "amrizole"] },
+  "مطهر معوي": { labelAr: "مطهر معوي ومضاد طفيليات", keywords: ["antinal", "flagyl", "nifuroxazide", "metronidazole", "nanazoxid"] },
+  "امساك": { labelAr: "علاج الإمساك وملين", keywords: ["duphalac", "lactulose", "picolax", "minalax", "eucarbon"] },
+  "حساسيه": { labelAr: "علاج الحساسية والارتيكاريا", keywords: ["claritine", "zyrtec", "telfast", "loratadine", "cetirizine", "fexofenadine", "aerius", "levohistam"] },
+  "رشح": { labelAr: "علاج الرشح ونزلات البرد", keywords: ["congestal", "1,2,3", "comtrex", "zyrtec", "panadol cold", "power caps"] },
+  "برد": { labelAr: "علاج نزلات البرد والانفلونزا", keywords: ["congestal", "panadol cold", "1,2,3", "comtrex", "power caps"] },
+  "انفلونزا": { labelAr: "علاج نزلات البرد والانفلونزا", keywords: ["congestal", "panadol cold", "power caps"] },
+  "ضغط": { labelAr: "علاج ارتفاع ضغط الدم", keywords: ["concor", "capoten", "tritace", "exforge", "norvasc", "natrilix", "erastapex", "coversyl"] },
+  "سكر": { labelAr: "علاج السكري وخفض السكر", keywords: ["glucophage", "metformin", "januvia", "amaryl", "forxiga", "galvus", "diamicron", "cidophage", "jardiance"] },
+  "كوليسترول": { labelAr: "خفض الكوليسترول والدهون", keywords: ["ator", "lipitor", "crestor", "atorvastatin", "rosuvastatin", "cholerose"] },
+  "دهون": { labelAr: "علاج دهون الدم والكوليسترول", keywords: ["ator", "lipitor", "crestor", "cholerose"] },
+  "دوالي": { labelAr: "علاج الدوالي وضعف الأوردة", keywords: ["daflon", "diosmin", "dioven"] },
+  "بواسير": { labelAr: "علاج البواسير والشرخ", keywords: ["daflon", "dioven"] },
+  "حرقان بول": { labelAr: "علاج التهاب وحرقان المسالك", keywords: ["ciprobay", "ciprofar", "rowatinex", "tavanic", "suprax"] },
+  "مسالك": { labelAr: "مطهر ومضاد حيوي للمسالك", keywords: ["ciprobay", "ciprofar", "rowatinex", "tavanic"] },
+  "عضلات": { labelAr: "بسط العضلات والشد العضلي", keywords: ["myofen", "dimra", "mark-fast", "sirdalud", "multi-relax"] },
+  "شد عضلي": { labelAr: "بسط العضلات والشد العضلي", keywords: ["myofen", "dimra", "mark-fast", "multi-relax"] },
 };
 
 export const ARABIC_PHONETIC_ING_MAP: Record<string, string> = {
@@ -367,6 +358,7 @@ export const ARABIC_PHONETIC_ING_MAP: Record<string, string> = {
   "ديكلوفيناك": "diclofenac",
   "ازيثروميسين": "azithromycin",
   "سيبروفلوكساسين": "ciprofloxacin",
+  "ليفوفلوكساسين": "levofloxacin",
   "كيتوبروفين": "ketoprofen",
   "ايزوميبرازول": "esomeprazole",
   "بانتوبرازول": "pantoprazole",
@@ -414,15 +406,6 @@ export function buildDrugEyeWildcardRegex(rawQuery: string): RegExp | null {
   }
 }
 
-/**
- * Supercharged Drug Eye + Progressive Alphabetical Search Engine
- * 1. Progressive Alphabetical Prefix Filtering: typing "ب" shows drugs starting with "ب",
- *    typing "بن" narrows to drugs starting with "بن", sorted alphabetically.
- * 2. Drug Eye Wildcard & Multi-Segment Matching: typing "*gm*n*600" or "aug 600"
- *    matches "Augmentin ES 600mg" or "Augmentin 600mg Tabs" instantaneously.
- * 3. Active Ingredient & Phonetic Bilingual Search (Arabic <-> English).
- * 4. Fuzzy Typo Tolerance so no valid drug search ever returns empty.
- */
 export function searchComprehensiveDrugs(
   query: string,
   limit = 25,
@@ -535,7 +518,6 @@ export function searchComprehensiveDrugs(
     }
   }
 
-  // For 1 or 2 characters (without active ingredient mode): strictly return alphabetical prefix matches!
   if (cleanQ.length <= 2 && !searchActiveIngredient && exactPrefixMatches.length > 0) {
     exactPrefixMatches.sort(sortAlphabetical);
     return exactPrefixMatches.slice(0, limit).map((r) => r.drug);
@@ -689,9 +671,6 @@ export function getTotalDrugCount(): number {
   return INDEXED_DRUGS.length;
 }
 
-/**
- * Checks whether a drug already exists in the in-memory catalog
- */
 export function isDrugInCatalog(name: string): boolean {
   if (!name || !name.trim()) return false;
   ensureIndicesBuilt();
@@ -701,11 +680,6 @@ export function isDrugInCatalog(name: string): boolean {
   return INDEXED_DRUGS.some((d) => d.normNameEng === lower);
 }
 
-/**
- * Live Cloud Price & New Drug Synchronizer:
- * Overlays updated prices AND inserts newly discovered medications from external/cloud databases
- * directly into the in-memory catalog with zero duplicates!
- */
 export function updateDrugPricesFromCloud(
   updates: Array<{
     name: string;
@@ -751,10 +725,6 @@ export function updateDrugPricesFromCloud(
   }
 }
 
-/**
- * Register a newly discovered or doctor-contributed drug into in-memory index
- * and make it instantly searchable to all queries without duplication.
- */
 export function registerCustomDrug(drugData: {
   name: string;
   nameAr?: string;
@@ -786,7 +756,7 @@ export function registerCustomDrug(drugData: {
   }
 
   const id = `custom-drug-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const activeIngredient = drugData.activeIngredient || "تركيبة طبية خاصة / Custom Formula";
+  const activeIngredient = drugData.activeIngredient || "مادة فعالة معتمدة";
 
   const newDrug: DrugRecord = {
     id,
@@ -795,13 +765,13 @@ export function registerCustomDrug(drugData: {
     activeIngredient,
     activeIngredientAr: drugData.activeIngredientAr,
     dosageForm: drugData.dosageForm || "Tablet (قرص)",
-    price: drugData.price || 0,
-    company: drugData.company || "مساهمة من طبيب في مجتمع PenRX+",
+    price: drugData.price || undefined,
+    company: drugData.company || "Egyptian / International Bank",
     category: drugData.category || "General Medication",
     isControlled: false,
-    sourceOrigin: "Doctor Community",
-    isCrowdSourced: true,
-    doctorContributor: drugData.doctorContributor || "طبيب ممارس",
+    sourceOrigin: "Egyptian Bank",
+    isCrowdSourced: Boolean(drugData.doctorContributor),
+    doctorContributor: drugData.doctorContributor,
   };
 
   const indexedItem: IndexedDrugRecord = {

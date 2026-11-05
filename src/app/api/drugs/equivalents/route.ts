@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { searchComprehensiveDrugs, DrugRecord } from "@/lib/drugSearchEngine";
 import { corsHeaders, securityHeaders } from "@/lib/httpSecurity";
-import { hasCloudCredentials, proxyToCloud } from "@/lib/cloudProxy";
 import { supabaseRest } from "@/lib/supabaseRest";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +9,6 @@ function responseHeaders(request: Request): Record<string, string> {
   return { ...securityHeaders(), ...corsHeaders(request) };
 }
 
-/**
- * Clean active ingredient to extract the root chemical entity.
- * e.g. "Diclofenac Potassium 50mg" -> "Diclofenac"
- */
 function extractCoreIngredient(ingredient: string): string {
   if (!ingredient) return "";
   return ingredient
@@ -29,8 +24,6 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!hasCloudCredentials()) return proxyToCloud(request, "/api/drugs/equivalents");
-
   const { searchParams } = new URL(request.url);
   const ingredient = (searchParams.get("ingredient") || "").slice(0, 120);
   const currentDrugName = (searchParams.get("currentDrug") || "").slice(0, 120);
@@ -71,7 +64,7 @@ export async function GET(request: Request) {
       }));
     }
   } catch {
-    // catalogue-only response when the database is unreachable
+    // Catalogue-only response when cloud database is unreachable
   }
 
   const map = new Map<string, DrugRecord>();

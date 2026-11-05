@@ -273,10 +273,76 @@
 
         <!-- Quick Drug Search Input with Autocomplete Suggestions -->
         <div class="relative">
-          <input id="drug-search-input" type="text" oninput="handleDrugSearch(this.value)" placeholder="🔍 ابحث في بنك الأدوية (اكتب حرفين)..." class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-500" />
-          <div id="drug-suggestions-box" class="hidden absolute top-full left-0 right-0 z-30 mt-1 max-h-48 overflow-y-auto rounded-xl bg-slate-900 border border-slate-700 shadow-2xl space-y-1 p-1">
+          <input id="drug-search-input" type="text" oninput="handleDrugSearch(this.value)" placeholder="🔍 ابحث في بنك الأدوية المصري والعالمي (يدعم نجمة * Drug Eye)..." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-emerald-500 shadow-inner" />
+          <div id="drug-suggestions-box" class="hidden absolute top-full left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-xl bg-slate-900 border border-slate-700 shadow-2xl space-y-1 p-1.5">
             <!-- Injected dynamically -->
           </div>
+        </div>
+
+        <!-- Step 2: Dosage, Quantity, Duration & Notes Configurator Panel -->
+        <div id="mobile-drug-config-panel" class="hidden p-3.5 rounded-2xl bg-slate-950/95 border-2 border-emerald-500/40 space-y-3 shadow-xl">
+          <div class="flex items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
+            <div class="flex-1 min-w-0">
+              <div class="text-[10px] font-black text-emerald-400 mb-0.5">تخصيص الجرعة والكمية والملاحظات قبل الإضافة:</div>
+              <input id="cfg-drug-name" type="text" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-black text-white focus:outline-none focus:border-emerald-500" placeholder="اسم الدواء والتركيز..." />
+              <div id="cfg-drug-meta" class="text-[10px] text-slate-400 mt-1 font-mono"></div>
+            </div>
+            <button type="button" onclick="cancelDrugConfig()" class="px-2 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold">إلغاء ✕</button>
+          </div>
+
+          <!-- Quantity / Form -->
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-black text-slate-300 block">1. الكمية / الشكل الدوائي (اختر أو اكتب يدوياً):</label>
+            <div class="flex flex-wrap gap-1">
+              <button type="button" onclick="setCfgField('cfg-drug-form','قرص واحد')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">قرص واحد</button>
+              <button type="button" onclick="setCfgField('cfg-drug-form','قرصين')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">قرصين</button>
+              <button type="button" onclick="setCfgField('cfg-drug-form','كبسولة واحدة')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">كبسولة واحدة</button>
+              <button type="button" onclick="setCfgField('cfg-drug-form','5 مل (ملعقة صغيرة)')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">5 مل شراب</button>
+              <button type="button" onclick="setCfgField('cfg-drug-form','أمبول عضل')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">أمبول عضل</button>
+              <button type="button" onclick="setCfgField('cfg-drug-form','دهان موضعي')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">دهان موضعي</button>
+              <button type="button" onclick="setCfgField('cfg-drug-form','كيس على نصف كوب ماء')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">كيس فوار</button>
+            </div>
+            <input id="cfg-drug-form" type="text" placeholder="أو اكتب الكمية والشكل يدوياً (مثل: نصف قرص / 3 سم شراب)..." class="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-500" />
+          </div>
+
+          <!-- Dosage / Frequency -->
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-black text-slate-300 block">2. الجرعة والتكرار اليومي (اختر أو اكتب يدوياً):</label>
+            <div class="flex flex-wrap gap-1">
+              <button type="button" onclick="setCfgField('cfg-drug-dose','كل 12 ساعة بعد الأكل')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">كل 12 ساعة بعد الأكل</button>
+              <button type="button" onclick="setCfgField('cfg-drug-dose','3 مرات يومياً بعد الأكل')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">3 مرات بعد الأكل</button>
+              <button type="button" onclick="setCfgField('cfg-drug-dose','مرتين يومياً بعد الأكل')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">مرتين بعد الأكل</button>
+              <button type="button" onclick="setCfgField('cfg-drug-dose','صباحاً على الريق قبل الإفطار بنصف ساعة')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">صباحاً على الريق</button>
+              <button type="button" onclick="setCfgField('cfg-drug-dose','مرة واحدة يومياً مساءً قبل النوم')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">مساءً قبل النوم</button>
+              <button type="button" onclick="setCfgField('cfg-drug-dose','عند اللزوم')" class="px-2 py-1 rounded-lg bg-slate-900 hover:bg-emerald-500/20 border border-slate-700 text-[10px] font-bold text-slate-300">عند اللزوم</button>
+            </div>
+            <input id="cfg-drug-dose" type="text" placeholder="أو اكتب الجرعة التفصيلية يدوياً..." class="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-500" />
+          </div>
+
+          <!-- Duration & Notes -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div class="space-y-1">
+              <label class="text-[10px] font-black text-slate-300 block">3. مدة العلاج (اختياري / يدوي):</label>
+              <div class="flex flex-wrap gap-1 mb-1">
+                <button type="button" onclick="setCfgField('cfg-drug-duration','لمدة 5 أيام')" class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-300">5 أيام</button>
+                <button type="button" onclick="setCfgField('cfg-drug-duration','لمدة 7 أيام')" class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-300">7 أيام</button>
+                <button type="button" onclick="setCfgField('cfg-drug-duration','لمدة شهر')" class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-300">شهر</button>
+              </div>
+              <input id="cfg-drug-duration" type="text" placeholder="مثال: لمدة 7 أيام..." class="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-500" />
+            </div>
+            <div class="space-y-1">
+              <label class="text-[10px] font-black text-slate-300 block">4. ملاحظات إضافية (اختياري):</label>
+              <div class="flex flex-wrap gap-1 mb-1">
+                <button type="button" onclick="setCfgField('cfg-drug-notes','يرج جيداً قبل الاستعمال')" class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-300">يرج جيداً</button>
+                <button type="button" onclick="setCfgField('cfg-drug-notes','ممنوع التكرار بدون استشارة')" class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] text-slate-300">ممنوع التكرار</button>
+              </div>
+              <input id="cfg-drug-notes" type="text" placeholder="ملاحظة للمريض أو الصيدلي..." class="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-500" />
+            </div>
+          </div>
+
+          <button type="button" onclick="confirmAddConfiguredDrug()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white font-black text-xs shadow-lg flex items-center justify-center gap-1.5">
+            <span>إدراج الدواء بالروشتة الآن ✓</span>
+          </button>
         </div>
 
         <!-- Real-Time AI Drug Interaction Warning Alert -->
@@ -651,39 +717,53 @@
     })();
     const ADMIN_PHONE = "201094085228"; // للاستدعاء/واتساب دعم ما قبل البيع
 
-    // Curated Egyptian & Arabic Medications Bank for Instant Offline Search (Bilingual)
+    // Curated Egyptian & Arabic Medications Bank for Instant Offline Search (Updated 2026 EGP Prices)
     const POPULAR_DRUGS = [
-      { name: "Panadol Extra (Red) - بنادول إكسترا", active: "Paracetamol 500mg + Caffeine", form: "أقراص", dose: "قرص مرتين إلى 3 مرات يومياً بعد الأكل", price: 42 },
-      { name: "Panadol Advance (Blue) - بنادول أدفانس", active: "Paracetamol 500mg", form: "أقراص", dose: "قرص عند اللزوم كل 6-8 ساعات", price: 32 },
-      { name: "Panadol Joint 665mg - بنادول جوينت للمفاصل", active: "Paracetamol 665mg SR", form: "أقراص", dose: "قرص كل 8 ساعات ممتد المفعول", price: 54 },
-      { name: "Panadol Night - بنادول نايت للنوم والألم", active: "Paracetamol + Diphenhydramine", form: "أقراص", dose: "قرصين قبل النوم بنصف ساعة", price: 45 },
-      { name: "Panadol Cold & Flu - بنادول كولد أند فلو", active: "Paracetamol + Phenylephrine", form: "أقراص", dose: "قرص كل 8 ساعات للبرد والرشح", price: 48 },
-      { name: "Panadol Baby & Infant - بنادول شراب أطفال", active: "Paracetamol 120mg/5ml", form: "شراب", dose: "5 مل كل 6-8 ساعات خافض حرارة", price: 28 },
-      { name: "Brufen 200mg - بروفين 200 مجم مسكن", active: "Ibuprofen 200mg", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 30 },
-      { name: "Brufen 400mg - بروفين 400 مجم مسكن ومضاد للالتهاب", active: "Ibuprofen 400mg", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 45 },
-      { name: "Brufen 600mg - بروفين 600 مجم للعظام", active: "Ibuprofen 600mg", form: "أقراص", dose: "قرص مرتين يومياً بعد الأكل", price: 58 },
-      { name: "Buscopan 10mg - بوسكوبان للمغص والتقلصات", active: "Hyoscine Butylbromide", form: "أقراص", dose: "قرص عند اللزوم للتقلصات", price: 26 },
-      { name: "Buscopan Plus - بوسكوبان بلس مسكن للمغص", active: "Hyoscine + Paracetamol", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 34 },
-      { name: "Pantoloc 20mg - بانتولوك للمعدة والحموضة", active: "Pantoprazole 20mg", form: "أقراص", dose: "قرص صباحاً على الريق", price: 58 },
-      { name: "Pantoloc 40mg - بانتولوك لقرحة المعدة", active: "Pantoprazole 40mg", form: "أقراص", dose: "قرص قبل الإفطار بنصف ساعة", price: 82 },
-      { name: "Betadine Solution - بيتادين مطهر ومعقم", active: "Povidone Iodine 10%", form: "محلول موضعي", dose: "دهان موضعي مرتين يومياً", price: 38 },
-      { name: "Bisolvon 8mg - بيسولفون مذيب للبلغم", active: "Bromhexine 8mg", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 24 },
-      { name: "Augmentin 1g - أوجمنتين 1 جم مضاد حيوي", active: "Amoxicillin + Clavulanic Acid", form: "أقراص", dose: "قرص كل 12 ساعة بعد الأكل لمدة 7 أيام", price: 110 },
-      { name: "Curam 1g - كيورام 1 جم مضاد حيوي", active: "Amoxicillin + Clavulanate", form: "أقراص", dose: "قرص كل 12 ساعة لمدة 7 أيام", price: 98 },
-      { name: "Cataflam 50mg - كتافلام 50 مجم مسكن سريع", active: "Diclofenac Potassium", form: "أقراص", dose: "قرص مرتين إلى 3 مرات يومياً بعد الوجبات", price: 63 },
-      { name: "Voltaren 100mg SR - فولتارين 100 مجم ممتد", active: "Diclofenac Sodium", form: "أقراص ممتدة", dose: "قرص واحد يومياً مساءً بعد العشاء", price: 65 },
-      { name: "Congestal - كونجستال للبرد والإنفلونزا", active: "Paracetamol + Pseudoephedrine", form: "أقراص", dose: "قرص 3 مرات يومياً للبرد والرشح", price: 35 },
-      { name: "1,2,3 (One Two Three) - وان تو ثري", active: "Paracetamol + Pseudoephedrine + Chlorpheniramine", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الأكل", price: 32 },
-      { name: "Cetal 500mg - سيتال خافض حرارة", active: "Paracetamol", form: "أقراص", dose: "قرص كل 8 ساعات لتسكين الألم وخفض الحرارة", price: 18 },
-      { name: "Flagyl 500mg - فلاجيل مطهر معوي", active: "Metronidazole", form: "أقراص", dose: "قرص 3 مرات يومياً بعد الوجبات لمدة 5-7 أيام", price: 35 },
-      { name: "Antinal 200mg - أنتينال كبسول للإسهال", active: "Nifuroxazide", form: "كبسول", dose: "كبسولة 4 مرات يومياً لعلاج الإسهال والمطهر المعوي", price: 32 },
-      { name: "Nexium 40mg - نيكسيوم 40 مجم للحموضة", active: "Esomeprazole", form: "أقراص", dose: "قرص واحد صباحاً على الريق قبل الإفطار بنصف ساعة", price: 135 },
-      { name: "Controloc 40mg - كنترولوك لقرحة المعدة", active: "Pantoprazole", form: "أقراص", dose: "قرص قبل الإفطار بنصف ساعة لعلاج الحموضة والقرحة", price: 90 },
-      { name: "Concor 5mg - كونكور 5 مجم للضغط والقلب", active: "Bisoprolol", form: "أقراص", dose: "قرص واحد يومياً صباحاً لضغط الدم ونبض القلب", price: 62 },
-      { name: "Concor 2.5mg - كونكور 2.5 مجم", active: "Bisoprolol", form: "أقراص", dose: "قرص واحد يومياً صباحاً", price: 48 },
-      { name: "Amaryl 2mg - أماريل 2 مجم للسكر", active: "Glimepiride", form: "أقراص", dose: "قرص واحد يومياً قبل أول وجبة رئيسية", price: 42 },
-      { name: "Cipralex 10mg - سبرالكس للقلق والاكتئاب", active: "Escitalopram", form: "أقراص", dose: "قرص واحد يومياً مساءً", price: 195 },
-      { name: "Zithrokan 500mg - زيثروكان مضاد حيوي 3 أيام", active: "Azithromycin", form: "كبسول", dose: "كبسولة واحدة يومياً قبل الأكل بساعة لمدة 3 أيام", price: 55 }
+      { name: "Panadol Extra (Red) - بنادول إكسترا", active: "Paracetamol 500mg + Caffeine 65mg", form: "قرص واحد", dose: "مرتين إلى 3 مرات يومياً بعد الأكل", price: 54 },
+      { name: "Panadol Advance (Blue) - بنادول أدفانس", active: "Paracetamol 500mg", form: "قرص واحد", dose: "عند اللزوم كل 6-8 ساعات", price: 48 },
+      { name: "Panadol Joint 665mg - بنادول جوينت للمفاصل", active: "Paracetamol 665mg SR", form: "قرص واحد", dose: "كل 8 ساعات ممتد المفعول", price: 75 },
+      { name: "Panadol Cold & Flu Day - بنادول كولد أند فلو", active: "Paracetamol + Phenylephrine + Caffeine", form: "قرص واحد", dose: "كل 8 ساعات للبرد والرشح", price: 65 },
+      { name: "Panadol Baby & Infant - بنادول شراب أطفال", active: "Paracetamol 120mg/5ml", form: "5 مل شراب", dose: "كل 6-8 ساعات خافض حرارة", price: 48 },
+      { name: "Abimol 500mg - أبيمول مسكن وخافض حرارة", active: "Paracetamol 500mg", form: "قرص واحد", dose: "كل 6-8 ساعات بعد الأكل", price: 33 },
+      { name: "Cetal 500mg - سيتال أقراص خافض حرارة", active: "Paracetamol 500mg", form: "قرص واحد", dose: "كل 8 ساعات لتسكين الألم وخفض الحرارة", price: 32 },
+      { name: "Brufen 400mg - بروفين 400 مجم مسكن ومضاد للالتهاب", active: "Ibuprofen 400mg", form: "قرص واحد", dose: "3 مرات يومياً بعد الأكل", price: 78 },
+      { name: "Brufen 600mg - بروفين 600 مجم للعظام", active: "Ibuprofen 600mg", form: "قرص واحد", dose: "مرتين يومياً بعد الأكل", price: 99 },
+      { name: "Cataflam 50mg - كتافلام 50 مجم مسكن سريع", active: "Diclofenac Potassium 50mg", form: "قرص واحد", dose: "مرتين إلى 3 مرات يومياً بعد الوجبات", price: 96 },
+      { name: "Voltaren 100mg SR - فولتارين 100 مجم ممتد", active: "Diclofenac Sodium 100mg", form: "قرص واحد", dose: "مرة واحدة يومياً مساءً بعد العشاء", price: 115 },
+      { name: "Augmentin 1g - أوجمنتين 1 جم مضاد حيوي", active: "Amoxicillin 875mg + Clavulanic Acid 125mg", form: "قرص واحد", dose: "كل 12 ساعة بعد الأكل لمدة 7 أيام", price: 176 },
+      { name: "Hibiotic 1g - هاي بيوتك 1 جم مضاد حيوي", active: "Amoxicillin 875mg + Clavulanic Acid 125mg", form: "قرص واحد", dose: "كل 12 ساعة بعد الأكل لمدة 7 أيام", price: 140 },
+      { name: "Curam 1g - كيورام 1 جم مضاد حيوي", active: "Amoxicillin 875mg + Clavulanate 125mg", form: "قرص واحد", dose: "كل 12 ساعة لمدة 7 أيام", price: 152 },
+      { name: "Zithromax 500mg - زيثروماكس 500 مجم", active: "Azithromycin 500mg", form: "كبسولة واحدة", dose: "مرة واحدة يومياً لمدة 3 أيام", price: 155 },
+      { name: "Zithrokan 500mg - زيثروكان مضاد حيوي 3 أيام", active: "Azithromycin 500mg", form: "كبسولة واحدة", dose: "مرة واحدة يومياً قبل الأكل بساعة لمدة 3 أيام", price: 81 },
+      { name: "Tavanic 500mg - تافانيك 500 مجم مضاد حيوي", active: "Levofloxacin 500mg", form: "قرص واحد", dose: "مرة واحدة يومياً لمدة 5-7 أيام", price: 170 },
+      { name: "Ciprofar 500mg - سيبروفار 500 مجم", active: "Ciprofloxacin 500mg", form: "قرص واحد", dose: "كل 12 ساعة لمدة 5-7 أيام", price: 68 },
+      { name: "Ceftriaxone 1g Vial - سيفترياكسون 1 جم حقن", active: "Ceftriaxone 1000mg", form: "أمبول عضل", dose: "حقنة عضل كل 24 ساعة لمدة 3-5 أيام", price: 65 },
+      { name: "Flagyl 500mg - فلاجيل مطهر معوي", active: "Metronidazole 500mg", form: "قرص واحد", dose: "3 مرات يومياً بعد الوجبات لمدة 5-7 أيام", price: 47 },
+      { name: "Antinal 200mg - أنتينال كبسول للإسهال", active: "Nifuroxazide 200mg", form: "كبسولة واحدة", dose: "4 مرات يومياً لعلاج الإسهال والمطهر المعوي", price: 55 },
+      { name: "Nexium 40mg - نيكسيوم 40 مجم للحموضة", active: "Esomeprazole 40mg", form: "قرص واحد", dose: "صباحاً على الريق قبل الإفطار بنصف ساعة", price: 294 },
+      { name: "Controloc 40mg - كنترولوك لقرحة المعدة", active: "Pantoprazole 40mg", form: "قرص واحد", dose: "قبل الإفطار بنصف ساعة لعلاج الحموضة والقرحة", price: 224 },
+      { name: "Antodin 40mg - أنتودين 40 مجم للمعدة", active: "Famotidine 40mg", form: "قرص واحد", dose: "مساءً قبل النوم", price: 68 },
+      { name: "Gaviscon Advance - جافيسكون أدفانس معلق", active: "Sodium Alginate + Potassium Bicarbonate", form: "10 مل شراب", dose: "بعد الوجبات وقبل النوم", price: 145 },
+      { name: "Buscopan Plus - بوسكوبان بلس مسكن للمغص", active: "Hyoscine + Paracetamol", form: "قرص واحد", dose: "3 مرات يومياً بعد الأكل", price: 55 },
+      { name: "Congestal - كونجستال للبرد والإنفلونزا", active: "Paracetamol + Pseudoephedrine + Chlorpheniramine", form: "قرص واحد", dose: "3 مرات يومياً للبرد والرشح", price: 49.5 },
+      { name: "1,2,3 (One Two Three) - وان تو ثري", active: "Paracetamol + Pseudoephedrine + Chlorpheniramine", form: "قرص واحد", dose: "3 مرات يومياً بعد الأكل", price: 42 },
+      { name: "Telfast 180mg - تلفاست 180 مجم للحساسية", active: "Fexofenadine 180mg", form: "قرص واحد", dose: "مرة واحدة يومياً مساءً", price: 120 },
+      { name: "Zyrtec 10mg - زيرتك 10 مجم للحساسية", active: "Cetirizine 10mg", form: "قرص واحد", dose: "مرة واحدة يومياً مساءً قبل النوم", price: 78 },
+      { name: "Concor 5mg - كونكور 5 مجم للضغط والقلب", active: "Bisoprolol 5mg", form: "قرص واحد", dose: "مرة واحدة يومياً صباحاً لضغط الدم ونبض القلب", price: 96 },
+      { name: "Concor 2.5mg - كونكور 2.5 مجم", active: "Bisoprolol 2.5mg", form: "قرص واحد", dose: "مرة واحدة يومياً صباحاً", price: 78 },
+      { name: "Plavix 75mg - بلافيكس 75 مجم للسيولة", active: "Clopidogrel 75mg", form: "قرص واحد", dose: "مرة واحدة يومياً بعد الغداء", price: 294 },
+      { name: "Aspocid 75mg - أسبوسيد أطفال للسيولة", active: "Acetylsalicylic Acid 75mg", form: "قرص واحد", dose: "مرة واحدة يومياً بعد الغداء", price: 27 },
+      { name: "Eliquis 5mg - إليكويس 5 مجم مضاد للتجلط", active: "Apixaban 5mg", form: "قرص واحد", dose: "مرتين يومياً (كل 12 ساعة)", price: 680 },
+      { name: "Marevan 5mg - ماريفان 5 مجم للسيولة", active: "Warfarin Sodium 5mg", form: "قرص واحد", dose: "مرة واحدة يومياً حسب تحليل INR", price: 54 },
+      { name: "Lipitor 20mg - ليبيتور 20 مجم للكوليسترول", active: "Atorvastatin 20mg", form: "قرص واحد", dose: "مرة واحدة يومياً مساءً", price: 195 },
+      { name: "Crestor 10mg - كريستور 10 مجم للكوليسترول", active: "Rosuvastatin 10mg", form: "قرص واحد", dose: "مرة واحدة يومياً مساءً", price: 230 },
+      { name: "Glucophage 1000mg XR - جلوكوفاج 1000 ممتد", active: "Metformin 1000mg XR", form: "قرص واحد", dose: "مرة واحدة يومياً مع وجبة العشاء", price: 76 },
+      { name: "Cidophage 500mg - سيدوفاج 500 مجم", active: "Metformin 500mg", form: "قرص واحد", dose: "مرتين يومياً وسط الأكل", price: 36 },
+      { name: "Amaryl 2mg - أماريل 2 مجم للسكر", active: "Glimepiride 2mg", form: "قرص واحد", dose: "مرة واحدة يومياً قبل أول وجبة رئيسية", price: 72 },
+      { name: "Janumet 50/1000mg - جانوميت للسكر", active: "Sitagliptin 50mg + Metformin 1000mg", form: "قرص واحد", dose: "كل 12 ساعة مع الوجبات", price: 430 },
+      { name: "Cipralex 10mg - سبرالكس للقلق والاكتئاب", active: "Escitalopram 10mg", form: "قرص واحد", dose: "مرة واحدة يومياً مساءً", price: 280 },
+      { name: "Milga Advance - ميلجا أدفانس للأعصاب", active: "Benfotiamine + Pyridoxine + Cyanocobalamin", form: "قرص واحد", dose: "مرة إلى مرتين يومياً بعد الأكل", price: 108 },
+      { name: "Neurobion Ampoules - نيوروبيون حقن للأعصاب", active: "Vitamin B1 + B6 + B12", form: "أمبول عضل", dose: "حقنة عضل كل 3 أيام", price: 54 }
     ];
 
     let machineId = "";
@@ -822,39 +902,78 @@
       }
     }
 
-    // Clinical Drug-to-Drug Interaction Rules (Built-in offline safety engine)
+    // Clinical Drug-to-Drug Interaction Rules (Built-in offline safety engine with GroupA vs GroupB matching)
     const CLINICAL_INTERACTIONS = [
       {
         id: "warfarin-nsaids",
-        keywords: ["warfarin", "marevan", "cataflam", "voltaren", "brufen", "ketofan", "aspirin", "aspocid", "feldene", "mobic", "antiflam", "diclofenac", "ibuprofen", "ketoprofen"],
+        groupA: ["warfarin", "marevan", "marivan", "apixaban", "eliquis", "rivaroxaban", "xarelto", "clopidogrel", "plavix", "ماريفان", "وارفارين", "إليكويس", "زاريلتو", "بلافيكس"],
+        groupB: ["cataflam", "voltaren", "brufen", "ketofan", "aspirin", "aspocid", "feldene", "mobic", "meloxicam", "celebrex", "celecoxib", "diclofenac", "ibuprofen", "ketoprofen", "naproxen", "كتافلام", "فولتارين", "بروفين", "كيتوفان", "أسبوسيد", "أسبرين", "موبيك"],
         severity: "CRITICAL",
-        titleAr: "خطر نزيف حاد وقرحة معدية خطيرة",
-        mechanismAr: "الجمع بين مضادات التجلط (وارفارين/ماريفان) ومسكنات NSAIDs يثبط الصفائح الدموية ويزيد احتمال النزيف الداخلي بشكل حاد.",
-        recommendationAr: "يُفضل تجنب الجمع واستبدال المسكن بالباراسيتامول (Panadol / Cetal) الأكثر أماناً."
+        titleAr: "خطر نزيف حاد وقرحة معدية خطيرة (Anticoagulant + NSAID)",
+        mechanismAr: "الجمع بين مضادات التجلط/السيولة ومسكنات NSAIDs يثبط الصفائح الدموية ويزيد احتمال النزيف المعوي والداخلي بشكل حاد.",
+        recommendationAr: "يُفضل تجنب الجمع واستبدال المسكن بالباراسيتامول (Panadol / Cetal / Abimol) الأكثر أماناً."
       },
       {
         id: "sildenafil-nitrates",
-        keywords: ["viagra", "erecta", "sildefil", "cialis", "nitromak", "effox", "isosorbide", "monoket", "angised", "nitroderm", "tadalafil", "sildenafil"],
+        groupA: ["viagra", "sildenafil", "erecta", "virecta", "cialis", "tadalafil", "سيلدينافيل", "فياجرا", "سياليس", "تادالافيل"],
+        groupB: ["nitromak", "nitroglycerin", "isosorbide", "monoket", "effox", "angised", "نيتروماك", "أنجيسيد", "إيفوكس", "مونوكيت"],
         severity: "CRITICAL",
-        titleAr: "هبوط حاد وقاتل في ضغط الدم (Severe Shock)",
+        titleAr: "هبوط حاد وقاتل في ضغط الدم (PDE5i + Nitrates)",
         mechanismAr: "الجمع بين منشطات الفوسفودايستراز ومركبات النترات يسبب توسعاً وعائياً مفرطاً وهبوطاً حاداً في ضغط الدم.",
         recommendationAr: "ممنوع الجمع نهائياً ويجب الفصل بينهما بـ 24 إلى 48 ساعة على الأقل."
       },
       {
-        id: "beta-blocker-ccb",
-        keywords: ["concor", "bisoprolol", "tenormin", "atenolol", "betaloc", "metoprolol", "verapamil", "isoptin", "diltiazem", "altiazem"],
+        id: "clopidogrel-omeprazole",
+        groupA: ["plavix", "clopidogrel", "clopex", "بلافيكس", "كلوبيدوجريل"],
+        groupB: ["omeprazole", "gastrozole", "omez", "nexium", "esomeprazole", "أوميبرازول", "جاستروزول", "نيكسيوم", "إيزوميبرازول"],
         severity: "HIGH",
-        titleAr: "هبوط حاد في نبضات القلب (Bradycardia)",
+        titleAr: "تثبيط فاعلية دواء السيولة بلافيكس (CYP2C19 Inhibition)",
+        mechanismAr: "الأوميبرازول والإيزوميبرازول يثبطان إنزيم CYP2C19 اللازم لتنشيط الكلوبيدوجريل مما يضعف الحماية من الجلطات.",
+        recommendationAr: "استبدل دواء المعدة بمادة Pantoprazole (مثل Controloc أو Pantoloc) أو Famotidine (Antodin)."
+      },
+      {
+        id: "macrolide-statin",
+        groupA: ["clarithromycin", "klacid", "erythromycin", "كلاسيد", "كلاريثرومايسين"],
+        groupB: ["simvastatin", "zocor", "atorvastatin", "lipitor", "ator", "ليبيتور", "أتور", "أتورفاستاتين", "زوكور"],
+        severity: "HIGH",
+        titleAr: "خطر التهاب وتحلل العضلات (Statin + Macrolide)",
+        mechanismAr: "المضادات الحيوية الماكروليدية تثبط تكسير أدوية الكوليسترول وترفع تركيزها بالدم بشكل قد يسبب آلاماً وتحللاً عضلياً.",
+        recommendationAr: "أوقف دواء الكوليسترول مؤقتاً خلال فترة كورس المضاد الحيوي أو استبدل المضاد بـ Azithromycin."
+      },
+      {
+        id: "quinolone-divalent",
+        groupA: ["ciprofloxacin", "ciprofar", "ciprobay", "levofloxacin", "tavanic", "تافانيك", "سيبروفار", "سيبروفلوكساسين", "ليفوفلوكساسين"],
+        groupB: ["feroglobin", "ferose", "osteocare", "calcimate", "gaviscon", "epicogel", "maalox", "أوستيوكير", "جافيسكون", "إبيكوجيل", "فيروجلوبين", "حديد", "كالسيوم"],
+        severity: "MODERATE",
+        titleAr: "ضعف امتصاص المضاد الحيوي (Chelation Interaction)",
+        mechanismAr: "الكالسيوم والحديد ومضادات الحموضة ترتبط بالمضاد الحيوي في المعدة وتمنع امتصاصه إلى الدم.",
+        recommendationAr: "افصل بين المضاد الحيوي ومكملات الحديد/الكالسيوم/الحموضة بـ ساعتين إلى 4 ساعات على الأقل."
+      },
+      {
+        id: "acei-spironolactone",
+        groupA: ["captopril", "capoten", "enalapril", "ezapril", "ramipril", "tritace", "valsartan", "tareg", "losartan", "تريتاس", "كابوتين", "تارج", "فالسارتان"],
+        groupB: ["spironolactone", "aldactone", "spectone", "ألداكتون", "سبيرونولاكتون"],
+        severity: "HIGH",
+        titleAr: "خطر ارتفاع البوتاسيوم بالدم (Hyperkalemia)",
+        mechanismAr: "الجمع بين أدوية الضغط (ACEi/ARBs) ومدرات البول الحافظة للبوتاسيوم يرفع مستوى البوتاسيوم وقد يسبب اضطراب ضربات القلب.",
+        recommendationAr: "تابع نسبة البوتاسيوم ووظائف الكلى بانتظام وتجنب مكملات البوتاسيوم."
+      },
+      {
+        id: "beta-blocker-ccb",
+        groupA: ["concor", "bisoprolol", "tenormin", "atenolol", "betaloc", "metoprolol", "كونكور", "بيسوبرولول", "تينورمين", "بيتالوك"],
+        groupB: ["verapamil", "isoptin", "diltiazem", "altiazem", "إيزوبتين", "ديلتيازيم", "ألتليازيم"],
+        severity: "HIGH",
+        titleAr: "هبوط حاد في نبضات القلب (Bradycardia / AV Block)",
         mechanismAr: "الجمع بين حاصرات بيتا (Concor) ومثبطات قنوات الكالسيوم يثبط العقدة الأذينية ويسبب تباطؤاً مفرطاً في ضربات القلب.",
         recommendationAr: "راقب نبض المريض وتجنب الجمع بالجرعات العالية."
       },
       {
         id: "duplicate-nsaids",
-        keywords: ["cataflam", "voltaren", "brufen", "ketofan", "feldene", "mobic", "antiflam", "olfen"],
-        severity: "MODERATE",
-        titleAr: "تكرار مسكنات مضادة للالتهاب (NSAIDs Duplicate)",
-        mechanismAr: "وصف أكثر من مسكن من عائلة NSAIDs معاً يزيد سمية الكلى ومخاطر المعدة دون زيادة الفاعلية المسكنة.",
-        recommendationAr: "اكتفِ بمسكن واحد مناسب بالجرعة المقررة."
+        singleGroup: ["cataflam", "voltaren", "brufen", "ketofan", "feldene", "mobic", "meloxicam", "celebrex", "celecoxib", "diclofenac", "ibuprofen", "ketoprofen", "olfen", "كتافلام", "فولتارين", "بروفين", "كيتوفان", "موبيك", "سيليبريكس"],
+        severity: "HIGH",
+        titleAr: "تكرار مسكنات مضادة للالتهاب من نفس العائلة (Duplicate NSAIDs)",
+        mechanismAr: "وصف أكثر من مسكن من عائلة NSAIDs معاً يضاعف خطر قرحة المعدة وسمية الكلى دون زيادة الفاعلية المسكنة.",
+        recommendationAr: "اكتفِ بمسكن واحد فقط من عائلة NSAIDs وعند الحاجة أضف باراسيتامول (Panadol / Cetal)."
       }
     ];
 
@@ -867,20 +986,32 @@
         return;
       }
 
-      const allMedText = currentRxMeds.map((m) => (m.name + " " + (m.dose || "")).toLowerCase());
+      const allMedText = currentRxMeds.map((m) => (m.name + " " + (m.active || "") + " " + (m.dose || "")).toLowerCase());
       const detected = [];
 
       CLINICAL_INTERACTIONS.forEach((rule) => {
-        // Count how many distinct medicines match keywords of this rule
-        let matchCount = 0;
-        allMedText.forEach((medStr) => {
-          if (rule.keywords.some((k) => medStr.includes(k))) {
-            matchCount++;
+        if (rule.singleGroup) {
+          let matchCount = 0;
+          allMedText.forEach((medStr) => {
+            if (rule.singleGroup.some((k) => medStr.includes(k))) {
+              matchCount++;
+            }
+          });
+          if (matchCount >= 2) detected.push(rule);
+        } else if (rule.groupA && rule.groupB) {
+          let foundPair = false;
+          for (let i = 0; i < allMedText.length && !foundPair; i++) {
+            for (let j = i + 1; j < allMedText.length && !foundPair; j++) {
+              const aInI = rule.groupA.some((k) => allMedText[i].includes(k));
+              const bInJ = rule.groupB.some((k) => allMedText[j].includes(k));
+              const bInI = rule.groupB.some((k) => allMedText[i].includes(k));
+              const aInJ = rule.groupA.some((k) => allMedText[j].includes(k));
+              if ((aInI && bInJ) || (bInI && aInJ)) {
+                foundPair = true;
+                detected.push(rule);
+              }
+            }
           }
-        });
-
-        if (matchCount >= 2) {
-          detected.push(rule);
         }
       });
 
@@ -889,22 +1020,22 @@
         return;
       }
 
-      alertBox.className = "p-3 rounded-2xl border text-xs space-y-2 bg-rose-500/15 border-rose-500/40 text-rose-200 animate-pulse";
+      alertBox.className = "p-3 rounded-2xl border text-xs space-y-2 bg-rose-500/15 border-rose-500/40 text-rose-200";
       alertBox.innerHTML = detected.map((d) => `
         <div class="space-y-1">
           <div class="font-black text-rose-300 flex items-center gap-1.5 text-xs">
             <span>🚨</span>
-            <span>تنبيه ذكي لتعارض دوائي: ${d.titleAr}</span>
+            <span>تنبيه تعارض دوائي: ${d.titleAr}</span>
           </div>
           <div class="text-[11px] text-slate-300 leading-relaxed">${d.mechanismAr}</div>
           <div class="text-[11px] text-amber-300 font-bold">💡 التوصية الطبية: ${d.recommendationAr}</div>
         </div>
-      `).join("<hr class='border-rose-500/30' />");
+      `).join("<hr class='border-rose-500/30 my-1.5' />");
 
       alertBox.classList.remove("hidden");
     }
 
-    // 5. Drug Search & Medications Engine with Incremental Prefix Matching
+    // 5. Drug Search & Medications Engine with Incremental Prefix Matching + Drug Eye (*) Wildcard
     async function handleDrugSearch(query) {
       const box = document.getElementById("drug-suggestions-box");
       const cleanQ = query.trim();
@@ -915,18 +1046,16 @@
         return;
       }
 
-      // ── Step 1: Attempt Live Cloud API Search (Access to 43,500+ Catalog) ──
+      // ── Step 1: Attempt Live API Search (Access to Verified Egyptian & International Catalog) ──
       try {
-        // Relative path when served by the app itself (local desktop server / cloud app);
-        // absolute cloud URL for static hosts (GitHub Pages, file://)
         const servedByApp =
           /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.hostname) ||
           window.location.hostname === "pen-rx.vercel.app";
         const liveSearchUrl = servedByApp
-          ? `/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=20`
-          : `${API_BASE}/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=20`;
+          ? `/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=25`
+          : `${API_BASE}/api/drugs/search?q=${encodeURIComponent(cleanQ)}&limit=25`;
 
-        const res = await fetch(liveSearchUrl, { signal: AbortSignal.timeout(1200) });
+        const res = await fetch(liveSearchUrl, { signal: AbortSignal.timeout(1400) });
         if (res.ok) {
           const data = await res.json();
           if (data.results && data.results.length > 0) {
@@ -934,8 +1063,8 @@
               const itemData = {
                 name: d.nameAr ? `${d.name} (${d.nameAr})` : d.name,
                 active: d.activeIngredient || "Active",
-                form: d.dosageForm || "علاج",
-                dose: "حسب الإرشاد الطبي",
+                form: d.dosageForm || "قرص واحد",
+                dose: "كل 12 ساعة بعد الأكل",
                 price: d.price
               };
               return `
@@ -943,11 +1072,11 @@
                   <div class="space-y-0.5">
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
                       <span>${itemData.name}</span>
-                      ${d.price ? `<span class="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded">${d.price} ج.م</span>` : ""}
+                      ${d.price ? `<span class="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">${d.price} ج.م</span>` : ""}
                     </div>
-                    <div class="text-[10px] text-slate-400 font-mono">${d.activeIngredient} • ${d.dosageForm || "علاج"}</div>
+                    <div class="text-[10px] text-slate-400 font-mono">${d.activeIngredient || ""} • ${d.dosageForm || "علاج"}</div>
                   </div>
-                  <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg">إضافة +</span>
+                  <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg">اختيار الجرعة ⬅</span>
                 </div>
               `;
             }).join("");
@@ -956,29 +1085,35 @@
           }
         }
       } catch (liveErr) {
-        // Live search deferred/offline — smoothly proceed to local offline bank
+        // Offline fallback
       }
 
-      // ── Step 2: High-Speed Offline Incremental Prefix Matcher ──
+      // ── Step 2: High-Speed Offline Incremental Prefix & Drug Eye (*) Matcher ──
       const exactPrefix = [];
       const containsMatches = [];
+      const hasWildcard = q.includes("*");
+      const wildcardTokens = q.split("*").map((t) => t.trim()).filter(Boolean);
 
       POPULAR_DRUGS.forEach((d) => {
         const nameLower = d.name.toLowerCase();
         const activeLower = d.active.toLowerCase();
+        const fullText = `${nameLower} ${activeLower}`;
 
-        if (nameLower.startsWith(q) || (d.name.includes("-") && d.name.split("-")[1].trim().toLowerCase().startsWith(q))) {
+        if (hasWildcard) {
+          if (wildcardTokens.every((tok) => fullText.includes(tok))) {
+            exactPrefix.push(d);
+          }
+        } else if (nameLower.startsWith(q) || (d.name.includes("-") && d.name.split("-")[1].trim().toLowerCase().startsWith(q))) {
           exactPrefix.push(d);
         } else if (nameLower.includes(q) || activeLower.includes(q)) {
           containsMatches.push(d);
         }
       });
 
-      // Strict alphabetical sort on offline matches
       exactPrefix.sort((a, b) => a.name.localeCompare(b.name, "ar"));
       containsMatches.sort((a, b) => a.name.localeCompare(b.name, "ar"));
 
-      const localMatches = q.length <= 2 ? exactPrefix : [...exactPrefix, ...containsMatches];
+      const localMatches = (!hasWildcard && q.length <= 2) ? exactPrefix : [...exactPrefix, ...containsMatches];
 
       if (localMatches.length > 0) {
         box.innerHTML = localMatches.map((d) => `
@@ -986,11 +1121,11 @@
             <div>
               <div class="font-bold text-white text-xs flex items-center gap-1.5">
                 <span>${d.name}</span>
-                ${d.price ? `<span class="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded">${d.price} ج.م</span>` : ""}
+                ${d.price ? `<span class="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">${d.price} ج.م</span>` : ""}
               </div>
               <div class="text-[10px] text-slate-400">${d.active} • ${d.form}</div>
             </div>
-            <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg">إضافة +</span>
+            <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg">اختيار الجرعة ⬅</span>
           </div>
         `).join("");
         box.classList.remove("hidden");
@@ -1002,13 +1137,13 @@
         box.innerHTML = `
           <div class="p-2 text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
             <span class="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
-            <span>جاري البحث في البنك الدوائي المفتوح...</span>
+            <span>جاري البحث في البنك الدوائي العالمي...</span>
           </div>
         `;
         box.classList.remove("hidden");
 
         try {
-          const res = await fetch(`https://api.fda.gov/drug/ndc.json?search=brand_name:"${encodeURIComponent(q)}"&limit=5`, { signal: AbortSignal.timeout(2500) });
+          const res = await fetch(`https://api.fda.gov/drug/ndc.json?search=brand_name:"${encodeURIComponent(q.replace(/\*/g, ""))}"&limit=8`, { signal: AbortSignal.timeout(2500) });
           if (res.ok) {
             const data = await res.json();
             if (data.results && data.results.length > 0) {
@@ -1016,8 +1151,8 @@
                 const d = {
                   name: r.brand_name || r.generic_name || q,
                   active: r.active_ingredients?.map((a) => a.name).join(" + ") || r.generic_name || "Active Ingredient",
-                  form: r.dosage_form || "علاج",
-                  dose: "حسب الإرشاد الطبي"
+                  form: r.dosage_form || "قرص واحد",
+                  dose: "كل 12 ساعة بعد الأكل"
                 };
                 return `
                   <div onclick='selectDrug(${JSON.stringify(d).replace(/'/g, "&apos;")})' class="p-2.5 rounded-xl hover:bg-slate-800 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-800/60 last:border-0">
@@ -1025,7 +1160,7 @@
                       <div class="font-bold text-white text-xs">${d.name}</div>
                       <div class="text-[10px] text-cyan-400">🌐 ${d.active} • ${d.form}</div>
                     </div>
-                    <span class="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-lg">إضافة +</span>
+                    <span class="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-lg">اختيار الجرعة ⬅</span>
                   </div>
                 `;
               }).join("");
@@ -1038,44 +1173,97 @@
       box.innerHTML = `
         <div class="p-2 text-center text-xs text-slate-400">
           <span>لم يُعثر على الدواء في البحث المباشر.</span>
-          <button type="button" onclick="addCustomDrugByName('${query.replace(/'/g, "\\'")}')" class="text-emerald-400 font-bold block mx-auto mt-1 hover:underline">إضافته كدواء مخصص الآن ➕</button>
+          <button type="button" onclick="addCustomDrugByName('${query.replace(/'/g, "\\'")}')" class="text-emerald-400 font-bold block mx-auto mt-1 hover:underline">تخصيص وإضافته كدواء يدوي الآن ➕</button>
         </div>
       `;
       box.classList.remove("hidden");
     }
 
+    let pendingConfigDrug = null;
+
+    function setCfgField(fieldId, val) {
+      const el = document.getElementById(fieldId);
+      if (el) el.value = val;
+    }
+
+    function cancelDrugConfig() {
+      pendingConfigDrug = null;
+      const panel = document.getElementById("mobile-drug-config-panel");
+      if (panel) panel.classList.add("hidden");
+    }
 
     function selectDrug(d) {
-      currentRxMeds.push({
-        id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-        name: d.name,
-        form: d.form,
-        dose: d.dose
-      });
+      pendingConfigDrug = d;
       document.getElementById("drug-search-input").value = "";
       document.getElementById("drug-suggestions-box").classList.add("hidden");
+
+      const panel = document.getElementById("mobile-drug-config-panel");
+      const nameInput = document.getElementById("cfg-drug-name");
+      const metaEl = document.getElementById("cfg-drug-meta");
+      const formInput = document.getElementById("cfg-drug-form");
+      const doseInput = document.getElementById("cfg-drug-dose");
+      const durInput = document.getElementById("cfg-drug-duration");
+      const notesInput = document.getElementById("cfg-drug-notes");
+
+      if (nameInput) nameInput.value = d.name || "";
+      if (metaEl) {
+        metaEl.textContent = `${d.active || "مادة فعالة"}${d.price ? ` • السعر الاسترشادي: ${d.price} ج.م` : ""}`;
+      }
+      if (formInput) formInput.value = d.form || "قرص واحد";
+      if (doseInput) doseInput.value = d.dose || "كل 12 ساعة بعد الأكل";
+      if (durInput) durInput.value = "";
+      if (notesInput) notesInput.value = "";
+
+      if (panel) {
+        panel.classList.remove("hidden");
+        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+
+    function confirmAddConfiguredDrug() {
+      const nameVal = (document.getElementById("cfg-drug-name")?.value || "").trim();
+      if (!nameVal) {
+        showToast("يرجى كتابة اسم الدواء أولاً", "error");
+        return;
+      }
+      const formVal = (document.getElementById("cfg-drug-form")?.value || "").trim() || "قرص واحد";
+      const doseVal = (document.getElementById("cfg-drug-dose")?.value || "").trim() || "حسب الإرشاد الطبي";
+      const durVal = (document.getElementById("cfg-drug-duration")?.value || "").trim();
+      const notesVal = (document.getElementById("cfg-drug-notes")?.value || "").trim();
+
+      const fullDose = [formVal, doseVal, durVal, notesVal ? `(${notesVal})` : ""].filter(Boolean).join(" — ");
+
+      currentRxMeds.push({
+        id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        name: nameVal,
+        active: pendingConfigDrug?.active || "",
+        form: formVal,
+        dose: fullDose,
+        price: pendingConfigDrug?.price
+      });
+
+      cancelDrugConfig();
       renderMedicationsList();
-      showToast(`تمت إضافة ${d.name} للروشتة`, "success");
+      showToast(`تمت إضافة ${nameVal} للروشتة بنجاح`, "success");
     }
 
     function addCustomDrugByName(name) {
-      const dose = prompt(`أدخل جرعة الدواء (${name}):`, "قرص مرتين يومياً بعد الأكل");
-      if (dose === null) return;
-      currentRxMeds.push({
-        id: `m-${Date.now()}`,
-        name: name.trim(),
-        form: "علاج",
-        dose: dose.trim() || "حسب الإرشاد"
+      selectDrug({
+        name: (name || "").trim(),
+        active: "إدخال يدوي مخصص",
+        form: "قرص واحد",
+        dose: "مرتين يومياً بعد الأكل"
       });
-      document.getElementById("drug-search-input").value = "";
-      document.getElementById("drug-suggestions-box").classList.add("hidden");
-      renderMedicationsList();
     }
 
     function addCustomDrugModal() {
-      const name = prompt("أدخل اسم الدواء الجديد:");
-      if (!name || !name.trim()) return;
-      addCustomDrugByName(name);
+      selectDrug({
+        name: "",
+        active: "إدخال يدوي مخصص",
+        form: "قرص واحد",
+        dose: "مرتين يومياً بعد الأكل"
+      });
+      setTimeout(() => document.getElementById("cfg-drug-name")?.focus(), 80);
     }
 
     function removeDrug(idx) {
@@ -1096,15 +1284,18 @@
       }
 
       list.innerHTML = currentRxMeds.map((m, idx) => `
-        <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 text-xs">
-          <div class="flex-1 min-w-0">
-            <div class="font-bold text-white truncate flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-              <span>${m.name}</span>
+        <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-start justify-between gap-2 text-xs">
+          <div class="flex-1 min-w-0 space-y-1.5">
+            <div class="font-bold text-white flex items-center justify-between gap-1.5">
+              <div class="flex items-center gap-1.5 truncate">
+                <span class="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] flex items-center justify-center shrink-0">${idx + 1}</span>
+                <span class="truncate">${m.name}</span>
+              </div>
+              ${m.price ? `<span class="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded shrink-0">${m.price} ج.م</span>` : ""}
             </div>
-            <input type="text" value="${m.dose}" onchange="currentRxMeds[${idx}].dose=this.value" placeholder="الجرعة..." class="mt-1 w-full px-2 py-1 rounded bg-slate-900 border border-slate-700/80 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500" />
+            <input type="text" value="${m.dose}" oninput="currentRxMeds[${idx}].dose=this.value; checkDrugInteractions();" placeholder="الكمية والجرعة والمدة والملاحظات..." class="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500" />
           </div>
-          <button type="button" onclick="removeDrug(${idx})" class="p-2 text-slate-500 hover:text-rose-400 transition-colors">
+          <button type="button" onclick="removeDrug(${idx})" class="p-2 text-slate-500 hover:text-rose-400 transition-colors shrink-0">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </div>

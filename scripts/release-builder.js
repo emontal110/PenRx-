@@ -333,7 +333,7 @@ if (fs.existsSync(distElectron)) {
 }
 
 console.log("⚡ Compressing and packaging Windows Setup installer (optimized fast build)...");
-run("npx electron-builder --win --publish never");
+run("npx electron-builder --win --x64 --publish never");
 
 if (fs.existsSync(distElectron)) {
   // Clear any existing setup executables, manifests, or blockmaps before copying new ones

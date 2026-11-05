@@ -15,10 +15,8 @@ name: Build & Release PenRX+ (Android APK & Windows Desktop)
 
 on:
   push:
-    branches:
-      - main
     tags:
-      - "v*"
+      - "v*" 
   workflow_dispatch:
     inputs:
       allow_unsigned_test_build:

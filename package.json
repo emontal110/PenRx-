@@ -1,6 +1,6 @@
 {
   "name": "penrx-plus",
-  "version": "1.74.0",
+  "version": "1.75.0",
   "private": true,
   "author": "PenRX+ Medical Systems",
   "description": "PenRX+ - The Ultimate Next-Gen Medical Prescription & Clinic Management Suite",
@@ -12,7 +12,7 @@
     "lint": "next lint",
     "test": "node --test __tests__/*.test.js",
     "electron:dev": "concurrently -k \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "npm run build && electron-builder --win",
+    "electron:build": "npm run build && electron-builder --win --x64",
     "cap:add:android": "cap add android",
     "cap:sync": "cap sync android",
     "cap:open:android": "cap open android"
@@ -62,9 +62,7 @@
     "compression": "normal",
     "asar": true,
     "asarUnpack": [
-      ".next/**/*",
-      "electron/start-server.js",
-      "public/**/*"
+      "electron/start-server.js"
     ],
     "publish": [
       {
@@ -91,22 +89,27 @@
     },
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "public/icon.ico",
-      "artifactName": "PenRX+-Setup-${version}.${ext}",
+      "artifactName": "PenRX+-Setup.${ext}",
       "legalTrademarks": "PenRX+ Medical Systems"
     },
     "nsis": {
       "differentialPackage": true,
       "oneClick": true,
       "perMachine": false,
-      "allowElevation": false,
+      "allowElevation": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
       "shortcutName": "PenRX+",
-      "artifactName": "PenRX+-Setup-${version}.${ext}",
+      "artifactName": "PenRX+-Setup.${ext}",
       "installerIcon": "public/icon.ico",
       "uninstallerIcon": "public/icon.ico"
     }

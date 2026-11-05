@@ -1,4 +1,6 @@
 @echo off
+chcp 65001 >nul
+set "PYTHONIOENCODING=utf-8"
 title PenRX+ - Master Control Hub
 color 0B
 
@@ -32,6 +34,7 @@ echo   [7] إدارة ونشر إصدار سحابي جديد (Release New Versi
 echo   [8] خروج (Exit)
 echo.
 echo ===============================================================================
+set "CHOICE="
 set /p "CHOICE=>> اختر رقم العملية (1 - 8): "
 
 if "%CHOICE%"=="1" goto RUN_DESKTOP
@@ -77,4 +80,4 @@ call "%~dp0Release-New-Version.bat"
 goto MENU
 
 :QUIT
-exit
+exit /b 0

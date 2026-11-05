@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title PenRX+ - Open Android Studio
 color 03
 
@@ -38,3 +39,4 @@ if exist "public\mobile.html" (
 
 call npx cap open android
 pause
+exit /b 0
