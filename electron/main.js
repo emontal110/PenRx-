@@ -6,6 +6,14 @@ const crypto = require("crypto");
 const http = require("http");
 const { execSync, fork, spawn } = require("child_process");
 
+process.on("uncaughtException", (err) => {
+  console.error("[PenRX+ Main] Uncaught exception:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[PenRX+ Main] Unhandled rejection:", reason);
+});
+
 if (process.platform === "win32") {
   app.setAppUserModelId("com.penrxplus.app");
   app.commandLine.appendSwitch("enable-features", "CalculateNativeWinOcclusion");
@@ -249,6 +257,9 @@ function performQuitAndInstall(customInstallerPath = null) {
           windowsHide: true,
         }
       );
+      runner.on("error", (err) => {
+        console.warn("[PenRX+ AutoUpdater] Installer runner error:", err.message);
+      });
       runner.unref();
       app.quit();
       return;
@@ -276,9 +287,7 @@ app.on("second-instance", () => {
 });
 
 const processCwd = app.isPackaged
-  ? (fs.existsSync(path.join(process.resourcesPath, "app.asar"))
-      ? path.join(process.resourcesPath, "app.asar")
-      : fs.existsSync(path.join(process.resourcesPath, "app.asar.unpacked"))
+  ? (fs.existsSync(path.join(process.resourcesPath, "app.asar.unpacked"))
       ? path.join(process.resourcesPath, "app.asar.unpacked")
       : fs.existsSync(path.join(process.resourcesPath, "app"))
       ? path.join(process.resourcesPath, "app")
@@ -541,6 +550,9 @@ ipcMain.handle("share-whatsapp-desktop", async (_event, payload) => {
           ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", autoPasteAndSendScript],
           { detached: true, stdio: "ignore", windowsHide: true }
         );
+        pasteRunner.on("error", (err) => {
+          console.warn("[PenRX+ WhatsApp] Auto-paste runner error:", err.message);
+        });
         pasteRunner.unref();
       } catch (sendErr) {
         console.warn("[PenRX+ WhatsApp] Auto-paste script warning:", sendErr.message);
@@ -922,68 +934,93 @@ async function ensureServerRunning() {
   return new Promise((resolve) => {
     const unpackedScript = path.join(process.resourcesPath, "app.asar.unpacked", "electron", "start-server.js");
     const appFolderScript = path.join(process.resourcesPath, "app", "electron", "start-server.js");
+    const devScript = path.join(__dirname, "start-server.js");
     const serverScript =
       app.isPackaged && fs.existsSync(unpackedScript)
         ? unpackedScript
         : app.isPackaged && fs.existsSync(appFolderScript)
         ? appFolderScript
-        : path.join(__dirname, "start-server.js");
+        : fs.existsSync(devScript)
+        ? devScript
+        : null;
 
     const targetPort = 3000;
     const fallbackCloudUrl = process.env.PENRX_CLOUD_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://pen-rx.vercel.app";
 
-    const asarModules = app.isPackaged && process.resourcesPath ? path.join(process.resourcesPath, "app.asar", "node_modules") : "";
-    const nodePaths = [asarModules, process.env.NODE_PATH || ""].filter(Boolean).join(path.delimiter);
-
-    serverProcess = fork(serverScript, [], {
-      cwd: processCwd,
-      env: {
-        ...process.env,
-        PORT: String(targetPort),
-        NODE_ENV: "production",
-        ELECTRON_RUN_AS_NODE: "1",
-        ...(nodePaths ? { NODE_PATH: nodePaths } : {}),
-      },
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
-      windowsHide: true,
-    });
-
     let resolved = false;
+    let pollInterval = null;
+    let fallbackTimeout = null;
+
     const finish = (url) => {
       if (resolved) return;
       resolved = true;
+      if (pollInterval) clearInterval(pollInterval);
+      if (fallbackTimeout) clearTimeout(fallbackTimeout);
       activeServerUrl = url;
       resolve(url);
     };
 
-    serverProcess.on("message", (msg) => {
-      if (msg && msg.status === "ready") {
-        finish(`http://localhost:${msg.port || targetPort}`);
-      }
-    });
+    if (!serverScript) {
+      console.warn("[PenRX+ Server] Server script not found, falling back to cloud");
+      finish(fallbackCloudUrl);
+      return;
+    }
 
-    serverProcess.on("exit", (code) => {
-      if (!resolved) {
-        console.warn(`[PenRX+ Server] Process exited early with code ${code}, falling back to cloud`);
+    const asarModules = app.isPackaged && process.resourcesPath ? path.join(process.resourcesPath, "app.asar", "node_modules") : "";
+    const nodePaths = [asarModules, process.env.NODE_PATH || ""].filter(Boolean).join(path.delimiter);
+
+    try {
+      serverProcess = fork(serverScript, [], {
+        cwd: processCwd,
+        env: {
+          ...process.env,
+          PORT: String(targetPort),
+          NODE_ENV: "production",
+          ELECTRON_RUN_AS_NODE: "1",
+          ...(nodePaths ? { NODE_PATH: nodePaths } : {}),
+        },
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+        windowsHide: true,
+      });
+
+      serverProcess.on("error", (err) => {
+        console.warn("[PenRX+ Server] Child process error:", err.message);
         finish(fallbackCloudUrl);
-      }
-    });
+      });
 
-    const pollInterval = setInterval(async () => {
+      serverProcess.on("message", (msg) => {
+        if (msg && msg.status === "ready") {
+          finish(`http://localhost:${msg.port || targetPort}`);
+        }
+      });
+
+      serverProcess.on("exit", (code) => {
+        if (!resolved) {
+          console.warn(`[PenRX+ Server] Process exited early with code ${code}, falling back to cloud`);
+          finish(fallbackCloudUrl);
+        }
+      });
+    } catch (err) {
+      console.warn("[PenRX+ Server] Failed to fork server process:", err.message);
+      finish(fallbackCloudUrl);
+      return;
+    }
+
+    pollInterval = setInterval(async () => {
       if (resolved) {
-        clearInterval(pollInterval);
+        if (pollInterval) clearInterval(pollInterval);
         return;
       }
       const isUp = await pingPenrxHealth(`http://localhost:${targetPort}`);
       if (isUp) {
-        clearInterval(pollInterval);
+        if (pollInterval) clearInterval(pollInterval);
         finish(`http://localhost:${targetPort}`);
       }
     }, 60);
 
     // Allow up to 12 seconds for cold disk startup before falling back to cloud URL
-    setTimeout(() => {
-      clearInterval(pollInterval);
+    fallbackTimeout = setTimeout(() => {
+      if (pollInterval) clearInterval(pollInterval);
       if (!resolved) {
         finish(fallbackCloudUrl);
       }
@@ -994,8 +1031,12 @@ async function ensureServerRunning() {
 function getAppIconPath() {
   const candidates = [
     path.join(__dirname, "../public/icon.ico"),
+    path.join(process.resourcesPath, "app.asar", "public/icon.ico"),
+    path.join(process.resourcesPath, "app.asar.unpacked", "public/icon.ico"),
+    path.join(process.resourcesPath, "app/public/icon.ico"),
     path.join(processCwd, "public/icon.ico"),
     path.join(__dirname, "../public/icon-512.png"),
+    path.join(process.resourcesPath, "app.asar", "public/icon-512.png"),
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -1006,8 +1047,12 @@ function getAppIconPath() {
 function getLogoBase64() {
   const candidates = [
     path.join(__dirname, "../public/logo-penrx.jpg"),
+    path.join(process.resourcesPath, "app.asar", "public/logo-penrx.jpg"),
+    path.join(process.resourcesPath, "app.asar.unpacked", "public/logo-penrx.jpg"),
+    path.join(process.resourcesPath, "app/public/logo-penrx.jpg"),
     path.join(processCwd, "public/logo-penrx.jpg"),
     path.join(__dirname, "../public/icon-512.png"),
+    path.join(process.resourcesPath, "app.asar", "public/icon-512.png"),
   ];
   for (const c of candidates) {
     try {
