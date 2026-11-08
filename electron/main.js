@@ -235,12 +235,12 @@ function performQuitAndInstall(installerExePath = null) {
       // runs NSIS installer silently (/S) with zero console flicker, and restarts the app.
       const psScript = [
         `try { Wait-Process -Id ${currentPid} -Timeout 8 -ErrorAction SilentlyContinue } catch {}`,
-        `Start-Sleep -Milliseconds 300`,
-        `Get-Process -Name 'PenRX+' -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ${currentPid} } | Stop-Process -Force -ErrorAction SilentlyContinue`,
-        `Start-Sleep -Milliseconds 200`,
-        `$installerProc = Start-Process -FilePath '${escapedInstaller}' -ArgumentList '/S','--updated','--force-run' -Wait -PassThru -WindowStyle Hidden`,
         `Start-Sleep -Milliseconds 400`,
-        `if (-not (Get-Process -Name 'PenRX+' -ErrorAction SilentlyContinue)) { if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' } }`,
+        `Get-Process -Name 'PenRX*' -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ${currentPid} } | Stop-Process -Force -ErrorAction SilentlyContinue`,
+        `Start-Sleep -Milliseconds 300`,
+        `$installerProc = Start-Process -FilePath '${escapedInstaller}' -ArgumentList '/S','--updated','--force-run' -Wait -PassThru -WindowStyle Hidden`,
+        `Start-Sleep -Milliseconds 500`,
+        `if (-not (Get-Process -Name 'PenRX*' -ErrorAction SilentlyContinue)) { if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' } }`,
       ].join("; ");
 
       const runner = spawn(
