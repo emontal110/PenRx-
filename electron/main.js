@@ -548,9 +548,49 @@ ipcMain.handle("get-app-version", () => {
 ipcMain.handle("get-hardware-id", () => {
   return getHardwareMachineIdSync();
 });
+ipcMain.handle("get-hardware-machine-id", () => {
+  return getHardwareMachineIdSync();
+});
 
+ipcMain.handle("open-external", (_event, url) => {
+  return openExternalSafely(url);
+});
 ipcMain.handle("open-external-url", (_event, url) => {
   return openExternalSafely(url);
+});
+
+ipcMain.handle("is-fullscreen", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow.isFullScreen();
+  }
+  return false;
+});
+
+ipcMain.handle("maximize-window", (_event, force) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (force === false) {
+      mainWindow.unmaximize();
+      return false;
+    }
+    mainWindow.maximize();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle("ensure-maximized", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (!mainWindow.isMaximized()) {
+      mainWindow.maximize();
+    }
+    return true;
+  }
+  return false;
+});
+
+ipcMain.on("restart_app", () => {
+  app.relaunch();
+  app.exit(0);
 });
 
 if (autoUpdater) {
@@ -563,11 +603,16 @@ if (autoUpdater) {
   autoUpdater.on("update-available", (info) => {
     isUpdateDownloading = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("updater-status", {
+      // Send on both channels: "updater-status" for internal tracking
+      // and "update_available" for the preload bridge that the frontend listens on
+      const payload = {
         status: "available",
         version: info.version,
         releaseNotes: info.releaseNotes,
-      });
+        releaseDate: info.releaseDate,
+      };
+      mainWindow.webContents.send("updater-status", payload);
+      mainWindow.webContents.send("update_available", payload);
     }
   });
 
@@ -611,15 +656,38 @@ if (autoUpdater) {
     downloadedInstallerPath = info.downloadedFile || null;
 
     if (mainWindow && !mainWindow.isDestroyed()) {
-      const payload = {
+      // Step 1: Notify frontend that download is complete (100%)
+      mainWindow.webContents.send("update-download-progress", {
+        percent: 100,
+        progress: 100,
+        completed: true,
+        status: "completed",
+        version: info.version,
+      });
+      mainWindow.webContents.send("updater-status", {
         percent: 100,
         progress: 100,
         completed: true,
         status: "downloaded",
         version: info.version,
-      };
-      mainWindow.webContents.send("update-download-progress", payload);
-      mainWindow.webContents.send("updater-status", payload);
+      });
+
+      // Step 2: After a brief pause, show "installing" state so the user sees it
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("update-download-progress", {
+            percent: 100,
+            progress: 100,
+            installing: true,
+            status: "installing",
+            version: info.version,
+          });
+        }
+        // Step 3: Perform quit and install after the user has seen the installing state
+        setTimeout(() => {
+          performQuitAndInstall(downloadedInstallerPath);
+        }, 1500);
+      }, 1200);
     }
   });
 
@@ -628,6 +696,10 @@ if (autoUpdater) {
     console.warn("[PenRX+ Updater] Differential update error:", err.message);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("updater-status", {
+        status: "error",
+        error: err.message,
+      });
+      mainWindow.webContents.send("update-download-progress", {
         status: "error",
         error: err.message,
       });
@@ -653,6 +725,65 @@ ipcMain.handle("check-for-native-updates", async () => {
 ipcMain.handle("quit-and-install-update", () => {
   performQuitAndInstall(downloadedInstallerPath);
   return { success: true };
+});
+
+// ── Differential (Delta) Update IPC Handlers ──
+// These are called by the preload bridge (checkDifferentialUpdate / downloadDifferentialUpdate)
+// to trigger electron-updater's native delta download, which only fetches the .blockmap diff.
+
+ipcMain.handle("check-differential-update", async () => {
+  if (!autoUpdater || !app.isPackaged) {
+    return { available: false, reason: "dev-mode" };
+  }
+  try {
+    const res = await autoUpdater.checkForUpdates();
+    return {
+      available: Boolean(res && res.updateInfo),
+      version: res?.updateInfo?.version || app.getVersion(),
+    };
+  } catch (err) {
+    return { available: false, error: err.message };
+  }
+});
+
+ipcMain.handle("download-differential-update", async () => {
+  if (!autoUpdater || !app.isPackaged) {
+    return { success: false, error: "AutoUpdater not available" };
+  }
+
+  // If already downloaded, trigger install directly
+  if (updateDownloadedSuccessfully) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update-download-progress", {
+        percent: 100,
+        progress: 100,
+        completed: true,
+        status: "completed",
+      });
+    }
+    // Short delay so the UI can show "installing" state before quit
+    setTimeout(() => {
+      performQuitAndInstall(downloadedInstallerPath);
+    }, 1800);
+    return { success: true, alreadyDownloaded: true };
+  }
+
+  // If already downloading, just confirm it's in progress
+  if (isUpdateDownloading) {
+    return { success: true, alreadyDownloading: true };
+  }
+
+  try {
+    // checkForUpdatesAndNotify triggers differential download automatically
+    // because autoUpdater.autoDownload is set to true
+    const res = await autoUpdater.checkForUpdatesAndNotify();
+    if (!res || !res.updateInfo) {
+      return { success: false, error: "No update available" };
+    }
+    return { success: true, version: res.updateInfo.version };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 });
 
 function downloadFileWithRedirects(fileUrl, destPath, onProgress, maxRedirects = 10) {
@@ -1179,11 +1310,12 @@ app.whenReady().then(() => {
         autoUpdater.checkForUpdates().catch(() => {});
       }, 2000);
 
+      // Check for updates every 2 minutes for near-real-time detection
       setInterval(() => {
         if (mainWindow && !mainWindow.isDestroyed() && !isUpdateDownloading && !updateDownloadedSuccessfully) {
           autoUpdater.checkForUpdates().catch(() => {});
         }
-      }, 15 * 60 * 1000);
+      }, 2 * 60 * 1000);
     }
   });
 });
