@@ -351,9 +351,7 @@ export function ClinicAndTemplateSettings() {
                   <LinkIcon className="w-3.5 h-3.5 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
                 </div>
 
-                <p className="text-[10px] text-emerald-400/90 font-medium">
-                  ✨ يتم ضغط الصور تلقائياً وتحويلها لـ WebP لضمان سرعة 0.01 ثانية على الهواتف الضعيفة والمتوسطة دون استهلاك الذاكرة.
-                </p>
+
               </div>
             </div>
           </div>
@@ -611,9 +609,7 @@ export function ClinicAndTemplateSettings() {
               </span>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">
-              اختر الشكل والإطار الفني للروشتة المطبوعة. يمكنك تجربة أي قالب بالنقر عليه لمعاينته حياً فوراً في لوحة المعاينة قبل الحفظ:
-            </p>
+
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
               {PRESCRIPTION_TEMPLATES.map((tmpl) => {

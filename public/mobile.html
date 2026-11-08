@@ -450,7 +450,7 @@
             <i data-lucide="smartphone" class="w-3.5 h-3.5 text-emerald-400"></i>
             <span>كود هذا الهاتف (Device ID):</span>
           </span>
-          <span id="machine-id-display" class="font-mono font-black text-emerald-400 text-xs bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800" dir="ltr">PRX-MOB-...</span>
+          <span id="machine-id-display" class="font-mono font-bold text-emerald-400 text-[10px] whitespace-nowrap bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800" dir="ltr">PRX-MOB-...</span>
         </div>
         <div class="flex items-center gap-2 pt-1">
           <button type="button" onclick="copyMachineId()" class="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all flex items-center justify-center gap-1.5">
@@ -1589,11 +1589,15 @@
       const safeNo = (pendingMobileShareRx.prescriptionNo || "RX").replace(/[^a-zA-Z0-9_-]/g, "_");
       const caption = "📋 الروشتة الطبية الخاصة بـ: " + (pendingMobileShareRx.patient?.name || "المريض");
 
+      const isPdfMode = mode === "pdf";
+      const targetFileName = "Prescription_" + safeNo + (isPdfMode ? ".pdf" : ".png");
+      const targetMime = isPdfMode ? "application/pdf" : "image/png";
+
       if (window.PenRxNative && typeof window.PenRxNative.shareFileToWhatsAppDirect === "function") {
         window.PenRxNative.shareFileToWhatsAppDirect(
           pngDataUrl,
-          "Prescription_" + safeNo + ".png",
-          "image/png",
+          targetFileName,
+          targetMime,
           cleanPhone,
           caption
         );

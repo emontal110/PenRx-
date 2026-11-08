@@ -102,8 +102,6 @@ export function pickBestSubscription(records: SubscriptionRecord[]): Subscriptio
   const active = records.find((s) => s.status === "ACTIVE");
   if (active) return active;
 
-  // بلا اشتراك نشط تُرجع آخر قرار إداري على هذا الجهاز: الطلب المعلّق حديثاً أو
-  // الإيقاف/الانتهاء الأحدث. ترتيب updatedAt يحسم أن الإيقاف الأخير لا يُخفيه طلب قديم.
   const newest = [...records].sort(
     (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
   )[0];
@@ -132,8 +130,6 @@ export async function getSubscriptionById(id: string): Promise<SubscriptionRecor
   const rows = await queryRows(`id=eq.${encodeURIComponent(clean)}&limit=1`);
   return rows[0] || null;
 }
-
-
 
 /**
  * Every subscription belonging to a physical device. allowedMachineIds is a
@@ -166,27 +162,39 @@ export async function getSubscriptionBySubscriberId(subscriberId: string): Promi
 
 /**
  * Single authoritative check used by desktop/mobile clients to unlock the app.
- * An order id or subscriber id hint only reveals records the device owns, so it
- * cannot be used to read someone else's subscription.
+ * Checks the primary hardware machineId as well as any deterministic altMachineIds
+ * generated for the same physical device (e.g. pre-hydration or legacy fallback IDs),
+ * and automatically heals/registers the canonical hardware machineId on the subscription
+ * when matched via a legacy ID after an app reinstall or version upgrade.
  */
 export async function resolveDeviceSubscription(input: {
   machineId: string;
-  altMachineId?: string;
+  altMachineId?: string | string[];
   subscriberId?: string;
   orderId?: string;
 }): Promise<SubscriptionRecord | null> {
   const machineId = normId(input.machineId);
   if (!machineId) return null;
 
-  const [ownSubs, altSubs, bySubId, byOrder] = await Promise.all([
+  const altIds = (
+    Array.isArray(input.altMachineId)
+      ? input.altMachineId
+      : input.altMachineId
+      ? String(input.altMachineId).split(",")
+      : []
+  )
+    .map((m) => normId(m))
+    .filter((m) => m && m !== machineId && MACHINE_ID_PATTERN.test(m))
+    .slice(0, 5);
+
+  const [ownSubs, altSubsNested, bySubId, byOrder] = await Promise.all([
     getSubscriptionsByMachine(machineId),
-    input.altMachineId && normId(input.altMachineId) !== machineId
-      ? getSubscriptionsByMachine(input.altMachineId)
-      : Promise.resolve([] as SubscriptionRecord[]),
+    Promise.all(altIds.map((aid) => getSubscriptionsByMachine(aid))),
     input.subscriberId ? getSubscriptionBySubscriberId(input.subscriberId) : Promise.resolve(null),
     input.orderId ? getSubscriptionById(input.orderId) : Promise.resolve(null),
   ]);
 
+  const altSubs = altSubsNested.flat();
   const candidates: SubscriptionRecord[] = [...ownSubs, ...altSubs];
   if (bySubId) candidates.push(bySubId);
   if (byOrder) candidates.push(byOrder);
@@ -194,15 +202,13 @@ export async function resolveDeviceSubscription(input: {
   const subscriberId = normId(input.subscriberId);
   const orderId = String(input.orderId || "").trim();
 
-  // ملكية الجهاز هي وحدها ما يفتح الاشتراك: hints مثل subscriberId أو رقم الطلب
-  // تُستخدم فقط لعرض الطلب المعلّق على الجهاز نفسه، ولا تُمنح مطلقاً لتوكن وصول.
   const directlyOwned: SubscriptionRecord[] = [];
   const pendingHints: SubscriptionRecord[] = [];
 
   for (const s of candidates) {
     const isOwnDevice =
       machineOwnsSubscription(s, machineId) ||
-      (input.altMachineId ? machineOwnsSubscription(s, normId(input.altMachineId)) : false);
+      altIds.some((aid) => machineOwnsSubscription(s, aid));
 
     if (isOwnDevice) {
       directlyOwned.push(s);
@@ -214,8 +220,25 @@ export async function resolveDeviceSubscription(input: {
     if (hinted && s.status === "PENDING") pendingHints.push(s);
   }
 
-  const best = pickBestSubscription(directlyOwned) || pickBestSubscription(pendingHints);
-  return best ? withDeviceToken(best, machineId) : null;
+  let best = pickBestSubscription(directlyOwned) || pickBestSubscription(pendingHints);
+  if (!best) return null;
+
+  // If matched via a legacy/alternate ID of this physical device after a reinstall or upgrade,
+  // automatically persist the canonical hardware machineId into allowedMachineIds so future checks match directly.
+  if (!machineOwnsSubscription(best, machineId) && altIds.some((aid) => machineOwnsSubscription(best!, aid))) {
+    try {
+      const updatedDevices = sanitizeMachineIds(
+        [...(best.allowedMachineIds || []), best.machineId, machineId],
+        best.machineId
+      );
+      if (updatedDevices.includes(machineId)) {
+        const patched = await replaceDevices(best.id, updatedDevices);
+        if (patched) best = patched;
+      }
+    } catch {}
+  }
+
+  return withDeviceToken(best, machineId);
 }
 
 export async function getAllSubscriptions(
@@ -280,7 +303,6 @@ export async function submitSubscription(data: {
   if (!machineId || !MACHINE_ID_PATTERN.test(machineId)) throw new Error("معرّف جهاز غير صالح.");
 
   const senderPhone = String(data.senderPhone || "").replace(/\D/g, "").slice(0, 15);
-  // A free trial has no transfer to prove, so only paid plans require the sender phone.
   if (!plan.isTrial && senderPhone.length < 10) {
     throw new Error("رقم الهاتف الذي حوّلت منه مطلوب.");
   }

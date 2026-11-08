@@ -1,14 +1,23 @@
 package com.penrxplus.app;
 
+import android.app.KeyguardManager;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.pdf.PdfDocument;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
@@ -39,9 +48,11 @@ import com.getcapacitor.BridgeActivity;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.List;
 
 public class MainActivity extends BridgeActivity {
 
+    private static boolean sessionBiometricUnlocked = false;
     private String cachedHardwareDeviceId = null;
     private View splashOverlay = null;
 
@@ -65,23 +76,47 @@ public class MainActivity extends BridgeActivity {
             centerParams.gravity = Gravity.CENTER;
             centerBox.setLayoutParams(centerParams);
 
-            ImageView logo = new ImageView(this);
             int logoSize = (int) TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP, 92, getResources().getDisplayMetrics()
             );
+            FrameLayout logoContainer = new FrameLayout(this);
             LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(logoSize, logoSize);
             logoParams.bottomMargin = (int) TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP, 16, getResources().getDisplayMetrics()
             );
-            logo.setLayoutParams(logoParams);
+            logoContainer.setLayoutParams(logoParams);
+
+            GradientDrawable logoBg = new GradientDrawable();
+            logoBg.setColor(Color.parseColor("#1C252A"));
+            logoBg.setCornerRadius(TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 22, getResources().getDisplayMetrics()
+            ));
+            logoBg.setStroke(
+                (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 1.5f, getResources().getDisplayMetrics()),
+                Color.parseColor("#34d399")
+            );
+            logoContainer.setBackground(logoBg);
+
+            ImageView logo = new ImageView(this);
+            logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            FrameLayout.LayoutParams innerLogoParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            );
+            logo.setLayoutParams(innerLogoParams);
             try {
-                logo.setImageResource(R.drawable.splash);
+                logo.setImageResource(R.drawable.penrx_logo);
             } catch (Exception e) {
                 try {
-                    logo.setImageResource(R.mipmap.ic_launcher);
-                } catch (Exception ignored) {}
+                    logo.setImageResource(R.mipmap.ic_launcher_round);
+                } catch (Exception ignored) {
+                    try {
+                        logo.setImageResource(R.mipmap.ic_launcher);
+                    } catch (Exception ignored2) {}
+                }
             }
-            centerBox.addView(logo);
+            logoContainer.addView(logo);
+            centerBox.addView(logoContainer);
 
             TextView title = new TextView(this);
             title.setText("PenRX+");
@@ -111,7 +146,7 @@ public class MainActivity extends BridgeActivity {
 
             ProgressBar pb = new ProgressBar(this);
             int pbSize = (int) TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP, 32, getResources().getDisplayMetrics()
+                TypedValue.COMPLEX_UNIT_DIP, 30, getResources().getDisplayMetrics()
             );
             LinearLayout.LayoutParams pbParams = new LinearLayout.LayoutParams(pbSize, pbSize);
             pbParams.bottomMargin = (int) TypedValue.applyDimension(
@@ -149,7 +184,7 @@ public class MainActivity extends BridgeActivity {
                 if (splashOverlay != null && splashOverlay.getParent() != null) {
                     splashOverlay.animate()
                         .alpha(0f)
-                        .setDuration(250)
+                        .setDuration(180)
                         .withEndAction(new Runnable() {
                             @Override
                             public void run() {
@@ -214,10 +249,24 @@ public class MainActivity extends BridgeActivity {
         return cachedHardwareDeviceId;
     }
 
-    /**
-     * Normalizes Egyptian and international phone numbers to strict WhatsApp JID format
-     * (e.g. "01012345678" -> "201012345678", "+201012345678" -> "201012345678")
-     */
+    private boolean checkDeviceBiometricOrCredentialSupport() {
+        try {
+            PackageManager pm = getPackageManager();
+            if (pm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
+                    return true;
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+                if (km != null && km.isKeyguardSecure()) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {}
+        return true;
+    }
+
     private String normalizeWhatsAppJidPhone(String rawPhone) {
         if (rawPhone == null) return "";
         String digits = rawPhone.replaceAll("[^0-9]", "");
@@ -265,14 +314,76 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    private void syncDeviceIdToWebView(final WebView webView, final String hwId) {
+        if (webView == null || hwId == null) return;
+        try {
+            final String sessionClearJs = sessionBiometricUnlocked
+                ? "sessionStorage.setItem('penrx_biometric_unlocked_session','true');"
+                : "";
+            final String js =
+                "try{" +
+                "window.__PENRX_NATIVE_HW_ID__='" + hwId + "';" +
+                "localStorage.setItem('penrx_unique_machine_id','" + hwId + "');" +
+                "localStorage.setItem('penrx_machine_id','" + hwId + "');" +
+                sessionClearJs +
+                "window.dispatchEvent(new CustomEvent('penrx-hw-id-ready',{detail:'" + hwId + "'}));" +
+                "}catch(e){}";
+            webView.evaluateJavascript(js, null);
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Writes decoded bytes to outFile. If the requested mimeType is application/pdf
+     * but the incoming bytes are a PNG/JPEG bitmap (e.g., from mobile.html), converts
+     * the bitmap into a crisp native Android PdfDocument automatically.
+     */
+    private void writeShareableFile(byte[] bytes, File outFile, boolean wantPdf) throws Exception {
+        boolean isAlreadyPdf = bytes.length > 4 &&
+            bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46; // "%PDF"
+
+        if (wantPdf && !isAlreadyPdf && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            if (bmp != null) {
+                PdfDocument pdfDoc = new PdfDocument();
+                int pageWidth = 595; // A4/A5 proportional points
+                int pageHeight = Math.max(842, (int) ((float) bmp.getHeight() / Math.max(1, bmp.getWidth()) * pageWidth));
+                PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create();
+                PdfDocument.Page page = pdfDoc.startPage(pageInfo);
+                Canvas canvas = page.getCanvas();
+                canvas.drawColor(Color.WHITE);
+                Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+                Rect destRect = new Rect(16, 16, pageWidth - 16, pageHeight - 16);
+                canvas.drawBitmap(bmp, null, destRect, paint);
+                pdfDoc.finishPage(page);
+                try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                    pdfDoc.writeTo(fos);
+                    fos.flush();
+                }
+                pdfDoc.close();
+                bmp.recycle();
+                outFile.setReadable(true, false);
+                return;
+            }
+        }
+
+        try (FileOutputStream fos = new FileOutputStream(outFile)) {
+            fos.write(bytes);
+            fos.flush();
+        }
+        outFile.setReadable(true, false);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        if (savedInstanceState == null) {
+            sessionBiometricUnlocked = false;
+        }
+
         try {
             Window window = getWindow();
             if (window != null) {
                 int brandDark = Color.parseColor("#0b1329");
                 window.setBackgroundDrawable(new ColorDrawable(brandDark));
-                // Ensure soft keyboard resizes WebView cleanly so rising Spotlight search stays above keyboard
                 window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     window.setStatusBarColor(brandDark);
@@ -290,7 +401,7 @@ public class MainActivity extends BridgeActivity {
             public void run() {
                 dismissSplashOverlay();
             }
-        }, 6500);
+        }, 2200);
 
         final String hwId = resolveImmutableHardwareId();
 
@@ -311,8 +422,6 @@ public class MainActivity extends BridgeActivity {
                 settings.setLoadWithOverviewMode(true);
                 settings.setUseWideViewPort(true);
 
-                // Use cache-else-network when offline so the same Next.js origin (https://pen-rx.vercel.app)
-                // and its localStorage/IndexedDB remain unified!
                 if (isNetworkAvailable()) {
                     settings.setCacheMode(WebSettings.LOAD_DEFAULT);
                 } else {
@@ -320,8 +429,10 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 String currentUa = settings.getUserAgentString();
+                boolean uaUpdated = false;
                 if (currentUa != null && !currentUa.contains("PenRxHwId/")) {
                     settings.setUserAgentString(currentUa + " PenRxHwId/" + hwId);
+                    uaUpdated = true;
                 }
 
                 webView.addJavascriptInterface(new Object() {
@@ -335,11 +446,33 @@ public class MainActivity extends BridgeActivity {
                         dismissSplashOverlay();
                     }
 
-                    /**
-                     * Directly opens the patient's WhatsApp chat (via JID phone@s.whatsapp.net)
-                     * in the native Android WhatsApp or WhatsApp Business app with the
-                     * Prescription Image (PNG) or PDF already attached and ready to send!
-                     */
+                    @JavascriptInterface
+                    public boolean hasBiometricHardware() {
+                        return checkDeviceBiometricOrCredentialSupport();
+                    }
+
+                    @JavascriptInterface
+                    public boolean isSessionUnlocked() {
+                        return sessionBiometricUnlocked;
+                    }
+
+                    @JavascriptInterface
+                    public void setSessionUnlocked(boolean unlocked) {
+                        sessionBiometricUnlocked = unlocked;
+                    }
+
+                    @JavascriptInterface
+                    public boolean isBiometricEnabled() {
+                        SharedPreferences prefs = getSharedPreferences("penrx_hw_prefs", Context.MODE_PRIVATE);
+                        return prefs.getBoolean("biometric_lock_enabled", false);
+                    }
+
+                    @JavascriptInterface
+                    public void setBiometricEnabled(boolean enabled) {
+                        SharedPreferences prefs = getSharedPreferences("penrx_hw_prefs", Context.MODE_PRIVATE);
+                        prefs.edit().putBoolean("biometric_lock_enabled", enabled).apply();
+                    }
+
                     @JavascriptInterface
                     public String shareFileToWhatsAppDirect(
                         String base64Data,
@@ -349,72 +482,120 @@ public class MainActivity extends BridgeActivity {
                         String caption
                     ) {
                         try {
-                            String rawB64 = base64Data;
+                            String rawB64 = base64Data != null ? base64Data : "";
                             int commaIdx = rawB64.indexOf(',');
                             if (commaIdx >= 0) {
                                 rawB64 = rawB64.substring(commaIdx + 1);
                             }
                             byte[] bytes = Base64.decode(rawB64, Base64.DEFAULT);
 
+                            boolean wantPdf = (mimeType != null && mimeType.toLowerCase().contains("pdf")) ||
+                                (fileName != null && fileName.toLowerCase().endsWith(".pdf"));
+                            final String targetMime = wantPdf ? "application/pdf" : "image/png";
+                            final String defaultExt = wantPdf ? ".pdf" : ".png";
+
                             String safeName = (fileName != null && !fileName.trim().isEmpty())
                                 ? fileName.replaceAll("[^a-zA-Z0-9._-]", "_")
-                                : ("Prescription." + (mimeType != null && mimeType.contains("pdf") ? "pdf" : "png"));
+                                : ("Prescription" + defaultExt);
+                            if (wantPdf && !safeName.toLowerCase().endsWith(".pdf")) {
+                                safeName = safeName + ".pdf";
+                            } else if (!wantPdf && !safeName.toLowerCase().endsWith(".png")) {
+                                safeName = safeName + ".png";
+                            }
+                            final String finalSafeName = safeName;
 
-                            File sharedDir = new File(getCacheDir(), "shared_rx");
+                            File baseCache = getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir();
+                            File sharedDir = new File(baseCache, "shared_rx");
                             if (!sharedDir.exists()) {
                                 sharedDir.mkdirs();
                             }
-                            File outFile = new File(sharedDir, safeName);
-                            try (FileOutputStream fos = new FileOutputStream(outFile)) {
-                                fos.write(bytes);
-                                fos.flush();
-                            }
+                            final File outFile = new File(sharedDir, finalSafeName);
+                            writeShareableFile(bytes, outFile, wantPdf);
 
-                            Uri contentUri = FileProvider.getUriForFile(
+                            final Uri contentUri = FileProvider.getUriForFile(
                                 MainActivity.this,
                                 getPackageName() + ".fileprovider",
                                 outFile
                             );
 
-                            String targetMime = (mimeType != null && !mimeType.trim().isEmpty())
-                                ? mimeType.trim()
-                                : "image/png";
+                            final String normalizedPhone = normalizeWhatsAppJidPhone(cleanPhone);
+                            final String finalCaption = caption != null ? caption.trim() : "";
 
-                            String normalizedPhone = normalizeWhatsAppJidPhone(cleanPhone);
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        String targetPackage = null;
+                                        if (isPackageInstalled("com.whatsapp")) {
+                                            targetPackage = "com.whatsapp";
+                                        } else if (isPackageInstalled("com.whatsapp.w4b")) {
+                                            targetPackage = "com.whatsapp.w4b";
+                                        }
 
-                            String targetPackage = null;
-                            if (isPackageInstalled("com.whatsapp")) {
-                                targetPackage = "com.whatsapp";
-                            } else if (isPackageInstalled("com.whatsapp.w4b")) {
-                                targetPackage = "com.whatsapp.w4b";
-                            }
+                                        Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                                        sendIntent.setType(targetMime);
+                                        sendIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                                        if (!finalCaption.isEmpty()) {
+                                            sendIntent.putExtra(Intent.EXTRA_TEXT, finalCaption);
+                                        }
+                                        if (!normalizedPhone.isEmpty()) {
+                                            sendIntent.putExtra("jid", normalizedPhone + "@s.whatsapp.net");
+                                        }
 
-                            Intent sendIntent = new Intent(Intent.ACTION_SEND);
-                            sendIntent.setType(targetMime);
-                            sendIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
-                            if (caption != null && !caption.trim().isEmpty()) {
-                                sendIntent.putExtra(Intent.EXTRA_TEXT, caption.trim());
-                            }
-                            if (!normalizedPhone.isEmpty()) {
-                                // Direct WhatsApp JID targeting: opens patient's conversation directly with the file attached!
-                                sendIntent.putExtra("jid", normalizedPhone + "@s.whatsapp.net");
-                            }
-                            sendIntent.setClipData(ClipData.newRawUri("Prescription", contentUri));
-                            sendIntent.addFlags(
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION |
-                                Intent.FLAG_ACTIVITY_NEW_TASK |
-                                Intent.FLAG_ACTIVITY_CLEAR_TOP
-                            );
+                                        try {
+                                            ClipData clipData = ClipData.newUri(
+                                                getContentResolver(),
+                                                finalSafeName,
+                                                contentUri
+                                            );
+                                            sendIntent.setClipData(clipData);
+                                        } catch (Exception ignored) {}
 
-                            if (targetPackage != null) {
-                                sendIntent.setPackage(targetPackage);
-                                grantUriPermission(targetPackage, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                startActivity(sendIntent);
-                            } else {
-                                Intent chooser = Intent.createChooser(sendIntent, "إرسال الروشتة عبر واتساب");
-                                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                startActivity(chooser);
-                            }
+                                        // IMPORTANT: Do NOT set FLAG_ACTIVITY_CLEAR_TOP!
+                                        // FLAG_ACTIVITY_CLEAR_TOP clears WhatsApp's ContactPicker share handler
+                                        // when WhatsApp is already open in the background, dropping the attachment!
+                                        sendIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                                        try {
+                                            grantUriPermission("com.whatsapp", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                        } catch (Exception ignored) {}
+                                        try {
+                                            grantUriPermission("com.whatsapp.w4b", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                        } catch (Exception ignored) {}
+
+                                        if (targetPackage != null) {
+                                            sendIntent.setPackage(targetPackage);
+                                            try {
+                                                List<ResolveInfo> resInfoList = getPackageManager().queryIntentActivities(
+                                                    sendIntent,
+                                                    PackageManager.MATCH_DEFAULT_ONLY
+                                                );
+                                                for (ResolveInfo resolveInfo : resInfoList) {
+                                                    String pkgName = resolveInfo.activityInfo.packageName;
+                                                    grantUriPermission(pkgName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                                }
+                                            } catch (Exception ignored) {}
+                                            MainActivity.this.startActivity(sendIntent);
+                                        } else {
+                                            Intent chooser = Intent.createChooser(sendIntent, "إرسال الروشتة عبر واتساب");
+                                            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                            MainActivity.this.startActivity(chooser);
+                                        }
+                                    } catch (Exception uiErr) {
+                                        try {
+                                            Intent fallbackChooser = Intent.createChooser(
+                                                new Intent(Intent.ACTION_SEND)
+                                                    .setType(targetMime)
+                                                    .putExtra(Intent.EXTRA_STREAM, contentUri)
+                                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                                                "إرسال الروشتة عبر واتساب"
+                                            );
+                                            MainActivity.this.startActivity(fallbackChooser);
+                                        } catch (Exception ignored2) {}
+                                    }
+                                }
+                            });
+
                             return "OK";
                         } catch (Exception err) {
                             return "ERROR:" + err.getMessage();
@@ -422,18 +603,31 @@ public class MainActivity extends BridgeActivity {
                     }
                 }, "PenRxNative");
 
-                webView.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            webView.evaluateJavascript(
-                                "try{localStorage.setItem('penrx_unique_machine_id','" + hwId + "');localStorage.setItem('penrx_machine_id','" + hwId + "');}catch(e){}",
-                                null
-                            );
-                        } catch (Exception ignored) {}
-                    }
-                }, 250);
+                if (uaUpdated && savedInstanceState == null) {
+                    String targetServerUrl = (this.bridge != null && this.bridge.getServerUrl() != null)
+                        ? this.bridge.getServerUrl()
+                        : "https://pen-rx.vercel.app";
+                    webView.loadUrl(targetServerUrl);
+                }
+
+                int[] delays = new int[]{100, 350, 800, 1500, 2600};
+                for (int delayMs : delays) {
+                    webView.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            syncDeviceIdToWebView(webView, hwId);
+                        }
+                    }, delayMs);
+                }
             }
         } catch (Exception ignored) {}
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (!isChangingConfigurations()) {
+            sessionBiometricUnlocked = false;
+        }
+        super.onDestroy();
     }
 }

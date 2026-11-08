@@ -10,6 +10,7 @@ Write-Host "Source image loaded successfully."
 
 $resDir = Join-Path $PSScriptRoot "..\android\app\src\main\res"
 $bgColor = [System.Drawing.ColorTranslator]::FromHtml("#1C252A")
+$splashBgColor = [System.Drawing.ColorTranslator]::FromHtml("#0b1329")
 
 $adaptiveDensities = @{
     "mipmap-mdpi"    = @{ Canvas = 108; Logo = 62 }
@@ -58,7 +59,6 @@ function Create-Centered-Icon([int]$canvasSize, [int]$logoSize, [System.Drawing.
         $brush.Dispose()
     }
 
-    # Center the logo in the middle
     $offsetX = [int](($canvasSize - $logoSize) / 2)
     $offsetY = [int](($canvasSize - $logoSize) / 2)
 
@@ -106,5 +106,18 @@ foreach ($key in $legacyDensities.Keys) {
     Write-Host "Generated $key/ic_launcher.png and ic_launcher_round.png"
 }
 
+# 3. Generate drawable/penrx_logo.png and drawable/splash.png with official PenRX+ brand logo
+$drawableFolder = Join-Path $resDir "drawable"
+if (-not (Test-Path $drawableFolder)) {
+    New-Item -ItemType Directory -Path $drawableFolder -Force | Out-Null
+}
+$splashIcon = Create-Centered-Icon 256 220 $bgColor $false $false
+$logoOutPath = Join-Path $drawableFolder "penrx_logo.png"
+$splashOutPath = Join-Path $drawableFolder "splash.png"
+$splashIcon.Save($logoOutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+$splashIcon.Save($splashOutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+$splashIcon.Dispose()
+Write-Host "Generated drawable/penrx_logo.png and drawable/splash.png"
+
 $srcBmp.Dispose()
-Write-Host "All Android icons updated successfully!"
+Write-Host "All Android icons and splash logos updated successfully!"

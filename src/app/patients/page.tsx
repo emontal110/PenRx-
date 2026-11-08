@@ -130,7 +130,7 @@ export default function PatientsPage() {
               </Badge>
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              إدارة بيانات المرضى، السجل المرضي السريري، وكتابة الروشتات الفورية
+              بيانات المرضى والسجل الطبي
             </p>
           </div>
         </div>
@@ -242,7 +242,7 @@ export default function PatientsPage() {
           <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-md mx-auto">
             {searchQuery
               ? `لم نعثر على أي مريض يطابق "${searchQuery}". تأكد من صحة الاسم أو رقم الهاتف.`
-              : "لم يتم تسجيل أي مريض في العيادة بعد. يمكنك إضافة مريض جديد أو كتابة روشتة مباشرة."}
+              : "لا يوجد مرضى مسجلون بعد."}
           </p>
           <div className="mt-6 flex justify-center gap-3">
             <Button onClick={() => setIsNewPatientModalOpen(true)}>
@@ -506,7 +506,7 @@ export default function PatientsPage() {
             <span>تسجيل مريض جديد</span>
           </div>
         }
-        description="أدخل بيانات المريض الأساسية لبدء كتابة الروشتة مباشرة"
+        description="بيانات المريض الأساسية"
         maxWidth="md"
       >
         <form onSubmit={handleCreateNewPatient} className="space-y-4">

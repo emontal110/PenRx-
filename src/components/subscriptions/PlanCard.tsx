@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Check, Crown, Sparkles, Zap } from "lucide-react";
+import { Crown, Sparkles, Zap } from "lucide-react";
 import { Button, Card, Badge } from "@/components/ui";
 
 export interface PlanItem {
@@ -16,7 +16,7 @@ export interface PlanItem {
   badgeColor?: string;
   popular?: boolean;
   isTrial?: boolean;
-  features: string[];
+  summary?: string;
 }
 
 interface PlanCardProps {
@@ -31,104 +31,94 @@ export function PlanCard({ plan, isSelected, onSelect, disabled }: PlanCardProps
 
   return (
     <Card
-      className={`relative p-5 sm:p-6 transition-all duration-200 flex flex-col justify-between overflow-hidden group ${
+      className={`p-4 sm:p-5 transition-all duration-200 rounded-2xl ${
         plan.popular
-          ? "border-emerald-500/80 bg-gradient-to-b from-slate-900/90 to-emerald-950/20 shadow-emerald-950/40 ring-1 ring-emerald-500/30"
+          ? "border-emerald-500/70 bg-gradient-to-b from-slate-900/95 to-emerald-950/20 shadow-lg shadow-emerald-950/30 ring-1 ring-emerald-500/25"
           : isSelected
-          ? "border-teal-500/80 bg-slate-900/90 shadow-teal-950/30 ring-1 ring-teal-500/30"
-          : "border-slate-800 bg-slate-900/70 hover:border-slate-700 hover:bg-slate-900/90"
+          ? "border-teal-500/70 bg-slate-900/95 ring-1 ring-teal-500/25"
+          : "border-slate-800/90 bg-slate-900/75 hover:border-slate-700 hover:bg-slate-900/90"
       }`}
     >
-      {/* Popular or Discount Floating Ribbon */}
-      {plan.badge && (
-        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10">
-          <Badge
-            variant={plan.popular ? "success" : isFree ? "brand" : "warning"}
-            className="text-[11px] font-black shadow-sm"
-          >
-            {plan.badge}
-          </Badge>
-        </div>
-      )}
-
-      <div>
-        {/* Header */}
-        <div className="flex items-center gap-2.5 mb-2">
-          <div
-            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-              isFree
-                ? "bg-teal-500/10 text-teal-400 border-teal-500/20"
-                : plan.popular
-                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-sm"
-                : "bg-slate-800 text-slate-300 border-slate-700"
-            }`}
-          >
-            {plan.popular ? (
-              <Crown className="w-5 h-5 text-emerald-400" />
-            ) : isFree ? (
-              <Sparkles className="w-5 h-5 text-teal-400" />
-            ) : (
-              <Zap className="w-5 h-5 text-amber-400" />
-            )}
-          </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-black text-slate-100">
-              {plan.nameAr}
-            </h3>
-            <span className="text-xs text-slate-400 font-medium">
-              {plan.durationLabel}
-            </span>
-          </div>
-        </div>
-
-        {/* Pricing Display */}
-        <div className="my-4 py-3 border-y border-slate-800/80 flex items-baseline justify-between">
-          <div className="flex items-baseline gap-1" dir="ltr">
-            <span className="text-3xl font-black text-emerald-400 font-mono tracking-tight">
-              {isFree ? "0" : plan.price}
-            </span>
-            <span className="text-xs font-bold text-slate-400">
-              {isFree ? "مجاناً بالكامل" : "ج.م مصري"}
-            </span>
-          </div>
-
-          {plan.originalPrice && (
-            <div className="text-right">
-              <span className="text-xs line-through text-slate-500 block font-mono">
-                {plan.originalPrice} ج.م
-              </span>
-              {plan.discountText && (
-                <span className="text-[11px] font-bold text-emerald-400">
-                  {plan.discountText}
-                </span>
+      <div className="flex flex-col gap-3.5">
+        {/* Top Row: Plan Identity & Non-Overlapping Badge */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                isFree
+                  ? "bg-teal-500/10 text-teal-400 border-teal-500/25"
+                  : plan.popular
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/35"
+                  : "bg-slate-800/90 text-amber-400 border-slate-700/80"
+              }`}
+            >
+              {plan.popular ? (
+                <Crown className="w-5 h-5 text-emerald-400" />
+              ) : isFree ? (
+                <Sparkles className="w-5 h-5 text-teal-400" />
+              ) : (
+                <Zap className="w-5 h-5 text-amber-400" />
               )}
             </div>
+
+            <div className="min-w-0">
+              <h3 className="text-base font-black text-slate-100 leading-snug">
+                {plan.nameAr}
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {plan.durationLabel}
+              </p>
+            </div>
+          </div>
+
+          {plan.badge && (
+            <Badge
+              variant={plan.popular ? "success" : isFree ? "brand" : "warning"}
+              className="text-[10px] px-2.5 py-0.5 font-bold shrink-0 whitespace-nowrap"
+            >
+              {plan.badge}
+            </Badge>
           )}
         </div>
 
-        {/* Features List */}
-        <ul className="space-y-2.5 text-xs text-slate-300 my-4">
-          {plan.features.map((feature, idx) => (
-            <li key={idx} className="flex items-start gap-2 leading-relaxed">
-              <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <span>{feature}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+        {/* Middle Row: Price & Action Button */}
+        <div className="pt-3 border-t border-slate-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-baseline justify-between sm:justify-start gap-3">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight">
+                {isFree ? "0" : plan.price.toLocaleString("en-US")}
+              </span>
+              <span className="text-xs font-bold text-slate-400">
+                {isFree ? "مجاناً بالكامل" : "ج.م"}
+              </span>
+            </div>
 
-      {/* Select Plan Button */}
-      <div className="mt-5 pt-3 border-t border-slate-800/60">
-        <Button
-          variant={plan.popular ? "primary" : isFree ? "soft" : "secondary"}
-          onClick={() => onSelect(plan)}
-          disabled={disabled}
-          className="w-full text-xs sm:text-sm font-black"
-        >
-          {isFree ? "ابدأ التجربة المجانية الآن 🎁" : "اختيار هذه الباقة والدفع ⚡"}
-        </Button>
+            {(plan.originalPrice || plan.discountText) && (
+              <div className="flex items-center gap-2">
+                {plan.originalPrice && (
+                  <span className="text-xs line-through text-slate-500 font-mono">
+                    {plan.originalPrice} ج.م
+                  </span>
+                )}
+                {plan.discountText && (
+                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                    {plan.discountText}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Button
+            variant={plan.popular ? "primary" : isFree ? "soft" : "secondary"}
+            onClick={() => onSelect(plan)}
+            disabled={disabled}
+            className="w-full sm:w-auto sm:min-w-[175px] text-xs font-black py-2.5"
+          >
+            {isFree ? "تفعيل التجربة المجانية 🎁" : "اختيار الباقة والدفع ⚡"}
+          </Button>
+        </div>
       </div>
     </Card>
   );
 }
-

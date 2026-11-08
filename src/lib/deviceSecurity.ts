@@ -4,7 +4,7 @@
  * Priority chain for machine ID generation:
  *   1. Electron Desktop: Real hardware ID via synchronous preload arg or IPC (Motherboard Serial → Windows GUID → MAC → Hostname)
  *   2. Capacitor Mobile: Native Android hardware ID (SSAID) via synchronous MainActivity bridge / User-Agent or Capacitor Device plugin
- *   3. Web Browser:      Deterministic FNV-1a hash of screen + navigator + hardware + timezone attributes (zero random drift across reinstalls)
+ *   3. Web Browser:      Deterministic FNV-1a hash of hardware + screen + timezone attributes (immune to browser version updates or orientation changes)
  *
  * The resulting ID is always in the format: PRX-XXXX-XXXX-XXXX
  * and is persisted in localStorage, cookies, and native storage.
@@ -23,6 +23,7 @@ const PRIMARY_STORAGE_KEY = "penrx_unique_machine_id";
 const INITIAL_STORAGE_KEY = "penrx_initial_machine_id";
 const LEGACY_MOBILE_KEY = "penrx_machine_id";
 const COOKIE_KEY = "penrx_hw_mid";
+export const BIOMETRIC_UNLOCKED_SESSION_KEY = "penrx_biometric_unlocked_session";
 
 function readCookieMachineId(): string | null {
   if (typeof document === "undefined") return null;
@@ -44,9 +45,26 @@ function writeCookieMachineId(id: string): void {
 }
 
 /**
+ * Formats an Android raw SSAID / hardware identifier into the canonical PRX-ANDR-XXXX-XXXX format.
+ */
+export function formatAndroidHardwareId(rawIdentifier: string): string {
+  const normalized = String(rawIdentifier || "").trim();
+  let hash = 2166136261;
+  const str = `ANDROID-HW-${normalized}`;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    hash = hash | 0;
+  }
+  const hex = Math.abs(hash | 0).toString(16).toUpperCase().padStart(8, "0");
+  const suffix = normalized.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase().padStart(4, "A");
+  return `PRX-ANDR-${hex.substring(0, 4)}-${suffix}`;
+}
+
+/**
  * Synchronously extracts the native hardware ID if injected by Electron preload or Android MainActivity
  */
-function getSynchronousNativeHardwareId(): string | null {
+export function getSynchronousNativeHardwareId(): string | null {
   if (typeof window === "undefined") return null;
   const w = window as any;
 
@@ -55,7 +73,12 @@ function getSynchronousNativeHardwareId(): string | null {
     return String(w.penrxDesktop.hardwareMachineId).trim().toUpperCase();
   }
 
-  // 2. Android APK synchronous JavascriptInterface (MainActivity.java)
+  // 2. Android APK injected global variable from MainActivity
+  if (w.__PENRX_NATIVE_HW_ID__ && String(w.__PENRX_NATIVE_HW_ID__).startsWith("PRX-")) {
+    return String(w.__PENRX_NATIVE_HW_ID__).trim().toUpperCase();
+  }
+
+  // 3. Android APK synchronous JavascriptInterface (MainActivity.java)
   try {
     if (w.PenRxNative && typeof w.PenRxNative.getHardwareDeviceId === "function") {
       const nativeId = w.PenRxNative.getHardwareDeviceId();
@@ -65,7 +88,7 @@ function getSynchronousNativeHardwareId(): string | null {
     }
   } catch {}
 
-  // 3. Android APK User-Agent embedded hardware ID (PenRxHwId/PRX-ANDR-XXXX-XXXX)
+  // 4. Android APK User-Agent embedded hardware ID (PenRxHwId/PRX-ANDR-XXXX-XXXX)
   try {
     const ua = navigator.userAgent || "";
     const uaMatch = ua.match(/PenRxHwId\/(PRX-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})/i);
@@ -78,12 +101,70 @@ function getSynchronousNativeHardwareId(): string | null {
 }
 
 /**
- * Computes a 100% deterministic browser/device fingerprint without Math.random()
- * so clearing storage or reinstalling a WebApp on the same device produces the exact same ID.
+ * Extracts a version-invariant hardware/model signature from User-Agent so WebView/Chrome
+ * auto-updates or custom PenRxHwId suffixes never alter the deterministic device hash.
+ */
+function normalizeHardwareUserAgent(rawUa: string): string {
+  return String(rawUa || "")
+    .replace(/\s*PenRxHwId\/PRX-[A-Z0-9-]+/gi, "")
+    .replace(/Chrome\/[\d.]+/gi, "Chrome")
+    .replace(/Version\/[\d.]+/gi, "Version")
+    .replace(/AppleWebKit\/[\d.]+/gi, "AppleWebKit")
+    .replace(/Safari\/[\d.]+/gi, "Safari")
+    .replace(/Edg[A-Za-z]*\/[\d.]+/gi, "Edge")
+    .trim();
+}
+
+/**
+ * Computes the legacy fallback ID (exact formula used in earlier versions) so devices that
+ * registered a subscription before the native hardware ID bridge was synchronous are still
+ * recognized automatically upon reinstall or upgrade.
+ */
+function computeLegacyFallbackIds(): string[] {
+  if (typeof window === "undefined") return [];
+  const results = new Set<string>();
+  const rawUa = navigator.userAgent || "";
+  const strippedUa = rawUa.replace(/\s*PenRxHwId\/PRX-[A-Z0-9-]+/gi, "");
+
+  for (const uaCandidate of [strippedUa, rawUa]) {
+    const screenInfo = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}x${window.devicePixelRatio || 1}`;
+    const navInfo = `${uaCandidate}-${navigator.language}-${navigator.hardwareConcurrency || 4}-${(navigator as any).deviceMemory || 4}-${navigator.maxTouchPoints || 0}`;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Cairo";
+    const platformStr = `${navigator.platform || ""}`;
+
+    let hash1 = 2166136261;
+    const str1 = `${screenInfo}#${navInfo}#${timezone}`;
+    for (let i = 0; i < str1.length; i++) {
+      hash1 ^= str1.charCodeAt(i);
+      hash1 += (hash1 << 1) + (hash1 << 4) + (hash1 << 7) + (hash1 << 8) + (hash1 << 24);
+    }
+
+    let hash2 = 2166136261;
+    const str2 = `SALT2#${platformStr}#${timezone}#${screenInfo}#${navInfo.split("").reverse().join("")}`;
+    for (let i = 0; i < str2.length; i++) {
+      hash2 ^= str2.charCodeAt(i);
+      hash2 += (hash2 << 1) + (hash2 << 4) + (hash2 << 7) + (hash2 << 8) + (hash2 << 24);
+    }
+
+    const hex1 = Math.abs(hash1 | 0).toString(16).toUpperCase().padStart(8, "0");
+    const hex2 = Math.abs(hash2 | 0).toString(16).toUpperCase().padStart(4, "0");
+    results.add(`PRX-${hex1.substring(0, 4)}-${hex1.substring(4, 8)}-${hex2.substring(0, 4)}`);
+  }
+
+  return Array.from(results);
+}
+
+/**
+ * Computes a 100% deterministic, orientation-invariant and browser-update-invariant
+ * device fingerprint without Math.random() so clearing storage or reinstalling on the
+ * same device always produces the exact same ID.
  */
 function computeDeterministicFallbackId(): string {
-  const screenInfo = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}x${window.devicePixelRatio || 1}`;
-  const navInfo = `${navigator.userAgent}-${navigator.language}-${navigator.hardwareConcurrency || 4}-${(navigator as any).deviceMemory || 4}-${navigator.maxTouchPoints || 0}`;
+  const minDim = Math.min(window.screen.width || 0, window.screen.height || 0);
+  const maxDim = Math.max(window.screen.width || 0, window.screen.height || 0);
+  const screenInfo = `${minDim}x${maxDim}x${window.screen.colorDepth}x${window.devicePixelRatio || 1}`;
+  const cleanUa = normalizeHardwareUserAgent(navigator.userAgent || "");
+  const navInfo = `${cleanUa}-${navigator.hardwareConcurrency || 4}-${(navigator as any).deviceMemory || 4}-${navigator.maxTouchPoints || 0}`;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Cairo";
   const platformStr = `${navigator.platform || ""}`;
 
@@ -107,8 +188,10 @@ function computeDeterministicFallbackId(): string {
 }
 
 /**
- * Returns all known Machine IDs associated with this device installation
- * (primary hardware ID, initial pre-hydration browser ID, and legacy mobile ID).
+ * Returns all known Machine IDs associated with this physical device installation
+ * (primary native hardware ID, stored IDs, deterministic hardware spec ID, and legacy UA IDs).
+ * This guarantees that even after a complete app uninstall & reinstall or version upgrade,
+ * any subscription previously activated on this device is recognized immediately.
  */
 export function getKnownDeviceMachineIds(currentId?: string): string[] {
   const ids = new Set<string>();
@@ -119,14 +202,20 @@ export function getKnownDeviceMachineIds(currentId?: string): string[] {
     }
   };
 
-  add(currentId);
   add(getSynchronousNativeHardwareId());
+  add(currentId);
   add(readCookieMachineId());
   if (typeof window !== "undefined") {
     try {
       add(localStorage.getItem(PRIMARY_STORAGE_KEY));
       add(localStorage.getItem(INITIAL_STORAGE_KEY));
       add(localStorage.getItem(LEGACY_MOBILE_KEY));
+    } catch {}
+    try {
+      add(computeDeterministicFallbackId());
+      for (const legId of computeLegacyFallbackIds()) {
+        add(legId);
+      }
     } catch {}
   }
   return Array.from(ids);
@@ -183,16 +272,7 @@ export async function getOrCreateMachineIdAsync(): Promise<string> {
       const { Device } = await import("@capacitor/device");
       const idInfo = await Device.getId();
       if (idInfo && idInfo.identifier) {
-        let hash = 2166136261;
-        const str = `ANDROID-HW-${idInfo.identifier}`;
-        for (let i = 0; i < str.length; i++) {
-          hash ^= str.charCodeAt(i);
-          hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-          hash = hash | 0;
-        }
-        const hex = Math.abs(hash | 0).toString(16).toUpperCase().padStart(8, "0");
-        const suffix = idInfo.identifier.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase().padStart(4, "A");
-        const androidId = `PRX-ANDR-${hex.substring(0, 4)}-${suffix}`;
+        const androidId = formatAndroidHardwareId(idInfo.identifier);
         if (existing && existing.startsWith("PRX-") && existing !== androidId) {
           localStorage.setItem(INITIAL_STORAGE_KEY, existing);
         }
@@ -274,17 +354,25 @@ export async function initializeHardwareMachineId(
 ): Promise<void> {
   if (typeof window === "undefined") return;
 
+  const applyResolvedId = (resolvedId: string) => {
+    const stored = localStorage.getItem(PRIMARY_STORAGE_KEY);
+    if (stored && stored.startsWith("PRX-") && stored !== resolvedId) {
+      try {
+        localStorage.setItem(INITIAL_STORAGE_KEY, stored);
+      } catch {}
+    }
+    try {
+      localStorage.setItem(PRIMARY_STORAGE_KEY, resolvedId);
+      localStorage.setItem(LEGACY_MOBILE_KEY, resolvedId);
+      writeCookieMachineId(resolvedId);
+    } catch {}
+    onUpdate(resolvedId);
+  };
+
   // 0. Check synchronous native hardware ID first
   const syncNativeId = getSynchronousNativeHardwareId();
   if (syncNativeId) {
-    const stored = localStorage.getItem(PRIMARY_STORAGE_KEY);
-    if (stored && stored.startsWith("PRX-") && stored !== syncNativeId) {
-      localStorage.setItem(INITIAL_STORAGE_KEY, stored);
-    }
-    localStorage.setItem(PRIMARY_STORAGE_KEY, syncNativeId);
-    localStorage.setItem(LEGACY_MOBILE_KEY, syncNativeId);
-    writeCookieMachineId(syncNativeId);
-    onUpdate(syncNativeId);
+    applyResolvedId(syncNativeId);
     return;
   }
 
@@ -295,14 +383,7 @@ export async function initializeHardwareMachineId(
     try {
       const hwId: string = await w.penrxDesktop.getHardwareMachineId();
       if (hwId && hwId.startsWith("PRX-")) {
-        const stored = localStorage.getItem(PRIMARY_STORAGE_KEY);
-        if (stored && stored.startsWith("PRX-") && stored !== hwId) {
-          localStorage.setItem(INITIAL_STORAGE_KEY, stored);
-        }
-        localStorage.setItem(PRIMARY_STORAGE_KEY, hwId);
-        localStorage.setItem(LEGACY_MOBILE_KEY, hwId);
-        writeCookieMachineId(hwId);
-        onUpdate(hwId);
+        applyResolvedId(hwId);
         return;
       }
     } catch (err) {
@@ -317,24 +398,8 @@ export async function initializeHardwareMachineId(
       const { Device } = await import("@capacitor/device");
       const idInfo = await Device.getId();
       if (idInfo && idInfo.identifier) {
-        let hash = 2166136261;
-        const str = `ANDROID-HW-${idInfo.identifier}`;
-        for (let i = 0; i < str.length; i++) {
-          hash ^= str.charCodeAt(i);
-          hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-          hash = hash | 0;
-        }
-        const hex = Math.abs(hash | 0).toString(16).toUpperCase().padStart(8, "0");
-        const suffix = idInfo.identifier.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase().padStart(4, "A");
-        const androidId = `PRX-ANDR-${hex.substring(0, 4)}-${suffix}`;
-        const stored = localStorage.getItem(PRIMARY_STORAGE_KEY);
-        if (stored && stored.startsWith("PRX-") && stored !== androidId) {
-          localStorage.setItem(INITIAL_STORAGE_KEY, stored);
-        }
-        localStorage.setItem(PRIMARY_STORAGE_KEY, androidId);
-        localStorage.setItem(LEGACY_MOBILE_KEY, androidId);
-        writeCookieMachineId(androidId);
-        onUpdate(androidId);
+        const androidId = formatAndroidHardwareId(idInfo.identifier);
+        applyResolvedId(androidId);
         return;
       }
     }
@@ -406,14 +471,68 @@ export function isNativeAndroidApk(): boolean {
   return false;
 }
 
+/**
+ * Checks whether the current app session has already been unlocked via biometrics.
+ * Survives WebView page refreshes (sessionStorage + MainActivity session state),
+ * and resets automatically when the app is closed and reopened.
+ */
+export function isBiometricUnlockedForSession(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const w = window as any;
+    if (w.PenRxNative && typeof w.PenRxNative.isSessionUnlocked === "function") {
+      if (w.PenRxNative.isSessionUnlocked()) {
+        return true;
+      }
+    }
+    return sessionStorage.getItem(BIOMETRIC_UNLOCKED_SESSION_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function markBiometricUnlockedForSession(): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(BIOMETRIC_UNLOCKED_SESSION_KEY, "true");
+    const w = window as any;
+    if (w.PenRxNative && typeof w.PenRxNative.setSessionUnlocked === "function") {
+      w.PenRxNative.setSessionUnlocked(true);
+    }
+  } catch {}
+}
+
 export function isBiometricLockEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  return localStorage.getItem("penrx_biometric_enabled") === "true";
+  try {
+    const stored = localStorage.getItem("penrx_biometric_enabled");
+    if (stored === "true") return true;
+    if (stored === "false") return false;
+    const w = window as any;
+    if (w.PenRxNative && typeof w.PenRxNative.isBiometricEnabled === "function") {
+      const nativeEnabled = Boolean(w.PenRxNative.isBiometricEnabled());
+      if (nativeEnabled) {
+        localStorage.setItem("penrx_biometric_enabled", "true");
+        return true;
+      }
+    }
+  } catch {}
+  return false;
 }
 
 export function setBiometricLockEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem("penrx_biometric_enabled", enabled ? "true" : "false");
+  try {
+    localStorage.setItem("penrx_biometric_enabled", enabled ? "true" : "false");
+    const w = window as any;
+    if (w.PenRxNative && typeof w.PenRxNative.setBiometricEnabled === "function") {
+      w.PenRxNative.setBiometricEnabled(enabled);
+    }
+    if (enabled) {
+      // Mark current session as unlocked so enabling in Settings doesn't immediately lock the current screen
+      markBiometricUnlockedForSession();
+    }
+  } catch {}
 }
 
 export interface BiometricAuthResult {
@@ -434,9 +553,19 @@ export async function isBiometricAvailable(): Promise<boolean> {
     return false;
   }
 
-  if (_cachedBiometricAvailable !== null) {
-    return _cachedBiometricAvailable;
+  if (_cachedBiometricAvailable === true) {
+    return true;
   }
+
+  // Native Android bridge synchronous hardware check
+  try {
+    if (w.PenRxNative && typeof w.PenRxNative.hasBiometricHardware === "function") {
+      if (w.PenRxNative.hasBiometricHardware()) {
+        _cachedBiometricAvailable = true;
+        return true;
+      }
+    }
+  } catch {}
 
   if (_biometricCheckInFlight) {
     return _biometricCheckInFlight;
@@ -450,31 +579,40 @@ export async function isBiometricAvailable(): Promise<boolean> {
           const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
           const checkPromise = BiometricAuth.checkBiometry().catch(() => null);
           const timeoutPromise = new Promise<any>((resolve) =>
-            setTimeout(() => resolve(null), 500)
+            setTimeout(() => resolve(null), 2500)
           );
           const check = await Promise.race([checkPromise, timeoutPromise]);
-          const result = Boolean(check && check.isAvailable);
-          _cachedBiometricAvailable = result;
-          return result;
+          const result = Boolean(
+            check &&
+              (check.isAvailable ||
+                check.strongBiometryIsAvailable ||
+                check.weakBiometryIsAvailable ||
+                check.deviceIsSecure ||
+                (Array.isArray(check.biometryTypes) && check.biometryTypes.length > 0))
+          );
+          if (result) {
+            _cachedBiometricAvailable = true;
+            return true;
+          }
+          // On native Android APK, allow biometric prompt attempt even if checkBiometry reports weak/custom OEM sensor
+          return true;
         }
       } catch (err) {
-        console.warn("[Biometrics] Native checkBiometry error:", err);
+        console.warn("[Biometrics] Native checkBiometry notice:", err);
       }
 
       if (!isMobileDevice() || !window.PublicKeyCredential) {
-        _cachedBiometricAvailable = false;
-        return false;
+        return isNativeAndroidApk();
       }
 
       try {
         const webauthnPromise = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false);
-        const webauthnTimeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500));
+        const webauthnTimeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000));
         const result = await Promise.race([webauthnPromise, webauthnTimeout]);
-        _cachedBiometricAvailable = Boolean(result);
-        return Boolean(result);
+        if (result) _cachedBiometricAvailable = true;
+        return Boolean(result) || isNativeAndroidApk();
       } catch {
-        _cachedBiometricAvailable = false;
-        return false;
+        return isNativeAndroidApk();
       }
     } finally {
       _biometricCheckInFlight = null;
@@ -492,9 +630,6 @@ export async function registerBiometricCredential(
   }
 
   try {
-    const isAvail = await isBiometricAvailable();
-    if (!isAvail) return false;
-
     const challenge = new Uint8Array(32);
     window.crypto.getRandomValues(challenge);
 
@@ -502,7 +637,7 @@ export async function registerBiometricCredential(
     window.crypto.getRandomValues(userId);
 
     const rpConfig: PublicKeyCredentialRpEntity = {
-      name: "PenRX+ Mobile",
+      name: "PenRX+",
     };
     if (
       window.location.hostname &&
@@ -537,7 +672,7 @@ export async function registerBiometricCredential(
 
     if (credential && credential.id) {
       localStorage.setItem("penrx_biometric_credential_id", credential.id);
-      localStorage.setItem("penrx_biometric_enabled", "true");
+      setBiometricLockEnabled(true);
       return true;
     }
     return false;
@@ -548,7 +683,7 @@ export async function registerBiometricCredential(
 }
 
 export async function authenticateWithBiometrics(
-  reason = "المس مستشعر البصمة لفتح منظومة PenRX+"
+  reason = "المس البصمة للدخول"
 ): Promise<BiometricAuthResult> {
   if (typeof window === "undefined") {
     return { success: false, error: "البيئة الحالية غير مدعومة" };
@@ -559,82 +694,99 @@ export async function authenticateWithBiometrics(
     return { success: false, error: "البصمة غير مدعومة على أجهزة الكمبيوتر" };
   }
 
+  // 1. Native Android Capacitor BiometricPrompt (supports both Class 2 WEAK and Class 3 STRONG sensors + Device Credential across all Android OEMs)
   try {
     const { Capacitor } = await import("@capacitor/core");
     if (Capacitor && typeof Capacitor.isNativePlatform === "function" && Capacitor.isNativePlatform()) {
       const { BiometricAuth, AndroidBiometryStrength } = await import("@aparajita/capacitor-biometric-auth");
 
-      const check = await BiometricAuth.checkBiometry().catch(() => null);
-      if (!check || !check.isAvailable) {
-        return {
-          success: false,
-          error: check?.reason || "البصمة غير متوفرة أو لم يتم تعيين بصمة في إعدادات الهاتف",
-        };
-      }
-
-      const biometryStrength = AndroidBiometryStrength?.strong ?? 1;
+      const weakStrength = AndroidBiometryStrength?.weak ?? 0;
+      const strongStrength = AndroidBiometryStrength?.strong ?? 1;
 
       const authAction = async (): Promise<BiometricAuthResult> => {
         try {
+          // Tier 1: Weak + Strong Biometry with Device Credential fallback (widest compatibility across Samsung, Xiaomi, Oppo, Vivo, Realme, Huawei, Infinix)
           await BiometricAuth.authenticate({
             reason,
             cancelTitle: "إلغاء",
             allowDeviceCredential: true,
-            androidTitle: "التحقق من الهوية - PenRX+",
-            androidSubtitle: "استخدم بصمة الإصبع أو رمز حماية الهاتف للدخول",
-            androidBiometryStrength: biometryStrength,
+            androidTitle: "PenRX+",
+            androidSubtitle: "المس مستشعر البصمة للدخول",
+            androidConfirmationRequired: false,
+            androidBiometryStrength: weakStrength,
           });
           return { success: true };
         } catch (firstErr: any) {
-          const code = firstErr?.code || "";
+          const code = String(firstErr?.code || "");
           if (code === "userCancel" || code === "appCancel" || code === "biometryLockout") {
             throw firstErr;
           }
 
-          await BiometricAuth.authenticate({
-            reason,
-            cancelTitle: "إلغاء",
-            allowDeviceCredential: false,
-            androidTitle: "التحقق من الهوية - PenRX+",
-            androidSubtitle: "المس مستشعر البصمة للفتح",
-            androidBiometryStrength: biometryStrength,
-          });
-          return { success: true };
+          try {
+            // Tier 2: Weak + Strong Biometry without Device Credential (for Android 9/10 ROMs that disallow negative button + device credential together)
+            await BiometricAuth.authenticate({
+              reason,
+              cancelTitle: "إلغاء",
+              allowDeviceCredential: false,
+              androidTitle: "PenRX+",
+              androidSubtitle: "المس مستشعر البصمة للدخول",
+              androidConfirmationRequired: false,
+              androidBiometryStrength: weakStrength,
+            });
+            return { success: true };
+          } catch (secondErr: any) {
+            const code2 = String(secondErr?.code || "");
+            if (code2 === "userCancel" || code2 === "appCancel" || code2 === "biometryLockout") {
+              throw secondErr;
+            }
+
+            // Tier 3: Strong Biometry only
+            await BiometricAuth.authenticate({
+              reason,
+              cancelTitle: "إلغاء",
+              allowDeviceCredential: false,
+              androidTitle: "PenRX+",
+              androidSubtitle: "المس مستشعر البصمة للدخول",
+              androidConfirmationRequired: false,
+              androidBiometryStrength: strongStrength,
+            });
+            return { success: true };
+          }
         }
       };
 
       const timeoutPromise = new Promise<BiometricAuthResult>((_, reject) => {
         setTimeout(() => {
-          reject(new Error("انتهت مهلة انتظار مستشعر البصمة"));
-        }, 20000);
+          reject(new Error("انتهت مهلة قراءة البصمة"));
+        }, 30000);
       });
 
       return await Promise.race([authAction(), timeoutPromise]);
     }
   } catch (err: any) {
-    const code = err?.code || "";
-    let message = "فشل التحقق من البصمة";
+    const code = String(err?.code || "");
     if (code === "userCancel" || code === "appCancel") {
-      message = "تم إلغاء عملية البصمة";
-    } else if (code === "biometryLockout") {
-      message = "تم قفل البصمة مؤقتاً لتكرار المحاولات الخاطئة. يرجى استخدام رمز العيادة.";
-    } else if (code === "biometryNotEnrolled") {
-      message = "لم يتم تسجيل بصمة في إعدادات الهاتف بعد.";
-    } else if (err?.message) {
-      message = err.message;
+      return { success: false, error: "تم إلغاء عملية البصمة" };
     }
-    return { success: false, error: message };
+    if (code === "biometryLockout") {
+      return { success: false, error: "تم إيقاف البصمة مؤقتاً. استخدم رمز العيادة." };
+    }
+    if (code === "biometryNotEnrolled") {
+      return { success: false, error: "لا توجد بصمة مسجلة في إعدادات الهاتف" };
+    }
+    // If not cancelled by user, fall through to WebAuthn platform authenticator if available
+    if (!window.PublicKeyCredential) {
+      return { success: false, error: err?.message || "تعذر التحقق من البصمة" };
+    }
   }
 
-  if (isMobileDevice() && window.PublicKeyCredential) {
+  // 2. WebAuthn Platform Authenticator (for PWA / Mobile Browsers & WebView fallback)
+  if ((isMobileDevice() || isNativeAndroidApk()) && window.PublicKeyCredential) {
     try {
-      const isAvail = await isBiometricAvailable();
-      if (!isAvail) return { success: false, error: "البصمة غير متوفرة" };
-
       const existingCredId = localStorage.getItem("penrx_biometric_credential_id");
       if (!existingCredId) {
         const enrolled = await registerBiometricCredential();
-        return { success: enrolled, error: enrolled ? undefined : "فشل تسجيل البصمة" };
+        return { success: enrolled, error: enrolled ? undefined : "تعذر تفعيل البصمة على هذا الجهاز" };
       }
 
       const challenge = new Uint8Array(32);
@@ -642,7 +794,7 @@ export async function authenticateWithBiometrics(
 
       const getPublicKey: PublicKeyCredentialRequestOptions = {
         challenge,
-        timeout: 60000,
+        timeout: 30000,
         userVerification: "required",
       };
 
@@ -662,8 +814,13 @@ export async function authenticateWithBiometrics(
         return { success: true };
       }
       return { success: false, error: "لم يتم التعرف على البصمة" };
-    } catch (err: any) {
-      return { success: false, error: err?.message || "فشل التحقق من البصمة" };
+    } catch {
+      // If stored credential became invalid after domain/system change, try re-enrolling once
+      try {
+        const reEnrolled = await registerBiometricCredential();
+        if (reEnrolled) return { success: true };
+      } catch {}
+      return { success: false, error: "لم يتم التحقق من البصمة" };
     }
   }
 

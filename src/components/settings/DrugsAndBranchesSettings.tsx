@@ -257,9 +257,7 @@ export function DrugsAndBranchesSettings() {
                     {branches.length} {branches.length === 1 ? "فرع مسجل" : "فروع مسجلة"}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  أضف فروع عيادتك وخصص عنوان وهاتف ومواعيد كل فرع على الروشتة المطبوعة.
-                </p>
+
               </div>
             </div>
 
@@ -442,9 +440,7 @@ export function DrugsAndBranchesSettings() {
               <h2 className="text-base font-black text-slate-100">
                 تخصيص حقول بيانات المريض في صفحة كتابة الروشتة
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                حدد الحقول التي ترغب في ظهورها أثناء تحرير الروشتة. انظر للمعاينة الحية لرؤية التأثير فوراً:
-              </p>
+
             </div>
           </div>
 
@@ -618,9 +614,7 @@ export function DrugsAndBranchesSettings() {
                 <h2 className="text-base font-black text-slate-100">
                   بنك الأدوية والتركيبات المخصصة للعيادة
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  أضف أي أدوية خاصة أو تركيبات مخصصة لعيادتك لتظهر فوراً في الإكمال التلقائي ومحرك البحث.
-                </p>
+
               </div>
             </div>
             <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-950 text-teal-400 border border-teal-500/30">

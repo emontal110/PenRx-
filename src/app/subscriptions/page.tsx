@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Crown, Sparkles, ShieldCheck, Phone, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
+import { Crown, Sparkles, ShieldCheck, Phone, Check } from "lucide-react";
 import {
   useSubscriptionStore,
   getSubscriptionDetails,
@@ -11,7 +11,7 @@ import { useClinicStore } from "@/store/useClinicStore";
 import { PlanCard, PlanItem } from "@/components/subscriptions/PlanCard";
 import { PaymentFlowModal, OFFICIAL_TRANSFER_NUMBER } from "@/components/subscriptions/PaymentFlowModal";
 import { SubscriptionHero } from "@/components/subscriptions/SubscriptionHero";
-import { Button, Card, Badge } from "@/components/ui";
+import { Card, Badge } from "@/components/ui";
 import { showGlobalToast } from "@/components/common/GlobalToast";
 
 const PLANS_CONFIG: PlanItem[] = [
@@ -19,34 +19,18 @@ const PLANS_CONFIG: PlanItem[] = [
     id: "trial",
     nameAr: "الاشتراك المجاني (تجريبي)",
     durationDays: 30,
-    durationLabel: "شهر كامل (30 يوماً مجاناً)",
+    durationLabel: "صلاحية 30 يوماً مجاناً بكامل المزايا",
     price: 0,
-    badge: "هدية الانضمام • مجاناً بالكامل 🎁",
+    badge: "هدية الانضمام 🎁",
     isTrial: true,
-    features: [
-      "تجربة مجانية بالكامل لمدة شهر (30 يوماً)",
-      "مساعد الذكاء الاصطناعي لفحص وتنبيه تعارض وتداخل الأدوية لحظياً",
-      "وصول كامل لبنك الأدوية الشامل (أكثر من 43,000 دواء ومستحضر)",
-      "التعبئة التلقائية الذكية للجرعات والمواعيد والمدة",
-      "طباعة الروشتات بجودة عالية وتصدير PDF ومشاركة واتساب مباشرة",
-      "تخصيص لوجو العيادة وبيانات الطبيب بالكامل",
-    ],
   },
   {
     id: "monthly",
     nameAr: "الاشتراك الشهري",
     durationDays: 30,
-    durationLabel: "تجديد شهري مرن (30 يوماً)",
+    durationLabel: "صلاحية شهر كامل (30 يوماً)",
     price: 150,
     badge: "تجديد مرن",
-    features: [
-      "تجديد شهري مرن بقيمة 150 جنيه شهرياً",
-      "مساعد الذكاء الاصطناعي لكشف تعارض وتداخل الأدوية والجرعات",
-      "وصول غير محدود لبنك الأدوية المحدث مع التعبئة الذكية للجرعات",
-      "تحديث صامت وتلقائي لقاعدة الأدوية والأسعار بشكل دوري",
-      "طباعة روشتات ومشاركة واتساب مباشرة غير محدودة للمرضى",
-      "تحديثات سحابية مستمرة ودعم فني سريع",
-    ],
   },
   {
     id: "quarterly",
@@ -55,15 +39,8 @@ const PLANS_CONFIG: PlanItem[] = [
     durationLabel: "صلاحية 3 أشهر (90 يوماً)",
     price: 400,
     originalPrice: 450,
-    discountText: "توفير 50 ج.م",
-    badge: "وفر 50 ج.م ⚡",
-    features: [
-      "اشتراك 3 شهور بقيمة 400 جنيه بدلاً من 450",
-      "توفير فوري 50 جنيه مباشر",
-      "فحص وإرشاد فوري لتعارض وتداخل الأدوية بالذكاء الاصطناعي الطبي",
-      "تحديثات بنك الأدوية والذكاء الاصطناعي السحابية اللحظية",
-      "دعم فني وتفعيل سريع وإمكانية ربط أجهزة إضافية لعيادتك",
-    ],
+    discountText: "وفر 50 ج.م",
+    badge: "توفير مميز ⚡",
   },
   {
     id: "semi_annual",
@@ -72,34 +49,29 @@ const PLANS_CONFIG: PlanItem[] = [
     durationLabel: "صلاحية 6 أشهر (180 يوماً)",
     price: 800,
     originalPrice: 900,
-    discountText: "توفير 100 ج.م",
-    badge: "وفر 100 ج.م 🔥",
-    features: [
-      "اشتراك 6 شهور بقيمة 800 جنيه بدلاً من 900",
-      "توفير فوري 100 جنيه مباشر",
-      "الذكاء الاصطناعي الطبي المتقدم: فحص التعارضات الدوائية وموانع الاستعمال",
-      "جميع مميزات النظام بدون أي قيود أو حدود للاستخدام",
-      "أولوية قصوى في بنك الأدوية وربط أجهزة متعددة لجميع الفروع",
-    ],
+    discountText: "وفر 100 ج.م",
+    badge: "قيمة عالية 🔥",
   },
   {
     id: "annual_vip",
     nameAr: "الاشتراك السنوي (VIP)",
     durationDays: 365,
-    durationLabel: "اشتراك سنوي شامل (12 شهراً)",
+    durationLabel: "صلاحية سنة كاملة (12 شهراً)",
     price: 1500,
     originalPrice: 1800,
-    discountText: "توفير 300 ج.م 🔥 | شهران مجاناً",
-    badge: "الأكثر طلباً وتوفيراً ⭐",
+    discountText: "وفر 300 ج.م • شهران مجاناً",
+    badge: "الأكثر طلباً ⭐",
     popular: true,
-    features: [
-      "اشتراك سنوي شامل بقيمة 1,500 جنيه بدلاً من 1,800 (شهران مجاناً)",
-      "مساعد الذكاء الاصطناعي الشامل: فحص التعارض ومطابقة الجرعات والبدائل",
-      "دعم مخصص VIP واستجابة فورية عبر الواتساب على مدار الساعة",
-      "تحديثات حصرية مجانية طوال السنة لكافة الميزات الجديدة",
-      "ربط أجهزة متعددة (العيادة + لابتوب شخصي + هاتف) مع ترخيص رسمي",
-    ],
   },
+];
+
+const UNIFIED_SYSTEM_FEATURES: string[] = [
+  "مساعد الذكاء الاصطناعي الطبي لفحص التعارضات والتداخلات الدوائية لحظياً",
+  "وصول كامل لبنك الأدوية المصري والعالمي المحدث (أكثر من 43,700 دواء ومستحضر)",
+  "تعبئة ذكية تلقائية للجرعات والمواعيد ومدة العلاج مع حفظ سجل المرضى",
+  "طباعة الروشتات بجودة عالية (A4 / A5) وتصدير PDF وإرسال مباشر عبر واتساب",
+  "تخصيص كامل لهوية ولوجو العيادة وبيانات الطبيب والفروع المتعددة",
+  "نسخ احتياطي سحابي مشفر وتحديثات تلقائية مستمرة ودعم فني سريع",
 ];
 
 export default function SubscriptionsPage() {
@@ -118,14 +90,14 @@ export default function SubscriptionsPage() {
 
   useEffect(() => {
     setMounted(true);
-    initHardwareId();
-    syncWithServer();
+    initHardwareId().then(() => {
+      syncWithServer();
+    });
   }, [initHardwareId, syncWithServer]);
 
   const subDetails = getSubscriptionDetails(subscriptions, machineId, subscriberId);
   const userHasUsedTrial = hasUsedFreeTrial(subscriptions, machineId);
 
-  // Filter plans: hide trial if already used
   const availablePlans = PLANS_CONFIG.filter((p) => {
     if (p.isTrial && userHasUsedTrial) return false;
     return true;
@@ -138,7 +110,6 @@ export default function SubscriptionsPage() {
   const handleSubscriptionSubmit = async (formData: any) => {
     await submitSubscriptionRequest(formData);
 
-    // Sync clinic store
     useClinicStore.getState().updateClinic({
       doctorName: formData.doctorName,
       nameAr: formData.clinicName,
@@ -147,51 +118,44 @@ export default function SubscriptionsPage() {
 
     showGlobalToast(
       formData.isTrial
-        ? "🎉 تم تسجيل طلب تفعيل الفترة التجريبية بنجاح!"
+        ? "🎉 تم إرسال طلب تفعيل التجربة المجانية بنجاح!"
         : "⚡ تم إرسال طلب الاشتراك بنجاح! جاري المراجعة والتفعيل.",
       "success"
     );
   };
 
   return (
-    <div className="space-y-8 pb-16 font-sans" dir="rtl">
-      {/* Header Banner */}
-      <div className="text-center max-w-2xl mx-auto space-y-2 pt-2">
-        <Badge variant="brand" className="text-xs px-3 py-1">
-          باقات واشتراكات PenRX+ الطبية المعتمدة
+    <div className="max-w-2xl mx-auto space-y-6 pb-16 font-sans" dir="rtl">
+      {/* Clean Concise Header */}
+      <div className="text-center space-y-1.5 pt-1">
+        <Badge variant="brand" className="text-[11px] px-3 py-0.5">
+          باقات واشتراكات PenRX+ المعتمدة
         </Badge>
-        <h1 className="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight">
           اختر الباقة المناسبة لعيادتك
         </h1>
-        <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-          نظام متكامل لكتابة الروشتات، إدارة المرضى، وبنك الأدوية بالذكاء الاصطناعي — متوافق مع الكمبيوتر والموبايل
-        </p>
       </div>
 
-      {/* Hero: Current License Status */}
+      {/* Hero: Current License Status (Check Activation Only) */}
       {mounted && (
         <SubscriptionHero
           subDetails={subDetails}
           machineId={machineId}
           onRefresh={() => syncWithServer(true)}
-          onOpenRenew={() => {
-            const annual = PLANS_CONFIG.find((p) => p.id === "annual_vip") || PLANS_CONFIG[1];
-            setSelectedPlanForModal(annual);
-          }}
         />
       )}
 
-      {/* Plans Grid */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-slate-200 flex items-center gap-2">
-            <Crown className="w-5 h-5 text-amber-400" />
-            <span>الباقات المتاحة للاشتراك والتجديد</span>
+      {/* Stacked Plan Cards */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-sm sm:text-base font-black text-slate-200 flex items-center gap-2">
+            <Crown className="w-4 h-4 text-amber-400" />
+            <span>الباقات المتاحة</span>
           </h2>
-          <span className="text-xs text-slate-400">أسعار رسمية ثابتة بالجنيه المصري</span>
+          <span className="text-[11px] text-slate-400">جميع الباقات تشمل كامل المزايا</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="flex flex-col gap-3">
           {availablePlans.map((plan) => (
             <PlanCard
               key={plan.id}
@@ -203,41 +167,58 @@ export default function SubscriptionsPage() {
         </div>
       </div>
 
-      {/* Security & Support Footer Banner */}
-      <Card className="p-6 bg-slate-900/60 border-slate-800">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center md:text-right">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-5 h-5" />
+      {/* Unified System Features Card (Grouped Below All Plan Cards) */}
+      <Card className="p-5 bg-slate-900/80 border-slate-800/90 rounded-2xl space-y-3.5">
+        <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2.5">
+          <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+          <h3 className="text-sm font-black text-slate-100">
+            مزايا منظومة PenRX+ المتاحة في جميع الباقات
+          </h3>
+        </div>
+
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-slate-300">
+          {UNIFIED_SYSTEM_FEATURES.map((feature, idx) => (
+            <li key={idx} className="flex items-start gap-2 leading-relaxed">
+              <div className="w-4 h-4 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                <Check className="w-2.5 h-2.5 text-emerald-400" />
+              </div>
+              <span>{feature}</span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      {/* Compact Security & Support Footer */}
+      <Card className="p-4 bg-slate-900/50 border-slate-800/80 rounded-2xl">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-200">تشفير وأمان تام</h3>
-              <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
-                بيانات المرضى والروشتات مشفرة بالكامل ومحمية وفق أعلى معايير الخصوصية الطبية
-              </p>
+              <h4 className="font-bold text-slate-200 text-xs">تشفير وأمان تام</h4>
+              <p className="text-[10px] text-slate-400">حماية كاملة لبيانات العيادة</p>
             </div>
           </div>
 
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shrink-0">
-              <Sparkles className="w-5 h-5" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-200">تحديثات دورية مجانية</h3>
-              <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
-                تحديث صامت وتلقائي لقائمة الأدوية والأسعار والميزات الجديدة دون أي رسوم خفية
-              </p>
+              <h4 className="font-bold text-slate-200 text-xs">تحديثات مجانية</h4>
+              <p className="text-[10px] text-slate-400">تحديث تلقائي للأدوية والأسعار</p>
             </div>
           </div>
 
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center shrink-0">
-              <Phone className="w-5 h-5" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center shrink-0">
+              <Phone className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-200">دعم فني مباشر على الواتساب</h3>
-              <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
-                فريق دعم فني متواجد لمساعدتك في أي استفسار أو تفعيل على الرقم {OFFICIAL_TRANSFER_NUMBER}
+              <h4 className="font-bold text-slate-200 text-xs">دعم فني واتساب</h4>
+              <p dir="ltr" className="text-[10px] text-emerald-400 font-mono font-bold text-right">
+                {OFFICIAL_TRANSFER_NUMBER}
               </p>
             </div>
           </div>

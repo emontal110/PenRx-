@@ -73,13 +73,8 @@ interface SubscriptionStoreState {
   revokeLocallyAndClear: (reason?: string) => void;
 }
 
-/**
- * The browser never talks to the database. License state comes only from the
- * PenRX+ API, and the device token minted by /api/system/verify unlocks the
- * medical-data endpoints.
- */
-
 let _hasTriggeredCloudDataRecovery = false;
+let _hwIdListenerAttached = false;
 
 /** CSRF marker the API requires on every admin mutation (see src/lib/adminAuth.ts). */
 const ADMIN_CSRF_HEADER = "x-penrx-admin";
@@ -120,7 +115,6 @@ async function adminAction(
 /**
  * Automatically recovers the doctor's Clinic Profile, Patients, and Prescriptions
  * whenever an existing SubscriptionRecord is verified on a fresh install / reinstall!
- * Prevents forcing the doctor to re-enter their clinic credentials after reinstalling the app.
  */
 function autoRestoreClinicAndPatientData(sub: SubscriptionRecord) {
   if (typeof window === "undefined" || !sub) return;
@@ -161,7 +155,6 @@ function autoRestoreClinicAndPatientData(sub: SubscriptionRecord) {
       });
     }
 
-    // Trigger one-time automatic cloud prescription & patient recovery if local records are empty
     if (!_hasTriggeredCloudDataRecovery && (sub.status === "ACTIVE" || sub.isTrial)) {
       _hasTriggeredCloudDataRecovery = true;
       setTimeout(async () => {
@@ -169,7 +162,6 @@ function autoRestoreClinicAndPatientData(sub: SubscriptionRecord) {
           const { usePrescriptionStore } = await import("@/store/usePrescriptionStore");
           await usePrescriptionStore.getState().syncWithCloud();
 
-          // If full clinic settings or additional archived records exist in CloudBackup, merge them silently
           const { restoreFromCloudBackup } = await import("@/lib/backupService");
           await restoreFromCloudBackup("MERGE").catch(() => {});
         } catch {}
@@ -357,7 +349,7 @@ function generateLocalSubscriberId(): string {
 
 let _lastSyncTime = 0;
 let _syncInFlight: Promise<void> | null = null;
-const SYNC_THROTTLE_MS = 4000;
+const SYNC_THROTTLE_MS = 3500;
 
 function safeTimeoutSignal(ms: number): AbortSignal | undefined {
   try {
@@ -381,7 +373,6 @@ function pickBestCandidate(candidates: (SubscriptionRecord | null | undefined)[]
   const anyActive = valid.find((s) => s.status === "ACTIVE");
   if (anyActive) return anyActive;
 
-  // بلا ACTIVE: آخر قرار إداري هو الذي يُعرض، حتى لا يُخفي إيقاف حديث طلباً معلّقاً قديماً
   return [...valid].sort(
     (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
   )[0];
@@ -436,6 +427,17 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
       },
 
       initHardwareId: async () => {
+        if (typeof window !== "undefined" && !_hwIdListenerAttached) {
+          _hwIdListenerAttached = true;
+          window.addEventListener("penrx-hw-id-ready", ((ev: CustomEvent<string>) => {
+            const detailId = ev?.detail ? String(ev.detail).trim().toUpperCase() : "";
+            if (detailId && detailId.startsWith("PRX-") && detailId !== get().machineId) {
+              set({ machineId: detailId });
+              get().syncWithServer(true).catch(() => {});
+            }
+          }) as EventListener);
+        }
+
         await initializeHardwareMachineId((newId) => {
           const allKnownMids = getKnownDeviceMachineIds(newId);
           const currentState = get();
@@ -466,22 +468,8 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
             };
           });
 
-          const activeOrPendingSub =
-            get().currentSubscription ||
-            (get().subscriptions || []).find((s) => s.status === "ACTIVE" || s.status === "PENDING");
-
-          if (activeOrPendingSub && activeOrPendingSub.id && prevMid && prevMid !== newId) {
-            // The server owns the device list: the new hardware id is verified and
-            // linked there, never written from the client.
-            get()
-              .syncWithServer(true)
-              .catch(() => {});
-          }
-
           if (prevMid !== newId) {
-            setTimeout(() => {
-              get().syncWithServer(true);
-            }, 100);
+            get().syncWithServer(true).catch(() => {});
           }
         });
       },
@@ -521,7 +509,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           updatedAt: nowIso,
         };
 
-        // Pre-populate clinic profile immediately when doctor submits subscription form so they never have to type it twice!
         if (req.doctorName?.trim() && req.clinicName?.trim() && req.senderPhone?.trim()) {
           autoRestoreClinicAndPatientData(newRecord);
         }
@@ -541,10 +528,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           } catch {}
         }
 
-        // The request is persisted by the API only. If it fails, the pending record
-        // is rolled back so the doctor is never told a payment was received when it
-        // was not — an undelivered request is the one failure mode a paid product
-        // cannot afford to hide.
         try {
           const data = await apiRequest("/api/subscriptions", {
             method: "POST",
@@ -674,7 +657,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
                 ...state.subscriptions.filter((s) => s.id !== data.subscription.id),
               ],
             }));
-            // Automatically restore doctor's clinic profile & cloud prescriptions/patients upon linking!
             _hasTriggeredCloudDataRecovery = false;
             autoRestoreClinicAndPatientData(data.subscription);
             return { success: true };
@@ -685,11 +667,6 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         }
       },
 
-      /**
-       * Admin-only operations. They never mutate the local license optimistically:
-       * a doctor-side code path must not be able to flip PENDING to ACTIVE, so the
-       * state is re-read from the server after the admin session performs the change.
-       */
       activateSubscription: async (id, customDays) => {
         await adminAction(id, { action: "ACTIVATE", durationDays: customDays });
         await get().syncWithServer(true);
@@ -733,9 +710,20 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
         _lastSyncTime = now;
 
         const runSync = async () => {
-          const machineId = get().machineId || getOrCreateMachineId();
+          // Ensure hardware ID is resolved before querying the server on fresh install/reinstall
+          try {
+            await Promise.race([
+              get().initHardwareId(),
+              new Promise((resolve) => setTimeout(resolve, 600)),
+            ]);
+          } catch {}
+
+          const machineId = (get().machineId || getOrCreateMachineId()).trim().toUpperCase();
           const allKnownMids = getKnownDeviceMachineIds(machineId);
-          const altMachineId = allKnownMids.find((m) => m !== machineId.trim().toUpperCase()) || "";
+          const altMachineIdsStr = allKnownMids
+            .filter((m) => m !== machineId)
+            .slice(0, 5)
+            .join(",");
 
           const localSubs = get().subscriptions || [];
           const currentLocalSub =
@@ -774,7 +762,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
           const buildApiQuery = () => {
             const params = new URLSearchParams();
             params.set("machineId", machineId);
-            if (altMachineId) params.set("altMachineId", altMachineId);
+            if (altMachineIdsStr) params.set("altMachineId", altMachineIdsStr);
             if (effectiveSubId) params.set("subscriberId", effectiveSubId);
             if (effectiveOrderId) params.set("id", effectiveOrderId);
             params.set("_t", String(Date.now()));
@@ -912,13 +900,10 @@ export const useSubscriptionStore = create<SubscriptionStoreState>()(
               };
             });
 
-            // Automatically restore Clinic Profile, Patients, and Prescriptions if app was reinstalled!
             autoRestoreClinicAndPatientData(fresh);
             return;
           }
 
-          // Authoritative deletion / revocation sync:
-          // If at least one channel verified zero subscriptions, OR any responding channel confirms no active sub:
           const serverConfirmedNoSub = serverResponded && serverReportedNoSub;
 
           if (serverConfirmedNoSub || (serverResponded && !hasPendingSub)) {

@@ -7,13 +7,29 @@ android {
         applicationId "com.penrxplus.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10
-        versionName "1.77"
+        versionCode 11
+        versionName "1.78"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        }
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    splits {
+        abi {
+            enable false
+        }
+    }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+        resources {
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'META-INF/DEPENDENCIES']
         }
     }
     signingConfigs {
@@ -30,6 +46,7 @@ android {
                 v1SigningEnabled true
                 v2SigningEnabled true
                 enableV3Signing = true
+                enableV4Signing = false
             }
         }
     }
@@ -41,7 +58,13 @@ android {
                 signingConfig signingConfigs.debug
             }
             minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            if (file("penrx-release.keystore").exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

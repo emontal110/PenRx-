@@ -2,6 +2,9 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
+    <cache-path name="shared_rx" path="shared_rx/" />
     <external-cache-path name="my_ext_cache" path="." />
+    <external-cache-path name="ext_shared_rx" path="shared_rx/" />
     <files-path name="my_files" path="." />
+    <files-path name="files_shared_rx" path="shared_rx/" />
 </paths>

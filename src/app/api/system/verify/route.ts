@@ -2,6 +2,7 @@ import {
   apiError,
   apiJson,
   cleanMachineId,
+  cleanMachineIds,
   cleanOrderId,
   cleanSubscriberId,
   preflight,
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const machineId = cleanMachineId(searchParams.get("machineId"));
-  const altMachineId = cleanMachineId(searchParams.get("altMachineId"));
+  const altMachineIds = cleanMachineIds(searchParams.get("altMachineId"));
   const subscriberId = cleanSubscriberId(searchParams.get("subscriberId"));
   const orderId = cleanOrderId(searchParams.get("id"));
 
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
 
   const sub = await resolveDeviceSubscription({
     machineId,
-    altMachineId: altMachineId || undefined,
+    altMachineId: altMachineIds.length > 0 ? altMachineIds : undefined,
     subscriberId: subscriberId || undefined,
     orderId: orderId || undefined,
   });

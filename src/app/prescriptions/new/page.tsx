@@ -123,7 +123,7 @@ export default function NewPrescriptionPage() {
     }
   }, []);
 
-  // ── Instant 0ms Local + Cloud AI Drug Interaction Analysis ─────────────────
+  // Local + Cloud Drug Interaction Analysis
   const [aiAlerts, setAiAlerts] = useState<InteractionAlert[]>([]);
   const [selectedAiAlert, setSelectedAiAlert] = useState<InteractionAlert | null>(null);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -134,7 +134,6 @@ export default function NewPrescriptionPage() {
       return;
     }
 
-    // 1. Run 0ms deterministic local clinical interaction checker immediately!
     const localAlerts = analyzePrescriptionInteractionsLocally(
       items,
       patient.allergyNotes || "",
@@ -142,7 +141,6 @@ export default function NewPrescriptionPage() {
     );
     setAiAlerts(localAlerts);
 
-    // 2. Also query server/AI endpoint to enrich with any additional deep interactions
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(getApiUrl("/api/ai/analyze-prescription"), {
@@ -177,9 +175,7 @@ export default function NewPrescriptionPage() {
             setAiAlerts(merged);
           }
         }
-      } catch {
-        // Local alerts are already displayed with 100% reliability
-      }
+      } catch {}
     }, 450);
 
     return () => clearTimeout(timer);
@@ -193,7 +189,7 @@ export default function NewPrescriptionPage() {
     );
     if (target) {
       removeItem(target.id);
-      showGlobalToast(`🗑️ تم حذف ${target.drugName} لتفادي التعارض الدوائي`, "info");
+      showGlobalToast(`تم حذف ${target.drugName}`, "info");
     }
     setIsAiModalOpen(false);
   };
@@ -222,7 +218,7 @@ export default function NewPrescriptionPage() {
     });
     setEditingItemId(null);
     setEditItemForm({});
-    showGlobalToast("✅ تم تحديث جرعة الدواء بنجاح", "success");
+    showGlobalToast("تم تحديث الجرعة", "success");
   };
 
   const patientNameInputRef = useRef<HTMLInputElement>(null);
@@ -254,10 +250,10 @@ export default function NewPrescriptionPage() {
 
   const hasPrescriptionData = Boolean(
     (patient.name && patient.name.trim().length > 0) ||
-    items.length > 0 ||
-    (diagnosis && diagnosis.trim().length > 0) ||
-    (notes && notes.trim().length > 0) ||
-    (patient.phone && patient.phone.trim().length > 0)
+      items.length > 0 ||
+      (diagnosis && diagnosis.trim().length > 0) ||
+      (notes && notes.trim().length > 0) ||
+      (patient.phone && patient.phone.trim().length > 0)
   );
 
   const handleNameChange = (val: string) => {
@@ -354,15 +350,9 @@ export default function NewPrescriptionPage() {
     setShowSuggestionsDropdown(false);
 
     if (p.allergyNotes) {
-      showGlobalToast(
-        `✅ تم استرجاع بيانات ${p.name}! ⚠️ تنبيه: حساسية مسجلة (${p.allergyNotes})`,
-        "info"
-      );
+      showGlobalToast(`تم تحميل بيانات ${p.name} • حساسية: ${p.allergyNotes}`, "info");
     } else {
-      showGlobalToast(
-        `✅ تم اختيار وتعبئة بيانات المريض (${p.name}) تلقائياً!`,
-        "success"
-      );
+      showGlobalToast(`تم تحميل بيانات ${p.name}`, "success");
     }
   };
 
@@ -381,9 +371,9 @@ export default function NewPrescriptionPage() {
     setPatientSuggestions([]);
     setShowSuggestionsDropdown(false);
 
-    showGlobalToast("✅ تم حفظ الروشتة في سجل العيادة بنجاح!", "success");
-    setToast("✅ تم حفظ الروشتة في سجل العيادة بنجاح!");
-    setTimeout(() => setToast(null), 3500);
+    showGlobalToast("تم حفظ الروشتة بنجاح", "success");
+    setToast("تم حفظ الروشتة بنجاح");
+    setTimeout(() => setToast(null), 3000);
   };
 
   const handlePrintOnly = () => {
@@ -398,7 +388,7 @@ export default function NewPrescriptionPage() {
       savePrescription(branchObj?.nameAr);
       setIsPrescriptionSaved(true);
     }
-    showGlobalToast("🖨️ تم حفظ الروشتة وجارٍ تجهيز الطباعة...");
+    showGlobalToast("جارٍ تجهيز الطباعة...");
     window.print();
   };
 
@@ -418,10 +408,10 @@ export default function NewPrescriptionPage() {
     } else if (hasPrescriptionData && isPrescriptionSaved) {
       resetCurrentPrescription();
       setIsPrescriptionSaved(false);
-      showGlobalToast("✨ تم تجهيز روشتة فارغة للمريض التالي!", "success");
+      showGlobalToast("تم تجهيز روشتة جديدة", "success");
     } else {
-      setToast("ℹ️ الروشتة فارغة بالفعل.");
-      setTimeout(() => setToast(null), 2500);
+      setToast("الروشتة فارغة بالفعل");
+      setTimeout(() => setToast(null), 2000);
     }
   };
 
@@ -434,14 +424,14 @@ export default function NewPrescriptionPage() {
     savePrescription(branchObj?.nameAr);
     resetCurrentPrescription();
     setIsPrescriptionSaved(false);
-    showGlobalToast("✅ تم حفظ الروشتة السابقة وتجهيز روشتة جديدة ✨", "success");
+    showGlobalToast("تم الحفظ وتجهيز روشتة جديدة", "success");
   };
 
   const handleConfirmDiscard = () => {
     resetCurrentPrescription();
     setIsPrescriptionSaved(false);
-    setToast("🗑️ تم تفريغ الروشتة الحالية وبدء روشتة جديدة");
-    setTimeout(() => setToast(null), 3000);
+    setToast("تم بدء روشتة جديدة");
+    setTimeout(() => setToast(null), 2500);
   };
 
   const hasExtraVitalsConfigured =
@@ -456,7 +446,7 @@ export default function NewPrescriptionPage() {
   return (
     <div className="space-y-4 sm:space-y-5 pb-28 sm:pb-16">
       {toast && (
-        <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500 text-emerald-200 text-xs font-black shadow-xl flex items-center justify-between">
+        <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500 text-emerald-200 text-xs font-black shadow-xl flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{toast}</span>
@@ -467,28 +457,23 @@ export default function NewPrescriptionPage() {
         </div>
       )}
 
-      {/* Top Commercial Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-l from-slate-900 via-slate-900/95 to-slate-950 border border-slate-800/90 px-4 sm:px-6 py-3.5 sm:py-4 rounded-2xl sm:rounded-3xl shadow-lg no-print print:!hidden">
+      {/* Compact Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/95 border border-slate-800 px-4 sm:px-5 py-3.5 rounded-2xl sm:rounded-3xl shadow-lg no-print print:!hidden">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
-            <Stethoscope className="w-5 h-5 text-emerald-400" />
+          <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <Stethoscope className="w-4 h-4 text-emerald-400" />
           </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-xl font-black text-slate-100 tracking-tight">
-                منصة تحرير وكتابة الروشتات الطبية الذكية
-              </h1>
-              <span
-                suppressHydrationWarning
-                className="font-mono text-[10px] sm:text-[11px] font-bold text-emerald-400 bg-slate-950 px-2.5 py-0.5 rounded-lg border border-slate-800"
-                dir="ltr"
-              >
-                {mounted ? prescriptionNo : "..."}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              محرك بحث دوائي مصري وعالمي (Drug Eye *) • فحص لحظي للتداخلات الدوائية • طباعة ومشاركة عبر واتساب
-            </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-base sm:text-lg font-black text-slate-100">
+              كتابة روشتة طبية
+            </h1>
+            <span
+              suppressHydrationWarning
+              className="font-mono text-[10px] font-bold text-emerald-400 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800"
+              dir="ltr"
+            >
+              {mounted ? prescriptionNo : "..."}
+            </span>
           </div>
         </div>
 
@@ -511,24 +496,23 @@ export default function NewPrescriptionPage() {
           ) : (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-emerald-300">
               <Building2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span>{branches?.[0]?.nameAr || clinic.nameAr || clinic.name || "العيادة الرئيسية"}</span>
+              <span>{branches?.[0]?.nameAr || clinic.nameAr || clinic.name || "العيادة"}</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Main Balanced 2-Column Commercial Workspace (Side-by-Side from lg 1024px upwards) */}
+      {/* Main 2-Column Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start print:!block print:!m-0 print:!p-0">
-        {/* Column 1 (Right in RTL): Doctor's Clinical Control Panel */}
+        {/* Column 1: Doctor's Control Panel */}
         <div className="lg:col-span-6 space-y-4 no-print print:!hidden">
-
-          {/* CARD 1: PATIENT DATA & CLINICAL DIAGNOSIS */}
+          {/* CARD 1: PATIENT DATA & DIAGNOSIS */}
           <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 gap-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
                 <User className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span className="text-xs sm:text-sm font-black text-slate-100">
-                  1. بيانات المريض والتشخيص السريري
+                  بيانات المريض والتشخيص
                 </span>
 
                 {bmiInfo && (
@@ -536,13 +520,13 @@ export default function NewPrescriptionPage() {
                     className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono"
                     dir="ltr"
                   >
-                    BMI {bmiInfo.bmiFormatted} ({bmiInfo.label})
+                    BMI {bmiInfo.bmiFormatted}
                   </span>
                 )}
                 {patient.allergyNotes && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
                     <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
-                    <span className="truncate max-w-[130px]">حساسية: {patient.allergyNotes}</span>
+                    <span className="truncate max-w-[120px]">{patient.allergyNotes}</span>
                   </span>
                 )}
               </div>
@@ -558,7 +542,7 @@ export default function NewPrescriptionPage() {
                         : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
                     }`}
                   >
-                    <span>{isPatientVitalsExpanded ? "إخفاء القياسات والحساسية" : "القياسات والحساسية"}</span>
+                    <span>القياسات والحساسية</span>
                     {isPatientVitalsExpanded ? (
                       <ChevronUp className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
@@ -577,14 +561,14 @@ export default function NewPrescriptionPage() {
               </div>
             </div>
 
-            {/* Row 1: Patient Name & WhatsApp Phone */}
+            {/* Row 1: Patient Name & Phone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="space-y-1 relative">
                 <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-300 text-[11px]">اسم المريض الثلاثي: *</label>
+                  <label className="font-bold text-slate-300 text-[11px]">اسم المريض: *</label>
                   {matchedPatientRecord && (
                     <span className="text-[10px] font-bold text-emerald-400">
-                      ✓ مسجل ({matchedPatientRecord.prescriptionCount} زيارة)
+                      ✓ مسجل ({matchedPatientRecord.prescriptionCount})
                     </span>
                   )}
                 </div>
@@ -598,7 +582,7 @@ export default function NewPrescriptionPage() {
                     onFocus={handleNameFocus}
                     onBlur={handleNameBlur}
                     onKeyDown={handleNameKeyDown}
-                    placeholder="اكتب اسم المريض أو رقم الهاتف للترشيح..."
+                    placeholder="اسم المريض..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/90 font-black text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                     autoComplete="off"
                   />
@@ -627,18 +611,13 @@ export default function NewPrescriptionPage() {
                   )}
                 </div>
 
-                {/* Patient Autocomplete Dropdown */}
                 {showSuggestionsDropdown && patientSuggestions.length > 0 && (
                   <div
                     ref={patientDropdownRef}
-                    className="absolute z-50 top-full mt-1.5 w-full min-w-[290px] sm:min-w-[360px] bg-slate-900/98 backdrop-blur-2xl border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden divide-y divide-slate-800/80"
+                    className="absolute z-50 top-full mt-1.5 w-full min-w-[260px] bg-slate-900 border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden divide-y divide-slate-800/80"
                     dir="rtl"
                   >
-                    <div className="px-3.5 py-2 bg-slate-950/90 flex items-center justify-between text-[10px] text-emerald-400 font-bold">
-                      <span>سجل المرضى ({patientSuggestions.length})</span>
-                      <span className="text-slate-400">اضغط للتعبئة التلقائية</span>
-                    </div>
-                    <div className="max-h-60 overflow-y-auto divide-y divide-slate-800/50">
+                    <div className="max-h-56 overflow-y-auto divide-y divide-slate-800/50">
                       {patientSuggestions.map((p, i) => (
                         <button
                           key={p.id || i}
@@ -647,7 +626,7 @@ export default function NewPrescriptionPage() {
                             e.preventDefault();
                             handleSelectPatient(p);
                           }}
-                          className={`w-full text-right p-3 transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                          className={`w-full text-right p-2.5 transition-all flex items-center justify-between gap-2 cursor-pointer ${
                             i === highlightedSuggestionIndex ? "bg-emerald-500/15" : "hover:bg-slate-800/60"
                           }`}
                         >
@@ -655,12 +634,12 @@ export default function NewPrescriptionPage() {
                             <span className="font-black text-xs text-slate-100 block truncate">
                               {p.name}
                             </span>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400">
                               {p.phone && <span className="font-mono text-emerald-400">{p.phone}</span>}
-                              {p.age && <span>السن: {p.age}</span>}
+                              {p.age && <span>{p.age} سنة</span>}
                             </div>
                           </div>
-                          <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 text-[10px] font-bold shrink-0">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold shrink-0">
                             اختيار
                           </span>
                         </button>
@@ -670,11 +649,10 @@ export default function NewPrescriptionPage() {
                 )}
               </div>
 
-              {/* Patient Phone */}
               <div className="space-y-1">
                 <label className="font-bold text-slate-300 text-[11px] flex items-center gap-1">
                   <Phone className="w-3 h-3 text-emerald-400" />
-                  <span>رقم الهاتف (لإرسال الروشتة واتساب):</span>
+                  <span>رقم الواتساب:</span>
                 </label>
                 <div
                   className="flex items-stretch rounded-xl overflow-hidden border border-slate-700/90 focus-within:border-emerald-500 bg-slate-950"
@@ -694,22 +672,22 @@ export default function NewPrescriptionPage() {
               </div>
             </div>
 
-            {/* Row 2: Clinical Diagnosis right inside Patient Card for fast workflow */}
+            {/* Row 2: Diagnosis */}
             <div className="space-y-1 text-xs">
               <label className="font-bold text-slate-300 text-[11px] flex items-center gap-1.5">
                 <Stethoscope className="w-3.5 h-3.5 text-cyan-400" />
-                <span>التشخيص الطبي (Diagnosis):</span>
+                <span>التشخيص:</span>
               </label>
               <input
                 type="text"
                 value={diagnosis}
                 onChange={(e) => setDiagnosis(e.target.value)}
-                placeholder="مثال: Acute Pharyngitis, التهاب حاد بالحلق، نزلة معوية، ارتفاع ضغط الدم..."
+                placeholder="مثال: التهاب حاد بالحلق، نزلة معوية..."
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700/90 font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
               />
             </div>
 
-            {/* Expandable Vitals, BMI, Chronic Diseases & Drug Allergies */}
+            {/* Expandable Vitals & Allergies */}
             {hasExtraVitalsConfigured && isPatientVitalsExpanded && (
               <div className="pt-3 border-t border-slate-800/80 space-y-3 animate-in fade-in duration-150">
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
@@ -727,14 +705,14 @@ export default function NewPrescriptionPage() {
                   )}
                   {visibleFields.showGender && (
                     <div className="space-y-1">
-                      <label className="font-bold text-slate-400 text-[11px]">الجنس:</label>
+                      <label className="font-bold text-slate-400 text-[11px]">النوع:</label>
                       <select
                         value={patient.gender || "MALE"}
                         onChange={(e) => setPatient({ gender: e.target.value as any })}
                         className="w-full px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-800 font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
                       >
-                        <option value="MALE">ذكر 👨</option>
-                        <option value="FEMALE">أنثى 👩</option>
+                        <option value="MALE">ذكر</option>
+                        <option value="FEMALE">أنثى</option>
                       </select>
                     </div>
                   )}
@@ -772,7 +750,9 @@ export default function NewPrescriptionPage() {
                       >
                         <option value="">غير محدد</option>
                         {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bt) => (
-                          <option key={bt} value={bt}>{bt}</option>
+                          <option key={bt} value={bt}>
+                            {bt}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -783,24 +763,24 @@ export default function NewPrescriptionPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                     {visibleFields.showMedicalHistory && (
                       <div className="space-y-1">
-                        <label className="font-bold text-cyan-400 text-[11px]">الأمراض المزمنة والتاريخ الطبي (تُفحص مع الأدوية):</label>
+                        <label className="font-bold text-cyan-400 text-[11px]">الأمراض المزمنة:</label>
                         <input
                           type="text"
                           value={patient.medicalHistory || ""}
                           onChange={(e) => setPatient({ medicalHistory: e.target.value })}
-                          placeholder="مثال: ربو شعبي، قرحة معدة، قصور كلوي، سكري..."
+                          placeholder="مثال: ضغط، سكري، ربو..."
                           className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-cyan-500/30 font-bold text-cyan-200 focus:outline-none focus:border-cyan-500"
                         />
                       </div>
                     )}
                     {visibleFields.showAllergies && (
                       <div className="space-y-1">
-                        <label className="font-bold text-amber-400 text-[11px]">تنبيه حساسية المريض (تُفحص تلقائياً مع الأدوية):</label>
+                        <label className="font-bold text-amber-400 text-[11px]">حساسية الأدوية:</label>
                         <input
                           type="text"
                           value={patient.allergyNotes || ""}
                           onChange={(e) => setPatient({ allergyNotes: e.target.value })}
-                          placeholder="مثال: حساسية بنسلين، سلفا، أسبرين..."
+                          placeholder="مثال: بنسلين، سلفا..."
                           className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-amber-500/30 font-bold text-amber-300 focus:outline-none focus:border-amber-500"
                         />
                       </div>
@@ -811,15 +791,15 @@ export default function NewPrescriptionPage() {
             )}
           </div>
 
-          {/* CARD 2: GIANT EGYPTIAN & INTERNATIONAL DRUG SEARCH ENGINE */}
+          {/* CARD 2: DRUG SEARCH & DOSAGE */}
           <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <span className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-2">
                 <Pill className="w-4 h-4 text-emerald-400" />
-                <span>2. محرك البحث الدوائي المصري والعالمي (اختر الدواء لتخصيص الجرعة)</span>
+                <span>إضافة الأدوية والجرعات</span>
               </span>
               <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                {items.length} {items.length === 1 ? "دواء مضاف" : "أدوية مضافة"}
+                {items.length} {items.length === 1 ? "صنف" : "أصناف"}
               </span>
             </div>
 
@@ -830,12 +810,12 @@ export default function NewPrescriptionPage() {
             />
           </div>
 
-          {/* CARD 3: REAL-TIME DRUG INTERACTIONS RADAR & PRESCRIBED MEDICATIONS LIST */}
+          {/* CARD 3: PRESCRIBED MEDICATIONS LIST & ACTIONS */}
           <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <span className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-400" />
-                <span>3. الأدوية المضافة بالروشتة وفحص التعارضات ({items.length})</span>
+                <span>أدوية الروشتة ({items.length})</span>
               </span>
 
               {items.length > 0 && (
@@ -844,26 +824,26 @@ export default function NewPrescriptionPage() {
                   onClick={clearItems}
                   className="text-[11px] font-bold text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
                 >
-                  مسح كل الأدوية
+                  مسح الكل
                 </button>
               )}
             </div>
 
-            {/* Instant Clinical Interaction Radar Banner */}
+            {/* Clinical Interaction Alerts */}
             {aiAlerts.length > 0 ? (
               <div className="space-y-2">
                 {aiAlerts.map((alert) => (
                   <div
                     key={alert.id}
-                    className={`p-3.5 rounded-2xl border-2 text-xs space-y-2 transition-all ${
+                    className={`p-3 rounded-2xl border text-xs space-y-1.5 ${
                       alert.severity === "CRITICAL"
                         ? "bg-rose-950/50 border-rose-500/60 text-rose-100"
                         : "bg-amber-950/40 border-amber-500/50 text-amber-100"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 font-black text-rose-300">
-                        <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+                      <div className="flex items-center gap-1.5 font-black text-rose-300">
+                        <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
                         <span>{alert.titleAr}</span>
                       </div>
                       <button
@@ -872,31 +852,22 @@ export default function NewPrescriptionPage() {
                           setSelectedAiAlert(alert);
                           setIsAiModalOpen(true);
                         }}
-                        className="text-[10px] bg-rose-500/30 hover:bg-rose-500/40 text-rose-200 px-2.5 py-1 rounded-lg font-bold shrink-0 cursor-pointer"
+                        className="text-[10px] bg-rose-500/30 hover:bg-rose-500/40 text-rose-200 px-2 py-0.5 rounded-lg font-bold shrink-0 cursor-pointer"
                       >
-                        عرض التفاصيل والحل
+                        التفاصيل
                       </button>
                     </div>
-                    <p className="text-[11px] text-slate-200 leading-relaxed pr-6">
-                      {alert.mechanismAr}
-                    </p>
-                    {alert.recommendationAr && (
-                      <p className="text-[11px] text-emerald-300 font-bold pr-6">
-                        💡 التوصية السريرية: {alert.recommendationAr}
-                      </p>
-                    )}
+                    <p className="text-[11px] text-slate-200 pr-5">{alert.mechanismAr}</p>
                     {alert.involvedDrugs && alert.involvedDrugs.length > 0 && (
-                      <div className="flex items-center gap-2 flex-wrap pr-6 pt-1">
-                        <span className="text-[10px] text-slate-400 font-bold">الأدوية المتعارضة:</span>
+                      <div className="flex items-center gap-1.5 flex-wrap pr-5 pt-0.5">
                         {alert.involvedDrugs.map((dName, i) => (
                           <button
                             key={i}
                             type="button"
                             onClick={() => handleRemoveConflictingDrug(dName)}
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/40 text-[10px] font-bold transition-colors cursor-pointer"
-                            title="اضغط لحذف هذا الدواء المتعارض"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/40 text-[10px] font-bold transition-colors cursor-pointer"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-2.5 h-2.5" />
                             <span>حذف {dName}</span>
                           </button>
                         ))}
@@ -906,16 +877,16 @@ export default function NewPrescriptionPage() {
                 ))}
               </div>
             ) : items.length >= 2 ? (
-              <div className="px-3.5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
+              <div className="px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-[11px] font-bold flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>تم فحص التداخلات الدوائية تلقائياً: لا توجد تعارضات مسجلة بين الأدوية المضافة.</span>
+                <span>لا توجد تداخلات دوائية مسجلة بين الأصناف المضافة.</span>
               </div>
             ) : null}
 
-            {/* Prescribed Drugs List with Inline Edit & Delete */}
+            {/* Prescribed Drugs List */}
             {items.length === 0 ? (
-              <div className="text-xs text-slate-500 text-center py-6 border border-dashed border-slate-800 rounded-2xl">
-                ابحث عن الدواء في البطاقة أعلاه واختره لتحديد الجرعة والكمية والملاحظات
+              <div className="text-xs text-slate-500 text-center py-5 border border-dashed border-slate-800 rounded-2xl">
+                لم تتم إضافة أدوية بعد
               </div>
             ) : (
               <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
@@ -926,10 +897,10 @@ export default function NewPrescriptionPage() {
                     return (
                       <div
                         key={it.id}
-                        className="p-3.5 rounded-2xl bg-slate-950 border-2 border-cyan-500/60 space-y-2.5 text-xs"
+                        className="p-3.5 rounded-2xl bg-slate-950 border border-cyan-500/50 space-y-2.5 text-xs"
                       >
                         <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                          <span className="font-black text-cyan-300">تعديل الدواء والجرعة يدوياً</span>
+                          <span className="font-black text-cyan-300">تعديل الجرعة</span>
                           <button
                             type="button"
                             onClick={() => setEditingItemId(null)}
@@ -966,14 +937,14 @@ export default function NewPrescriptionPage() {
                             type="text"
                             value={editItemForm.frequency || ""}
                             onChange={(e) => setEditItemForm((p) => ({ ...p, frequency: e.target.value }))}
-                            placeholder="مواعيد الجرعة"
+                            placeholder="التكرار"
                             className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 font-bold text-slate-100 text-xs"
                           />
                           <input
                             type="text"
                             value={editItemForm.duration || ""}
                             onChange={(e) => setEditItemForm((p) => ({ ...p, duration: e.target.value }))}
-                            placeholder="مدة العلاج"
+                            placeholder="المدة"
                             className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 font-bold text-slate-100 text-xs"
                           />
                         </div>
@@ -982,7 +953,7 @@ export default function NewPrescriptionPage() {
                             type="text"
                             value={editItemForm.instructions || ""}
                             onChange={(e) => setEditItemForm((p) => ({ ...p, instructions: e.target.value }))}
-                            placeholder="ملاحظات إضافية..."
+                            placeholder="ملاحظات..."
                             className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 text-xs"
                           />
                           <button
@@ -1001,31 +972,35 @@ export default function NewPrescriptionPage() {
                   return (
                     <div
                       key={it.id}
-                      className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800/90 hover:border-emerald-500/40 flex items-center justify-between gap-3 text-xs transition-all"
+                      className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800/90 hover:border-emerald-500/40 flex items-center justify-between gap-3 text-xs transition-all"
                     >
-                      <div className="min-w-0 flex-1 space-y-1">
+                      <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold text-[10px] flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
-                          <h4 className="font-black text-slate-100 truncate" dir="ltr">
+                          <h4 className="font-black text-slate-100 text-sm truncate" dir="ltr">
                             {it.drugName}
                           </h4>
-                          {it.activeIngredient && (
-                            <span className="text-[10px] text-slate-400 font-mono truncate">
-                              ({it.activeIngredient})
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 pr-7">
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[11px] font-bold">
+                            {it.doseQuantity} {it.doseForm}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-900 text-slate-200 border border-slate-800 text-[11px] font-medium">
+                            {it.frequency}
+                          </span>
+                          {it.duration && (
+                            <span className="px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[11px] font-medium">
+                              {it.duration}
+                            </span>
+                          )}
+                          {it.instructions && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px]">
+                              {it.instructions}
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-emerald-300/90 pr-7 font-bold">
-                          {it.doseQuantity} {it.doseForm} • {it.frequency}{" "}
-                          {it.duration ? `• ${it.duration}` : ""}
-                        </p>
-                        {it.instructions && (
-                          <p className="text-[10px] text-slate-400 pr-7">
-                            ملاحظة: {it.instructions}
-                          </p>
-                        )}
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
@@ -1033,7 +1008,7 @@ export default function NewPrescriptionPage() {
                           type="button"
                           onClick={() => startInlineItemEdit(it)}
                           className="p-2 rounded-xl text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors cursor-pointer"
-                          title="تعديل الجرعة أو الكمية"
+                          title="تعديل"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
@@ -1041,7 +1016,7 @@ export default function NewPrescriptionPage() {
                           type="button"
                           onClick={() => removeItem(it.id)}
                           className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                          title="حذف هذا الدواء"
+                          title="حذف"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1056,13 +1031,13 @@ export default function NewPrescriptionPage() {
             <div className="pt-3 border-t border-slate-800 space-y-3 text-xs">
               <div className="space-y-1">
                 <label className="font-bold text-slate-300 text-[11px]">
-                  تعليمات وإرشادات ختامية للمريض (تظهر أسفل الروشتة):
+                  ملاحظات ختامية للمريض (اختياري):
                 </label>
                 <textarea
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="مثال: الراحة التامة وتناول السوائل الدافئة، وإعادة الكشف بعد أسبوع..."
+                  placeholder="مثال: إعادة الكشف بعد أسبوع..."
                   className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700/80 font-medium text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -1083,7 +1058,7 @@ export default function NewPrescriptionPage() {
                   className="py-3 px-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:brightness-110 text-white font-black text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
                 >
                   <MessageCircle className="w-3.5 h-3.5" />
-                  <span>واتساب مباشر</span>
+                  <span>إرسال واتساب</span>
                 </button>
 
                 <button
@@ -1108,7 +1083,7 @@ export default function NewPrescriptionPage() {
           </div>
         </div>
 
-        {/* Column 2 (Left in RTL): Clean Live Paper Sheet Preview */}
+        {/* Column 2: Live Paper Sheet Preview */}
         <div className="hidden lg:block print:!block print:!w-full print:!m-0 print:!p-0 print:!static lg:col-span-6 sticky top-20">
           <LivePrescriptionPreview
             prescriptionNo={prescriptionNo}
@@ -1140,7 +1115,7 @@ export default function NewPrescriptionPage() {
           className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs shadow-xl shadow-emerald-950/70 border border-emerald-300 hover:brightness-110 active:scale-95 transition-all cursor-pointer"
         >
           <Eye className="w-4 h-4 stroke-[2.5]" />
-          <span>معاينة ورقة الروشتة</span>
+          <span>معاينة الروشتة</span>
           {items.length > 0 && (
             <span className="w-5 h-5 rounded-full bg-slate-950 text-emerald-400 text-[10px] font-mono flex items-center justify-center font-bold">
               {items.length}
@@ -1155,7 +1130,7 @@ export default function NewPrescriptionPage() {
           <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-black text-slate-100">معاينة طباعة الروشتة</h3>
+              <h3 className="text-sm font-black text-slate-100">معاينة الروشتة</h3>
               <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                 {Math.round(mobilePreviewScale * 100)}%
               </span>

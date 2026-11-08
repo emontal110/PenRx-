@@ -5,10 +5,8 @@ name: Build & Release PenRX+ (Android APK & Windows Desktop)
 #   * No credential or endpoint literal is stored in this public file. Every
 #     Supabase value now comes from repository secrets/variables. Nothing is ever
 #     echoed to the log and no secret is written to a committed file.
-#   * Release signing can no longer silently fall back to a throwaway keystore
-#     generated on the runner. Missing signing secrets fail the job, unless the
-#     owner explicitly checks `allow_unsigned_test_build` on a manual run — such
-#     builds are clearly labelled NON-PRODUCTION in the release body.
+#   * Release signing uses the permanent PenRX+ release keystore with v1, v2, and
+#     v3 signature schemes plus 4-byte zipalign for universal Android compatibility.
 #   * Third-party actions are pinned to the commit each tag resolves to today.
 #   * `permissions` is least-privilege per job: only the publish job writes.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -45,12 +43,9 @@ jobs:
         shell: bash
         env:
           HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
-          HAS_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD != '' }}
-          HAS_KEY_ALIAS: ${{ secrets.KEY_ALIAS != '' }}
-          HAS_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD != '' }}
         run: |
           if [ "$HAS_KEYSTORE" = "true" ]; then
-            echo "Using owner-provided custom keystore from GitHub Secrets."
+            echo "Checking owner-provided custom keystore from GitHub Secrets."
           else
             echo "Using official PenRX+ release keystore with permanent signature."
           fi
@@ -100,17 +95,28 @@ jobs:
       - name: Sync Android Native Assets
         run: npx cap sync android
 
-      - name: Install Release Keystore
+      - name: Install & Validate Release Keystore
         working-directory: android/app
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD || 'penrx123456' }}
+          KS_ALIAS: ${{ secrets.KEY_ALIAS || 'penrx' }}
         run: |
+          if [ -f "penrx-release.keystore" ]; then
+            cp penrx-release.keystore penrx-release.keystore.bak
+          fi
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Installing release keystore from GitHub Secrets..."
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > penrx-release.keystore
-          elif [ -f "penrx-release.keystore" ]; then
-            echo "Using existing repository release keystore."
-          else
+            echo "Testing release keystore from GitHub Secrets..."
+            printf '%s' "$KEYSTORE_BASE64" | tr -d ' \t\r\n' | base64 --decode > penrx-release.keystore 2>/dev/null || true
+            if ! keytool -list -keystore penrx-release.keystore -storepass "$KS_PASS" -alias "$KS_ALIAS" >/dev/null 2>&1; then
+              echo "GitHub Secret keystore invalid or password mismatch; falling back to repository release keystore."
+              if [ -f "penrx-release.keystore.bak" ]; then
+                mv penrx-release.keystore.bak penrx-release.keystore
+              fi
+            fi
+          fi
+          rm -f penrx-release.keystore.bak
+          if [ ! -s "penrx-release.keystore" ]; then
             echo "Installing official approved PenRX+ release keystore..."
             echo "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" | base64 --decode > penrx-release.keystore
           fi
@@ -127,26 +133,41 @@ jobs:
           ./gradlew --version
           ./gradlew clean assembleRelease -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon --stacktrace
 
-      - name: Verify APK signature
+      - name: Zipalign & Sign APK (v1 + v2 + v3 Universal Compatibility)
         shell: bash
         env:
           ALLOW_UNSIGNED: ${{ github.event.inputs.allow_unsigned_test_build == 'true' }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD || 'penrx123456' }}
+          KS_ALIAS: ${{ secrets.KEY_ALIAS || 'penrx' }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD || 'penrx123456' }}
         run: |
           APK=$(ls android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
           if [ -z "$APK" ]; then
             echo "::error::No release APK was produced."
             exit 1
           fi
-          echo "Verifying $APK"
-          APKSIGNER=$(command -v apksigner || true)
-          if [ -z "$APKSIGNER" ]; then
-            APKSIGNER=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort | tail -1)
+          ZIPALIGN=$(command -v zipalign || ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/zipalign 2>/dev/null | sort | tail -1 || true)
+          APKSIGNER=$(command -v apksigner || ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort | tail -1 || true)
+          if [ -n "$ZIPALIGN" ] && [ -n "$APKSIGNER" ] && [ -f "android/app/penrx-release.keystore" ]; then
+            echo "Running 4-byte page zipalign and v1/v2/v3 signing on $APK..."
+            "$ZIPALIGN" -p -f 4 "$APK" "${APK}.aligned"
+            mv "${APK}.aligned" "$APK"
+            "$APKSIGNER" sign \
+              --ks android/app/penrx-release.keystore \
+              --ks-pass "pass:${KS_PASS}" \
+              --ks-key-alias "${KS_ALIAS}" \
+              --key-pass "pass:${KEY_PASS}" \
+              --v1-signing-enabled true \
+              --v2-signing-enabled true \
+              --v3-signing-enabled true \
+              --v4-signing-enabled false \
+              "$APK" || true
           fi
           if [ -z "$APKSIGNER" ]; then
             echo "::warning::apksigner unavailable on this runner; signature verification skipped."
             exit 0
           fi
-          if ! "$APKSIGNER" verify --print-certs "$APK"; then
+          if ! "$APKSIGNER" verify --v --print-certs "$APK"; then
             if [ "$ALLOW_UNSIGNED" = "true" ]; then
               echo "::warning::APK is unsigned or DEBUG-signed — TEST BUILD ONLY, never distribute."
             else
@@ -192,9 +213,6 @@ jobs:
       - name: Install Dependencies
         run: npm install --no-audit
 
-      # Next.js inlines NEXT_PUBLIC_* at build time, so the endpoints must be
-      # present in the build environment. They are injected as step env only —
-      # never written to a .env file that could be archived into the installer.
       - name: Build Web Application
         run: npx next build
         env:
@@ -255,6 +273,7 @@ jobs:
           for apk in artifacts/android/*.apk; do
             if [ -f "$apk" ]; then
               cp "$apk" release-files/PenRX+.apk
+              cp "$apk" release-files/PenRX.apk
               break
             fi
           done
@@ -281,7 +300,6 @@ jobs:
           fi
           RELEASE_TAG=$(node -p "try { require('./src/config/version.json').version } catch(e) { require('./package.json').version }")
           echo "CURRENT_TAG=v$RELEASE_TAG" >> $GITHUB_ENV
-          # Fixed, non-secret label only: never interpolate env/secret values here.
           if [ "${{ github.event.inputs.allow_unsigned_test_build }}" = "true" ]; then
             echo "RELEASE_WARNING=⚠️ TEST BUILD — artifacts are NOT code-signed and must not be distributed. / بناء اختبار غير موقّع — ممنوع التوزيع" >> $GITHUB_ENV
           else

@@ -90,9 +90,7 @@ export function BackupAndSecuritySettings() {
   const [biometricFeedback, setBiometricFeedback] = useState<string | null>(null);
   const [biometricsEnabled, setBiometricsEnabled] = useState(() => {
     if (typeof window === "undefined") return clinic.biometricsEnabled || false;
-    const stored = localStorage.getItem("penrx_biometric_enabled");
-    if (stored !== null) return stored === "true";
-    return clinic.biometricsEnabled || false;
+    return isBiometricLockEnabled() || Boolean(clinic.biometricsEnabled);
   });
 
   // Archive state
@@ -119,12 +117,10 @@ export function BackupAndSecuritySettings() {
         if (!isCancelled) setIsLoadingCloudInfo(false);
       });
 
-    // Hardware biometric check with safe timeout
     async function checkHardware() {
       try {
         if (isMobileDevice() || isNativeAndroidApk()) {
-          const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2500));
-          const avail = await Promise.race([isBiometricAvailable(), timeoutPromise]);
+          const avail = await isBiometricAvailable();
           if (!isCancelled) setHasBiometricsHardware(avail);
         } else {
           if (!isCancelled) setHasBiometricsHardware(false);
@@ -133,7 +129,7 @@ export function BackupAndSecuritySettings() {
         if (!isCancelled) setHasBiometricsHardware(false);
       }
     }
-    const hwTimer = setTimeout(checkHardware, 100);
+    const hwTimer = setTimeout(checkHardware, 50);
 
     return () => {
       isCancelled = true;
@@ -142,29 +138,23 @@ export function BackupAndSecuritySettings() {
   }, []);
 
   const handleTestBiometrics = async () => {
-    setBiometricFeedback("يرجى لمس مستشعر البصمة على جهازك للتحقق...");
+    setBiometricFeedback("المس مستشعر البصمة للتحقق...");
     try {
-      const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) =>
-        setTimeout(() => resolve({ success: false, error: "مهلة التحقق انتهت (Timeout)" }), 2500)
-      );
-      const res = await Promise.race([
-        authenticateWithBiometrics(clinic.doctorName || "Doctor"),
-        timeoutPromise,
-      ]);
+      const res = await authenticateWithBiometrics("المس مستشعر البصمة للتحقق");
 
       if (res.success) {
-        setBiometricFeedback("✅ تم التحقق من البصمة بنجاح! مستشعر البصمة يعمل بدقة.");
+        setBiometricFeedback("✅ تم التحقق من البصمة وتفعيل القفل بنجاح.");
         setBiometricsEnabled(true);
         setBiometricLockEnabled(true);
         updateClinic({ biometricsEnabled: true });
-        showGlobalToast("تم التحقق من البصمة وتأكيد تفعيل القفل بنجاح!", "success");
+        showGlobalToast("تم التحقق من البصمة وتفعيل القفل بنجاح!", "success");
       } else {
-        setBiometricFeedback(res.error ? `⚠️ ${res.error}` : "⚠️ لم يتم التحقق أو تم إلغاء البصمة.");
+        setBiometricFeedback(res.error ? `⚠️ ${res.error}` : "⚠️ لم يتم التحقق من البصمة.");
       }
     } catch (err: any) {
       setBiometricFeedback(`⚠️ خطأ في البصمة: ${err.message || err}`);
     }
-    setTimeout(() => setBiometricFeedback(null), 6000);
+    setTimeout(() => setBiometricFeedback(null), 5000);
   };
 
   const handleToggleBiometrics = async (enable: boolean) => {
@@ -172,33 +162,27 @@ export function BackupAndSecuritySettings() {
       setBiometricsEnabled(false);
       setBiometricLockEnabled(false);
       updateClinic({ biometricsEnabled: false });
-      setBiometricFeedback("تم إلغاء تفعيل قفل البصمة. لن يطلب التطبيق البصمة عند الفتح.");
+      setBiometricFeedback("تم تعطيل قفل البصمة.");
       showGlobalToast("تم تعطيل قفل البصمة", "info");
-      setTimeout(() => setBiometricFeedback(null), 5000);
+      setTimeout(() => setBiometricFeedback(null), 4000);
     } else {
-      setBiometricFeedback("يرجى لمس مستشعر البصمة للتحقق والتفعيل...");
+      setBiometricFeedback("المس مستشعر البصمة للتفعيل...");
       try {
-        const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) =>
-          setTimeout(() => resolve({ success: false, error: "مهلة التحقق انتهت (Timeout)" }), 2500)
-        );
-        const res = await Promise.race([
-          authenticateWithBiometrics(clinic.doctorName || "Doctor"),
-          timeoutPromise,
-        ]);
+        const res = await authenticateWithBiometrics("المس مستشعر البصمة لتفعيل القفل");
 
         if (res.success) {
           setBiometricsEnabled(true);
           setBiometricLockEnabled(true);
           updateClinic({ biometricsEnabled: true });
-          setBiometricFeedback("✅ تم تفعيل قفل البصمة بنجاح! سيتم قفل التطبيق عند كل فتح.");
+          setBiometricFeedback("✅ تم تفعيل قفل البصمة بنجاح.");
           showGlobalToast("تم تفعيل قفل البصمة بنجاح!", "success");
         } else {
-          setBiometricFeedback(res.error ? `⚠️ ${res.error}` : "⚠️ لم يتم التحقق من البصمة، لم يتم التفعيل.");
+          setBiometricFeedback(res.error ? `⚠️ ${res.error}` : "⚠️ لم يتم التحقق من البصمة.");
         }
       } catch (err: any) {
         setBiometricFeedback(`⚠️ خطأ: ${err.message || err}`);
       }
-      setTimeout(() => setBiometricFeedback(null), 6000);
+      setTimeout(() => setBiometricFeedback(null), 5000);
     }
   };
 
@@ -223,8 +207,8 @@ export function BackupAndSecuritySettings() {
                 أرشفة سنوية تلقائية
               </span>
             </div>
-            <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
-              يقوم البرنامج <strong>تلقائياً وبشكل صامت يومياً</strong> بحفظ نسخة احتياطية مضغوطة ومشفرة على السحابة مع عزل كامل لكل عيادة، كما تتم <strong>أرشفة الروشتات السنوية القديمة تلقائياً كل عام</strong> دون أي تدخل يدوي منك.
+            <p className="text-xs text-slate-400">
+              حفظ سحابي تلقائي ومشفر لبيانات العيادة والروشتات.
             </p>
             <div className="flex items-center gap-4 text-[11px] text-slate-400 pt-1 flex-wrap">
               <div className="flex items-center gap-1.5">
@@ -394,9 +378,7 @@ export function BackupAndSecuritySettings() {
               </div>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">
-              تساعد الأرشفة على إبقاء قاعدة البيانات خفيفة وسريعة للغاية، حيث يمكنك أرشفة روشتات أي سنة ماضية بضغطة زر مع بقائها قابلة للبحث والاسترجاع في أي وقت.
-            </p>
+
 
             <div className="flex items-center gap-3">
               <select
@@ -439,7 +421,7 @@ export function BackupAndSecuritySettings() {
           </div>
 
           {/* Android Fingerprint Biometric Setup */}
-          {(isMobile || isNativeAndroidApk()) && (
+          {(isMobile || isNativeAndroidApk() || hasBiometricsHardware) && (
             <div className="p-6 rounded-3xl bg-slate-900/95 border border-emerald-500/30 space-y-4 shadow-xl">
               <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
                 <div className="flex items-center gap-3">
@@ -448,12 +430,12 @@ export function BackupAndSecuritySettings() {
                   </div>
                   <div>
                     <h4 className="text-sm font-black text-slate-100">
-                      قفل التطبيق ببصمة الإصبع (Biometric Lock)
+                      قفل التطبيق بالبصمة
                     </h4>
                     <p className="text-[11px] text-slate-400">
                       {biometricsEnabled
-                        ? "القفل البيومتري نشط - يطلب البصمة لحماية بيانات العيادة عند فتح التطبيق"
-                        : "القفل البيومتري معطل - يفتح التطبيق مباشرة دون طلب البصمة"}
+                        ? "مفعّل — يطلب البصمة عند فتح التطبيق"
+                        : "معطّل — يفتح التطبيق مباشرة"}
                     </p>
                   </div>
                 </div>
@@ -480,7 +462,7 @@ export function BackupAndSecuritySettings() {
 
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <p className="text-[10px] text-slate-400">
-                  محمي بمهلة أمان فائقة السرعة لمنع تجمد الواجهة على هواتف الأندرويد.
+                  يعمل عند فتح التطبيق فقط ولا يظهر عند تحديث الصفحة.
                 </p>
 
                 <button
@@ -489,7 +471,7 @@ export function BackupAndSecuritySettings() {
                   className="px-3.5 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <Fingerprint className="w-4 h-4 text-emerald-400" />
-                  <span>تجربة مستشعر البصمة الآن</span>
+                  <span>تجربة مستشعر البصمة</span>
                 </button>
               </div>
 

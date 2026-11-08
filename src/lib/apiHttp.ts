@@ -71,6 +71,22 @@ export function cleanMachineId(value: unknown): string | null {
   return MACHINE_ID.test(clean) ? clean : null;
 }
 
+export function cleanMachineIds(value: unknown): string[] {
+  if (!value) return [];
+  const rawList = Array.isArray(value)
+    ? value
+    : String(value)
+        .split(",")
+        .map((s) => s.trim());
+  const seen = new Set<string>();
+  for (const item of rawList) {
+    const cleaned = cleanMachineId(item);
+    if (cleaned) seen.add(cleaned);
+    if (seen.size >= 6) break;
+  }
+  return Array.from(seen);
+}
+
 export function cleanOrderId(value: unknown): string | null {
   const clean = String(value || "").trim();
   return /^(sub|trial)-[a-z0-9-]{6,40}$/i.test(clean) ? clean : null;

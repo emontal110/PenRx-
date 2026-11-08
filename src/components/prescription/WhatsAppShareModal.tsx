@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   Loader2,
   Download,
-  Sparkles,
   Send,
   Phone,
   User,
@@ -96,7 +95,6 @@ export function WhatsAppShareModal({
   const dedicatedSheetRef = useRef<HTMLDivElement | null>(null);
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Reset modal state every time it opens or closed so share options NEVER disappear on reopen!
   useEffect(() => {
     if (isOpen) {
       setIsGenerating(false);
@@ -107,7 +105,6 @@ export function WhatsAppShareModal({
     }
   }, [isOpen, patient.phone, prescriptionNo]);
 
-  // Cleanup any created object URL when unmounting or changing statusBanner
   useEffect(() => {
     return () => {
       if (statusBanner?.fileUrl) {
@@ -132,27 +129,25 @@ export function WhatsAppShareModal({
       ? 600
       : 560;
 
-  /**
-   * Captures the prescription sheet into a high-resolution PNG Data URL.
-   * Uses the dedicated off-screen sheet (which is always rendered at standard desktop/print width
-   * even on mobile phones where the main column is hidden) and avoids CORS/Base64 cacheBust bugs.
-   */
   const capturePrescriptionPngDataUrl = async (): Promise<string> => {
-    // Allow a brief paint frame so all images/fonts inside the dedicated staging sheet are ready
     await new Promise((resolve) => setTimeout(resolve, 60));
 
     let sourceEl: HTMLElement | null = null;
     if (dedicatedSheetRef.current) {
-      sourceEl = (dedicatedSheetRef.current.querySelector("#prescription-print-sheet") as HTMLElement) || dedicatedSheetRef.current;
+      sourceEl =
+        (dedicatedSheetRef.current.querySelector("#prescription-print-sheet") as HTMLElement) ||
+        dedicatedSheetRef.current;
     }
     if (!sourceEl && printAreaRef?.current) {
-      sourceEl = (printAreaRef.current.querySelector("#prescription-print-sheet") as HTMLElement) || printAreaRef.current;
+      sourceEl =
+        (printAreaRef.current.querySelector("#prescription-print-sheet") as HTMLElement) ||
+        printAreaRef.current;
     }
     if (!sourceEl) {
       sourceEl = document.getElementById("prescription-print-sheet");
     }
     if (!sourceEl) {
-      throw new Error("تعذر العثور على نموذج الروشتة لتوليد الملف.");
+      throw new Error("تعذر العثور على نموذج الروشتة.");
     }
 
     const filterNode = (node: HTMLElement) => {
@@ -163,9 +158,8 @@ export function WhatsAppShareModal({
     };
 
     try {
-      // First pass: fast capture with skipFonts: true (uses browser's already-loaded Cairo font without CORS errors)
       const dataUrl = await toPng(sourceEl, {
-        pixelRatio: 2.2,
+        pixelRatio: 2,
         backgroundColor: "#ffffff",
         cacheBust: false,
         skipFonts: true,
@@ -180,26 +174,20 @@ export function WhatsAppShareModal({
       if (dataUrl && dataUrl.length > 1000) {
         return dataUrl;
       }
-    } catch (firstErr) {
-      console.warn("[WhatsAppShare] First pass capture notice, retrying:", firstErr);
-    }
+    } catch {}
 
-    // Fallback pass
     const fallbackUrl = await toPng(sourceEl, {
-      pixelRatio: 2,
+      pixelRatio: 1.8,
       backgroundColor: "#ffffff",
       cacheBust: false,
       skipFonts: true,
     });
     if (!fallbackUrl || fallbackUrl.length < 500) {
-      throw new Error("تعذر استخراج صورة الروشتة بجودة صالحة.");
+      throw new Error("تعذر استخراج صورة الروشتة.");
     }
     return fallbackUrl;
   };
 
-  /**
-   * Generates a crisp, proportionally scaled PDF from the captured PNG Data URL
-   */
   const buildPdfFromPngDataUrl = async (
     pngDataUrl: string
   ): Promise<{ pdfBlob: Blob; pdfDataUrl: string }> => {
@@ -221,11 +209,14 @@ export function WhatsAppShareModal({
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
 
-    // Load image dimensions reliably via browser Image object
     const imgDims = await new Promise<{ width: number; height: number }>((resolve, reject) => {
       const img = new window.Image();
-      img.onload = () => resolve({ width: img.naturalWidth || img.width || 560, height: img.naturalHeight || img.height || 790 });
-      img.onerror = () => reject(new Error("تعذر قراءة أبعاد صورة الروشتة عند بناء ملف الـ PDF"));
+      img.onload = () =>
+        resolve({
+          width: img.naturalWidth || img.width || 560,
+          height: img.naturalHeight || img.height || 790,
+        });
+      img.onerror = () => reject(new Error("تعذر قراءة أبعاد صورة الروشتة"));
       img.src = pngDataUrl;
     });
 
@@ -246,14 +237,9 @@ export function WhatsAppShareModal({
     return { pdfBlob, pdfDataUrl };
   };
 
-  /**
-   * Unified Instant Dispatch Engine:
-   * Immediately generates the chosen format (Image or PDF) and sends it directly
-   * to the patient's WhatsApp conversation across Android APK, Windows EXE, and Web.
-   */
   const handleInstantWhatsAppSend = async (mode: "image" | "pdf") => {
     if (!cleanPhone || cleanPhone.length < 10) {
-      setErrorMessage("يرجى إدخال رقم واتساب المريض بشكل صحيح أولاً لإرسال الروشتة مباشرة.");
+      setErrorMessage("يرجى إدخال رقم واتساب المريض أولاً.");
       phoneInputRef.current?.focus();
       return;
     }
@@ -273,7 +259,7 @@ export function WhatsAppShareModal({
       const safeRxNo = (prescriptionNo || "RX").replace(/[^a-zA-Z0-9_-]/g, "_");
       const patientLabel = (patient.name || "المريض").trim();
       const doctorLabel = clinic.doctorName ? `د. ${clinic.doctorName}` : clinic.nameAr || "العيادة الطبية";
-      const caption = `📋 الروشتة الطبية الخاصة بـ: ${patientLabel} — ${doctorLabel} (${prescriptionNo})`;
+      const caption = `📋 الروشتة الطبية: ${patientLabel} — ${doctorLabel} (${prescriptionNo})`;
 
       const pngDataUrl = await capturePrescriptionPngDataUrl();
 
@@ -298,7 +284,7 @@ export function WhatsAppShareModal({
       const fileUrl = URL.createObjectURL(targetBlob);
       const w = typeof window !== "undefined" ? (window as any) : null;
 
-      // ── 1. NATIVE ANDROID APK: Direct WhatsApp Patient JID Attachment (Zero Chooser, Direct to Patient Chat!) ──
+      // 1. NATIVE ANDROID APK: Direct WhatsApp Patient JID Attachment
       if (w?.PenRxNative && typeof w.PenRxNative.shareFileToWhatsAppDirect === "function") {
         const res = w.PenRxNative.shareFileToWhatsAppDirect(
           targetDataUrl,
@@ -312,9 +298,7 @@ export function WhatsAppShareModal({
             type: mode,
             fileName: targetFileName,
             fileUrl,
-            message: `تم فتح محادثة المريض (${cleanPhone}) على واتساب وإرفاق ${
-              mode === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"
-            } تلقائياً وجاهز للإرسال الفوري!`,
+            message: `تم فتح واتساب وإرفاق ${mode === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"} تلقائياً لمحادثة المريض (${cleanPhone}).`,
           });
           setIsGenerating(false);
           setGenerationType(null);
@@ -322,7 +306,7 @@ export function WhatsAppShareModal({
         }
       }
 
-      // ── 2. NATIVE WINDOWS DESKTOP EXE (Electron): Native WhatsApp App + Auto-Paste + Auto-Send ──
+      // 2. NATIVE WINDOWS DESKTOP EXE (Electron): Native WhatsApp App + Auto-Paste + Auto-Send
       if (w?.penrxDesktop && typeof w.penrxDesktop.shareWhatsAppDesktop === "function") {
         const res = await w.penrxDesktop.shareWhatsAppDesktop({
           base64Data: targetDataUrl,
@@ -336,9 +320,9 @@ export function WhatsAppShareModal({
             type: mode,
             fileName: targetFileName,
             fileUrl,
-            message: `✅ تم فتح تطبيق واتساب على محادثة المريض (${cleanPhone}) مباشرةً، وتم الإرفاق التلقائي وإرسال ${
+            message: `تم فتح محادثة المريض (${cleanPhone}) على واتساب وإرفاق ${
               mode === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"
-            } بضغطة واحدة!`,
+            } تلقائياً.`,
           });
           setIsGenerating(false);
           setGenerationType(null);
@@ -346,12 +330,8 @@ export function WhatsAppShareModal({
         }
       }
 
-      // ── 3. MOBILE WEB / iOS / CAPACITOR FALLBACK ──
-      const isMobile =
-        typeof navigator !== "undefined" &&
-        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-      if (isMobile && typeof navigator !== "undefined" && navigator.canShare) {
+      // 3. WEB SHARE API (Mobile Browsers / Tablets / Supported Desktop Browsers)
+      if (typeof navigator !== "undefined" && navigator.canShare) {
         const file = new File([targetBlob], targetFileName, { type: targetMimeType });
         if (navigator.canShare({ files: [file] })) {
           try {
@@ -364,7 +344,7 @@ export function WhatsAppShareModal({
               type: mode,
               fileName: targetFileName,
               fileUrl,
-              message: `تم إرفاق ${mode === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"} عبر واتساب بنجاح!`,
+              message: `تم إرفاق ${mode === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"} عبر واتساب بنجاح.`,
             });
             setIsGenerating(false);
             setGenerationType(null);
@@ -379,8 +359,7 @@ export function WhatsAppShareModal({
         }
       }
 
-      // ── 4. BROWSER FALLBACK: Copy to Clipboard + Open Native WhatsApp App ──
-      // Uses whatsapp:// URI first (opens WhatsApp Desktop/Mobile app), falls back to api.whatsapp.com
+      // 4. DESKTOP BROWSER FALLBACK: Copy to Clipboard + Download + Open WhatsApp Chat
       let copiedImage = false;
       if (mode === "image" && typeof navigator !== "undefined" && navigator.clipboard && (window as any).ClipboardItem) {
         try {
@@ -392,7 +371,6 @@ export function WhatsAppShareModal({
       }
 
       if (mode === "pdf" || !copiedImage) {
-        // Trigger automatic download so the doctor has the exact file immediately
         const a = document.createElement("a");
         a.href = fileUrl;
         a.download = targetFileName;
@@ -401,9 +379,8 @@ export function WhatsAppShareModal({
         document.body.removeChild(a);
       }
 
-      // Try native app protocol first, fall back to web
-      const nativeWaUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=`;
-      const webWaUrl = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}`;
+      const nativeWaUrl = `whatsapp://send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(caption)}`;
+      const webWaUrl = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(caption)}`;
       try {
         window.open(nativeWaUrl, "_blank");
       } catch {
@@ -415,14 +392,11 @@ export function WhatsAppShareModal({
         fileName: targetFileName,
         fileUrl,
         message: copiedImage
-          ? `تم نسخ صورة الروشتة تلقائياً وفتح تطبيق واتساب على محادثة المريض (${cleanPhone})! اضغط (Ctrl + V) داخل المحادثة لإرسالها فوراً.`
-          : `تم تجهيز وتنزيل ${
-              mode === "pdf" ? "ملف الروشتة (PDF)" : "صورة الروشتة"
-            } وفتح تطبيق واتساب على محادثة المريض (${cleanPhone}) مباشرة!`,
+          ? `تم نسخ صورة الروشتة وفتح محادثة المريض (${cleanPhone}) — اضغط (Ctrl + V) لإرسالها.`
+          : `تم تجهيز ${mode === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"} وفتح محادثة المريض (${cleanPhone}).`,
       });
     } catch (err: any) {
-      console.error("[WhatsAppShareModal] Error:", err);
-      setErrorMessage(err?.message || "حدث خطأ أثناء تجهيز وإرسال ملف الروشتة.");
+      setErrorMessage(err?.message || "حدث خطأ أثناء تجهيز ملف الروشتة.");
     } finally {
       setIsGenerating(false);
       setGenerationType(null);
@@ -431,8 +405,7 @@ export function WhatsAppShareModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-      {/* Off-screen Dedicated Export Sheet: Always rendered at standard print width with readOnly=true
-          so Image & PDF generation works 100% reliably on Mobile APK, Tablet, and Desktop! */}
+      {/* Off-screen Dedicated Export Sheet */}
       <div
         aria-hidden="true"
         style={{
@@ -472,29 +445,25 @@ export function WhatsAppShareModal({
         </div>
       </div>
 
-      {/* Modal Dialog Card: Standardized responsive dimensions for Phone APK and Desktop EXE */}
+      {/* Modal Dialog Card */}
       <div
-        className="w-full max-w-[460px] sm:max-w-[520px] max-h-[92vh] flex flex-col bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/30 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-3.5 sm:space-y-4 text-right relative overflow-y-auto overscroll-contain animate-in zoom-in-95 duration-200"
+        className="w-full max-w-[440px] sm:max-w-[480px] bg-slate-900 border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 text-right relative overflow-hidden animate-in zoom-in-95 duration-200"
         dir="rtl"
       >
-        {/* Top Glowing Accent Bar */}
-        <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
-        <div className="absolute -top-20 -right-20 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
 
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800/90 pb-3.5 relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-inner shrink-0">
-              <MessageCircle className="w-5 h-5 stroke-[2.2]" />
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+              <MessageCircle className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-black text-slate-100 flex items-center gap-1.5">
-                <span>إرسال الروشتة عبر واتساب</span>
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <h3 className="text-sm sm:text-base font-black text-slate-100">
+                إرسال الروشتة عبر واتساب
               </h3>
-              <p className="text-[11px] text-slate-400 font-medium">
-                اختر الصيغة لإرفاق الروشتة وإرسالها لمحادثة المريض فوراً
+              <p className="text-[11px] text-slate-400">
+                إرفاق تلقائي لمحادثة المريض ({patient.name || "المريض"})
               </p>
             </div>
           </div>
@@ -509,148 +478,118 @@ export function WhatsAppShareModal({
           </button>
         </div>
 
-        {/* Patient & WhatsApp Phone Bar */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-950/90 border border-slate-800/90 space-y-3 text-xs relative z-10">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-slate-400 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-emerald-400" />
-              <span>اسم المريض:</span>
+        {/* Patient Phone Bar */}
+        <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-2 text-xs">
+          <label className="font-bold text-slate-300 flex items-center justify-between text-[11px]">
+            <span className="flex items-center gap-1.5">
+              <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              <span>رقم واتساب المريض:</span>
             </span>
-            <span className="font-black text-slate-100 text-xs sm:text-sm truncate max-w-[200px]">
-              {patient.name || "غير محدد"}
+            <span className="font-bold text-slate-400 flex items-center gap-1">
+              <User className="w-3 h-3 text-emerald-400" />
+              <span className="truncate max-w-[140px]">{patient.name || "المريض"}</span>
             </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="font-bold text-slate-300 flex items-center justify-between text-[11px]">
-              <span className="flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                <span>رقم واتساب المريض:</span>
-              </span>
-              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                إرسال مباشر للمحادثة
-              </span>
-            </label>
-            <div
-              className="flex items-stretch rounded-xl overflow-hidden border border-slate-700/90 focus-within:border-emerald-500 bg-slate-900 transition-colors"
-              dir="ltr"
-            >
-              <span className="flex items-center justify-center px-3 bg-slate-800/90 border-r border-slate-700 text-emerald-400 font-mono font-black text-xs select-none">
-                +2
-              </span>
-              <input
-                ref={phoneInputRef}
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => {
-                  setPhoneNumber(e.target.value);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                placeholder="01012345678"
-                className="w-full px-3 py-2.5 bg-transparent text-xs font-mono font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none text-left"
-              />
-            </div>
+          </label>
+          <div
+            className="flex items-stretch rounded-xl overflow-hidden border border-slate-700 focus-within:border-emerald-500 bg-slate-900 transition-colors"
+            dir="ltr"
+          >
+            <span className="flex items-center justify-center px-3 bg-slate-800 border-r border-slate-700 text-emerald-400 font-mono font-black text-xs select-none">
+              +2
+            </span>
+            <input
+              ref={phoneInputRef}
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => {
+                setPhoneNumber(e.target.value);
+                if (errorMessage) setErrorMessage(null);
+              }}
+              placeholder="01012345678"
+              className="w-full px-3 py-2.5 bg-transparent text-xs font-mono font-bold text-slate-100 placeholder:text-slate-500 focus:outline-none text-left"
+            />
           </div>
         </div>
 
-        {/* Error Alert */}
         {errorMessage && (
-          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center gap-2 relative z-10 animate-in fade-in">
+          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
 
-        {/* Two Clean, Modern Instant-Send Cards: HD Image & Official PDF */}
-        <div className="space-y-2.5 relative z-10">
-          <p className="text-xs font-extrabold text-slate-300">
-            اضغط على الصيغة المطلوبة للإرفاق والإرسال التلقائي:
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Option 1: HD Image */}
-            <button
-              type="button"
-              onClick={() => handleInstantWhatsAppSend("image")}
-              disabled={isGenerating}
-              className="relative p-4 rounded-2xl bg-gradient-to-b from-emerald-950/40 via-slate-950 to-slate-950 border-2 border-emerald-500/40 hover:border-emerald-400 hover:from-emerald-950/60 text-right flex flex-col justify-between gap-3 transition-all group cursor-pointer active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-emerald-950/30"
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 flex items-center justify-center transition-all shadow-sm">
-                  {isGenerating && generationType === "image" ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <ImageIcon className="w-5 h-5 stroke-[2.2]" />
-                  )}
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black flex items-center gap-1">
-                  <Send className="w-2.5 h-2.5" />
-                  <span>إرسال فوري</span>
-                </span>
+        {/* Two Clean Format Buttons: HD Image & PDF */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => handleInstantWhatsAppSend("image")}
+            disabled={isGenerating}
+            className="p-4 rounded-2xl bg-slate-950 border-2 border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-950/30 text-right flex flex-col justify-between gap-2.5 transition-all group cursor-pointer active:scale-[0.98] disabled:opacity-60"
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 flex items-center justify-center transition-all">
+                {isGenerating && generationType === "image" ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <ImageIcon className="w-5 h-5" />
+                )}
               </div>
+              <Send className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
 
-              <div className="space-y-1">
-                <h4 className="font-black text-slate-100 text-sm group-hover:text-emerald-300 transition-colors">
-                  صورة الروشتة (HD)
-                </h4>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  توليد صورة عالية الوضوح وإرفاقها مباشرة داخل محادثة المريض على واتساب.
-                </p>
-              </div>
-            </button>
+            <div>
+              <h4 className="font-black text-slate-100 text-xs sm:text-sm group-hover:text-emerald-300">
+                إرفاق كصورة (HD)
+              </h4>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                إرسال صورة الروشتة مباشرة
+              </p>
+            </div>
+          </button>
 
-            {/* Option 2: PDF File */}
-            <button
-              type="button"
-              onClick={() => handleInstantWhatsAppSend("pdf")}
-              disabled={isGenerating}
-              className="relative p-4 rounded-2xl bg-gradient-to-b from-cyan-950/40 via-slate-950 to-slate-950 border-2 border-cyan-500/40 hover:border-cyan-400 hover:from-cyan-950/60 text-right flex flex-col justify-between gap-3 transition-all group cursor-pointer active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-cyan-950/30"
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="w-11 h-11 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 flex items-center justify-center transition-all shadow-sm">
-                  {isGenerating && generationType === "pdf" ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <FileText className="w-5 h-5 stroke-[2.2]" />
-                  )}
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-black flex items-center gap-1">
-                  <Send className="w-2.5 h-2.5" />
-                  <span>إرسال فوري</span>
-                </span>
+          <button
+            type="button"
+            onClick={() => handleInstantWhatsAppSend("pdf")}
+            disabled={isGenerating}
+            className="p-4 rounded-2xl bg-slate-950 border-2 border-cyan-500/40 hover:border-cyan-400 hover:bg-cyan-950/30 text-right flex flex-col justify-between gap-2.5 transition-all group cursor-pointer active:scale-[0.98] disabled:opacity-60"
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-950 flex items-center justify-center transition-all">
+                {isGenerating && generationType === "pdf" ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <FileText className="w-5 h-5" />
+                )}
               </div>
+              <Send className="w-3.5 h-3.5 text-cyan-400" />
+            </div>
 
-              <div className="space-y-1">
-                <h4 className="font-black text-slate-100 text-sm group-hover:text-cyan-300 transition-colors">
-                  ملف الروشتة (PDF)
-                </h4>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  توليد مستند PDF رسمي بمقاس {paperSize} وإرفاقه مباشرة في واتساب المريض.
-                </p>
-              </div>
-            </button>
-          </div>
+            <div>
+              <h4 className="font-black text-slate-100 text-xs sm:text-sm group-hover:text-cyan-300">
+                إرفاق كملف (PDF)
+              </h4>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                إرسال مستند PDF بمقاس {paperSize}
+              </p>
+            </div>
+          </button>
         </div>
 
-        {/* Live Progress Indicator */}
         {isGenerating && (
-          <div className="p-3.5 rounded-2xl bg-slate-950 border border-emerald-500/40 flex items-center justify-center gap-2.5 text-xs font-bold text-emerald-300 relative z-10 animate-in fade-in">
+          <div className="p-3 rounded-2xl bg-slate-950 border border-emerald-500/40 flex items-center justify-center gap-2 text-xs font-bold text-emerald-300">
             <Loader2 className="w-4 h-4 animate-spin text-emerald-400 shrink-0" />
             <span>
-              جارٍ تجهيز وإرفاق {generationType === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"} وفتح محادثة المريض تلقائياً...
+              جارٍ إرفاق {generationType === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"} لمحادثة المريض...
             </span>
           </div>
         )}
 
-        {/* Non-destructive Status Confirmation Banner (Never hides the 2 buttons above!) */}
         {statusBanner && !isGenerating && (
-          <div className="p-3.5 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 space-y-2.5 text-xs relative z-10 animate-in fade-in">
+          <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 space-y-2 text-xs">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-emerald-300 font-black">
+              <div className="flex items-center gap-1.5 text-emerald-300 font-black">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>
-                  تم تجهيز وإرسال {statusBanner.type === "pdf" ? "ملف الـ PDF" : "صورة الروشتة"} بنجاح!
-                </span>
+                <span>تم الإرفاق بنجاح</span>
               </div>
               <a
                 href={statusBanner.fileUrl}
@@ -658,24 +597,12 @@ export function WhatsAppShareModal({
                 className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[10px] flex items-center gap-1 transition-colors shrink-0"
               >
                 <Download className="w-3 h-3 text-emerald-400" />
-                <span>حفظ نسخة</span>
+                <span>تنزيل نسخة</span>
               </a>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">{statusBanner.message}</p>
+            <p className="text-[11px] text-slate-300">{statusBanner.message}</p>
           </div>
         )}
-
-        {/* Footer */}
-        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 relative z-10">
-          <span>يتم حفظ الروشتة تلقائياً في سجل العيادة عند الإرسال</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs transition-colors cursor-pointer"
-          >
-            إغلاق
-          </button>
-        </div>
       </div>
     </div>
   );

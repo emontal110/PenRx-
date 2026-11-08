@@ -56,14 +56,14 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
 
     if (checkAllHydrated()) {
       markAppReady();
-      const fadeTimer = setTimeout(() => setShouldRenderSplash(false), 120);
+      const fadeTimer = setTimeout(() => setShouldRenderSplash(false), 100);
       return () => clearTimeout(fadeTimer);
     }
 
     const markReadyIfDone = () => {
       if (checkAllHydrated()) {
         markAppReady();
-        setTimeout(() => setShouldRenderSplash(false), 120);
+        setTimeout(() => setShouldRenderSplash(false), 100);
       }
     };
 
@@ -71,11 +71,11 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
     const unsubClinic = useClinicStore.persist?.onFinishHydration?.(markReadyIfDone);
     const unsubRx = usePrescriptionStore.persist?.onFinishHydration?.(markReadyIfDone);
 
-    // Ultra-fast safety unlock (80ms) so mobile APK never stalls on a dark screen
+    // Ultra-fast safety unlock (60ms) so mobile APK never stalls on splash or delays biometrics
     const safetyTimer = setTimeout(() => {
       markAppReady();
-      setTimeout(() => setShouldRenderSplash(false), 120);
-    }, 80);
+      setTimeout(() => setShouldRenderSplash(false), 100);
+    }, 60);
 
     return () => {
       unsubSub?.();
@@ -87,16 +87,14 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
 
   return (
     <>
-      {/* Real app content (rendered immediately with zero black-screen opacity block) */}
       <div className="min-h-screen bg-slate-950 text-slate-100">
         {children}
       </div>
 
-      {/* Modern High-Speed Micro-Splash Screen */}
       {shouldRenderSplash && (
         <div
           dir="rtl"
-          className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-950 text-slate-100 transition-all duration-200 ease-out ${
+          className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0b1329] text-slate-100 transition-all duration-150 ease-out ${
             isReady ? "opacity-0 pointer-events-none scale-105" : "opacity-100 pointer-events-auto scale-100"
           }`}
           style={{ willChange: "opacity, transform" }}
@@ -108,7 +106,7 @@ export function AppHydrationSplash({ children }: { children: React.ReactNode }) 
             <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-3xl overflow-hidden border-2 border-emerald-500/50 shadow-2xl shadow-emerald-950/60 p-0.5 bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-500">
               <div className="relative w-full h-full rounded-[22px] overflow-hidden bg-[#1C252A]">
                 <Image
-                  src="/icon-192.png"
+                  src="/logo-penrx.jpg"
                   alt="PenRX+"
                   fill
                   priority

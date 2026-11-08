@@ -1,6 +1,6 @@
 {
   "name": "penrx-plus",
-  "version": "1.77.0",
+  "version": "1.78.0",
   "private": true,
   "author": "PenRX+ Medical Systems",
   "description": "PenRX+ - The Ultimate Next-Gen Medical Prescription & Clinic Management Suite",
@@ -60,10 +60,7 @@
     "appId": "com.penrxplus.app",
     "productName": "PenRX+",
     "compression": "normal",
-    "asar": true,
-    "asarUnpack": [
-      "electron/start-server.js"
-    ],
+    "asar": false,
     "publish": [
       {
         "provider": "github",

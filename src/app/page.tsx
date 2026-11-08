@@ -298,8 +298,8 @@ export default function DashboardPage() {
                 }`}
               >
                 {subDetails.daysRemaining <= 3
-                  ? "يرجى تجديد الاشتراك فوراً لضمان استمرار عمل منظومة الروشتات وبنك الأدوية دون توقف."
-                  : "نوصي بتجديد الاشتراك الآن للحفاظ على استمرارية ترخيص العيادة والمزامنة السحابية."}
+                  ? "جدد اشتراكك لضمان استمرار الخدمة دون توقف."
+                  : "يمكنك التجديد المبكر للحفاظ على استمرارية الترخيص."}
               </p>
             </div>
           </div>
@@ -371,9 +371,7 @@ export default function DashboardPage() {
                   </span>
                 )}
               </h3>
-              <p className="text-[11px] text-slate-400">
-                اختر فترة محددة لتحديث أرقام الكروت وسجل الروشتات تلقائياً
-              </p>
+
             </div>
           </div>
 
@@ -657,9 +655,7 @@ export default function DashboardPage() {
                   <span>نشاط كتابة الروشتات</span>
                   <span className="text-[10px] text-slate-400 font-normal">(آخر 7 أيام)</span>
                 </h3>
-                <p className="text-[11px] text-slate-400">
-                  معدل النشاط اليومي وتدفق المرضى بالعيادة
-                </p>
+
               </div>
             </div>
 
@@ -753,7 +749,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h3 className="text-sm font-black text-slate-100">الأدوية الأكثر تكراراً</h3>
-                <p className="text-[11px] text-slate-400">التوزيع النسبي لأصناف روشتات العيادة</p>
+
               </div>
             </div>
 
@@ -768,7 +764,7 @@ export default function DashboardPage() {
               <div className="py-8 text-center text-slate-500 space-y-2">
                 <Pill className="w-8 h-8 text-slate-600 mx-auto opacity-40" />
                 <p className="text-xs">لم يتم تسجيل أدوية بعد في الفترة المحددة</p>
-                <p className="text-[10px] text-slate-600">بمجرد كتابة وحفظ الروشتات ستظهر إحصائيات الأدوية هنا تلقائياً</p>
+
               </div>
             ) : (
               topMedicationsList.map((item, idx) => {
@@ -863,8 +859,8 @@ export default function DashboardPage() {
               </p>
               <p className="text-xs font-medium text-slate-400 leading-relaxed">
                 {startDate || endDate
-                  ? "لا توجد روشتات مسجلة مطابقة للفترة المحددة. جرب توسيع نطاق البحث أو تصفية الكل."
-                  : "ابدأ بكتابة أول روشتة الآن بضغطة زر مع الحفظ التلقائي والطباعة الفورية."}
+                  ? "لا توجد روشتات مطابقة للفترة المحددة."
+                  : "ابدأ بكتابة أول روشتة الآن."}
               </p>
             </div>
             <div className="pt-2">
