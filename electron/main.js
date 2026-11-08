@@ -226,27 +226,47 @@ function performQuitAndInstall(installerExePath = null) {
 
   if (installerExePath && fs.existsSync(installerExePath)) {
     try {
-      const child = spawn(installerExePath, ["--updated", "--force-run"], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: false,
+      const currentPid = process.pid;
+      const escapedInstaller = installerExePath.replace(/'/g, "''");
+      const appExePath = process.execPath;
+      const escapedAppExe = appExePath.replace(/'/g, "''");
+
+      // Fully hidden PowerShell worker that waits for PenRX+ to release file locks,
+      // runs NSIS installer silently (/S) with zero console flicker, and restarts the app.
+      const psScript = [
+        `try { Wait-Process -Id ${currentPid} -Timeout 8 -ErrorAction SilentlyContinue } catch {}`,
+        `Start-Sleep -Milliseconds 300`,
+        `Get-Process -Name 'PenRX+' -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne ${currentPid} } | Stop-Process -Force -ErrorAction SilentlyContinue`,
+        `Start-Sleep -Milliseconds 200`,
+        `$installerProc = Start-Process -FilePath '${escapedInstaller}' -ArgumentList '/S','--updated','--force-run' -Wait -PassThru -WindowStyle Hidden`,
+        `Start-Sleep -Milliseconds 400`,
+        `if (-not (Get-Process -Name 'PenRX+' -ErrorAction SilentlyContinue)) { if (Test-Path '${escapedAppExe}') { Start-Process -FilePath '${escapedAppExe}' } }`,
+      ].join("; ");
+
+      const runner = spawn(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psScript],
+        {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: true,
+        }
+      );
+      runner.on("error", (err) => {
+        console.warn("[PenRX+ AutoUpdater] Installer runner error:", err.message);
       });
-      child.on("error", (err) => {
-        console.warn("[PenRX+ Updater] Installer spawn error:", err.message);
-      });
-      child.unref();
+      runner.unref();
+      app.quit();
+      setTimeout(() => process.exit(0), 400);
+      return;
     } catch (e) {
-      console.error("[PenRX+ Updater] Direct spawn error:", e.message);
+      console.error("[PenRX+ Updater] PowerShell runner spawn error:", e.message);
     }
-    app.quit();
-    setTimeout(() => process.exit(0), 300);
-    return;
   }
 
   if (autoUpdater && updateDownloadedSuccessfully) {
     try {
       autoUpdater.quitAndInstall(true, true);
-      setTimeout(() => process.exit(0), 600);
       return;
     } catch (e) {
       console.error("[PenRX+ Updater] autoUpdater.quitAndInstall error:", e.message);
